@@ -1,6 +1,7 @@
+use std::path::PathBuf;
 use common::{ProjectId, ProjectUnixSlugStr, UserId, UserSlugStr, UserUnixSlugStr};
 use std::process::Stdio;
-use tempfile::NamedTempFile;
+use async_tempfile::TempFile;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
@@ -84,9 +85,7 @@ pub async fn ensure_user_removed_in_sshd(user_slug: UserSlugStr) -> Result<(), t
     let mut inside_block = false;
 
     // Fichier temporaire
-    let mut tmp_file = NamedTempFile::new_in("/etc/ssh").map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::Other, format!("tmpfile: {}", e))
-    })?;
+    let mut tmp_file = TempFile::new_in(PathBuf::from("/etc/ssh")).await.unwrap();
 
     while let Some(line) = lines.next_line().await? {
         if line.trim() == match_line {
@@ -100,12 +99,11 @@ pub async fn ensure_user_removed_in_sshd(user_slug: UserSlugStr) -> Result<(), t
             }
             continue; // skip lines inside block
         }
-
-        writeln!(tmp_file, "{}", line)?;
+        tmp_file.write(line.as_bytes()).await?;
     }
 
-    tmp_file.flush()?;
-    tokio::fs::rename(tmp_file.path(), path).await?;
+    tmp_file.flush().await?;
+    tokio::fs::rename(tmp_file.file_path(), path).await?;
     reload_sshd().await?;
     Ok(())
 }

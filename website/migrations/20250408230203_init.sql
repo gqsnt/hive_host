@@ -29,3 +29,9 @@ create table if not exists permissions
     permission  permission_type not null,
     primary key(user_id, project_id)
 );
+
+create table if not exists user_ssh_keys(
+    id BIGSERIAL primary key,
+    user_id BIGINT references users (id) on delete cascade,
+    public_key text not null
+);

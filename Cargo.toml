@@ -18,6 +18,8 @@ secrecy = "0.10.3"
 uuid = "1.16.0"
 
 
+
+
 [profile.wasm-release]
 inherits = "release"
 opt-level = 'z'

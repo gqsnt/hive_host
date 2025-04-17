@@ -10,7 +10,6 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 use serde::de::StdError;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[macro_export]
 macro_rules! impl_chain_from {

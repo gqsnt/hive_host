@@ -1,12 +1,8 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
 
-use secrecy::ExposeSecret;
-use serde::{Deserialize, Serialize};
-use common::{ProjectId, ProjectSlug};
-use common::server_action::{ServerAction, ServerActionResponse};
-use common::server_project_action::{IsProjectServerAction, ServerProjectAction, ServerProjectActionRequest, ServerProjectActionResponse};
-use crate::projects::Project;
+use common::{ProjectSlug};
+use common::server_project_action::{ ServerProjectAction,  ServerProjectActionResponse};
 
 pub fn token_url(token: String) -> String {
    format!("http://127.0.1:3002/token/{}", token)
@@ -18,8 +14,11 @@ pub async fn request_server_project_action(
     project_slug: ProjectSlug,
     action:ServerProjectAction,
 ) -> Result<ServerProjectActionResponse, ServerFnError> {
+    use secrecy::ExposeSecret;
+    use common::server_project_action::{IsProjectServerAction, ServerProjectActionRequest};
+
     let auth = crate::ssr::auth(false)?;
-    crate::permission::ssr::ensure_permission(&auth, project_slug.id, action.permission()).await?;
+    ssr::ensure_permission(&auth, project_slug.id, action.permission()).await?;
     let server_vars = crate::ssr::server_vars()?;
     let client = reqwest::Client::new();
     let with_token = action.with_token();
@@ -59,8 +58,7 @@ pub enum PermissionResult {
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use crate::auth::ssr::{get_auth_session_user_id, AppAuthSession};
-    use crate::permission::{PermissionResult};
+    use crate::security::permission::{PermissionResult};
     use common::permission::Permission;
     use crate::ssr::{permissions, pool, Permissions};
     use leptos::logging::log;
@@ -68,6 +66,8 @@ pub mod ssr {
     use secrecy::ExposeSecret;
     use common::{ProjectId, UserId};
     use common::server_action::{ServerAction, ServerActionResponse};
+    use crate::security::ssr::AppAuthSession;
+    use crate::security::utils::ssr::get_auth_session_user_id;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, sqlx::Type)]
     #[sqlx(type_name = "permission_type", rename_all = "lowercase")]

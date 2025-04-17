@@ -4,7 +4,7 @@ pub mod io_action;
 
 use serde::{Deserialize, Serialize};
 use crate::permission::Permission;
-use crate::{ProjectId, ProjectSlug, UserId, UserSlug};
+use crate::{ProjectSlug, UserSlug};
 use crate::server_project_action::io_action::dir_action::DirActionTreeResponse;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

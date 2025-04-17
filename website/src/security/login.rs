@@ -1,0 +1,44 @@
+use leptos::prelude::ServerFnError;
+use leptos::server;
+use crate::BoolInput;
+use crate::security::User;
+
+#[server(Login, "/api")]
+pub async fn login(
+    csrf: String,
+    email: String,
+    password: String,
+    remember: Option<BoolInput>,
+) -> Result<User, ServerFnError> {
+    use secrecy::ExposeSecret;
+    use crate::security::utils::ssr::verify_easy_hash;
+
+    let auth = crate::ssr::auth(true)?;
+    let server_vars = crate::ssr::server_vars()?;
+    verify_easy_hash(
+        auth.session.get_session_id().to_string(),
+        server_vars.csrf_server.to_secret(),
+        csrf,
+    )?;
+
+    let remember = remember.unwrap_or_default().into();
+    let password = secrecy::SecretString::from(password.as_str());
+    let pool = crate::ssr::pool()?;
+    let (user, password_hash) = User::get_from_email_with_password(&email, &pool)
+        .await
+        .ok_or(ServerFnError::new("User not found"))?;
+    match password_auth::verify_password(
+        password.expose_secret().as_bytes(),
+        password_hash.expose_secret(),
+    ) {
+        Ok(_) => {
+            auth.login_user(user.id);
+            auth.remember_user(remember);
+            leptos_axum::redirect("/user");
+            Ok(user)
+        }
+        Err(_) => Err(ServerFnError::ServerError(
+            "Password does not match".to_string(),
+        )),
+    }
+}

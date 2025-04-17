@@ -1,13 +1,12 @@
 #[allow(unused_imports)]
-use crate::permission::PermissionResult;
-use common::permission::Permission;
-use common::{ProjectId, ProjectSlug, ProjectSlugStr, UserId};
+use crate::security::permission::PermissionResult;
+use common::{ProjectId, ProjectSlug};
 #[allow(unused_imports)]
 use leptos::logging::log;
 use leptos::prelude::ServerFnError;
 use leptos::server;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
@@ -24,11 +23,14 @@ impl Project {
 
 #[server]
 pub async fn get_projects() -> Result<Vec<Project>, ServerFnError> {
+    use crate::security::utils::ssr::get_auth_session_user_id;
+
+
     let pool = crate::ssr::pool()?;
     let auth = crate::ssr::auth(false)?;
     let projects = sqlx::query_as!(Project,
         "SELECT * FROM projects WHERE id IN (SELECT project_id FROM permissions WHERE user_id = $1)",
-        crate::auth::ssr::get_auth_session_user_id(&auth).unwrap()
+        get_auth_session_user_id(&auth).unwrap()
     )
         .fetch_all(&pool)
         .await.
@@ -38,10 +40,13 @@ pub async fn get_projects() -> Result<Vec<Project>, ServerFnError> {
 
 #[server]
 pub async fn get_project(project_id:ProjectId) -> Result<Project, ServerFnError> {
+
+    use common::permission::Permission;
+
     let pool = crate::ssr::pool()?;
     let auth = crate::ssr::auth(false)?;
     log!("Session Id: {}", auth.session.get_session_id());
-    match crate::permission::ssr::ensure_permission(&auth,project_id , Permission::Read).await? {
+    match crate::security::permission::ssr::ensure_permission(&auth, project_id, Permission::Read).await? {
         PermissionResult::Allow => {
             let project = sqlx::query_as!(Project, "SELECT * FROM projects WHERE id = $1", project_id)
                 .fetch_one(&pool)
@@ -58,9 +63,9 @@ pub async fn get_project(project_id:ProjectId) -> Result<Project, ServerFnError>
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use crate::permission::ssr::{request_server_action, SqlPermissionType};
+    use crate::security::permission::ssr::{request_server_action, SqlPermissionType};
     use common::server_action::user_action::UserAction;
-    use common::{Slug, UserId, UserSlug};
+    use common::{Slug, UserSlug};
     use leptos::prelude::ServerFnError;
 
     pub async fn create_project(user_slug: UserSlug, name: String) -> Result<(), ServerFnError> {

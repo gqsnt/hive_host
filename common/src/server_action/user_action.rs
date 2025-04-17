@@ -1,6 +1,6 @@
 
 use serde::{Deserialize, Serialize};
-use crate::{impl_chain_from, ProjectId, ProjectSlug, UserId, UserSlug};
+use crate::{impl_chain_from, ProjectSlug, UserSlug};
 use crate::server_action::ServerAction;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -4,13 +4,12 @@ use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 pub mod app;
-pub mod auth;
 pub mod error_template;
-pub mod permission;
 pub mod projects;
 pub mod rate_limiter;
 pub mod tasks;
 pub mod api;
+pub mod security;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -73,7 +72,6 @@ impl<'de> Deserialize<'de> for BoolInput {
 #[cfg(feature = "ssr")]
 pub mod ssr {
     use crate::app::shell;
-    use crate::auth::ssr::{stringify_u128_base64, AppAuthSession};
     use common::permission::Permission;
     use crate::rate_limiter::ssr::RateLimiter;
     use axum::{
@@ -92,9 +90,11 @@ pub mod ssr {
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
     use leptos::config::LeptosOptions;
-    use leptos::prelude::{ServerFnError};
+    use leptos::prelude::ServerFnError;
     use secrecy::SecretString;
     use common::{ProjectId, UserId};
+    use crate::security::ssr::AppAuthSession;
+    use crate::security::utils::ssr::stringify_u128_base64;
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
 

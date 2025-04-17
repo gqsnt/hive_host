@@ -1,16 +1,9 @@
-use std::net::SocketAddr;
-use memory_serve::{load_assets, CacheControl, MemoryServe};
-use secrecy::SecretString;
-use tower_http::compression::{CompressionLayer, Predicate};
-use tower_http::compression::predicate::{NotForContentType, SizeAbove};
-use tower_http::CompressionLevel;
-use common::UserId;
+
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
     use website::app::*;
-    use website::auth::User;
     use website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
     use axum::{routing::get, Router};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
@@ -27,6 +20,13 @@ async fn main() {
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use moka::future::Cache;
     use std::time::Duration;
+    use std::net::SocketAddr;
+    use secrecy::SecretString;
+    use tower_http::compression::{CompressionLayer, Predicate};
+    use tower_http::compression::predicate::{NotForContentType, SizeAbove};
+    use tower_http::CompressionLevel;
+    use common::UserId;
+    use website::security::User;
 
     dotenvy::dotenv().ok();
 
@@ -44,7 +44,8 @@ async fn main() {
             .await
             .unwrap();
 
-    let auth_config = AuthConfig::<UserId>::default();
+    let auth_config = AuthConfig::<UserId>::default()
+        .with_anonymous_user_id(Some(-1));
 
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;
