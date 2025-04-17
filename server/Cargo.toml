@@ -17,3 +17,4 @@ serde = { version = "1.0.219", features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing = "0.1.41"
 log = "0.4.27"
+tempfile = "3.19.1"

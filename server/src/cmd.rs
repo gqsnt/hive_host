@@ -1,7 +1,8 @@
-use common::{ProjectId, ProjectUnixSlugStr, UserId, UserUnixSlugStr};
+use common::{ProjectId, ProjectUnixSlugStr, UserId, UserSlugStr, UserUnixSlugStr};
 use std::process::Stdio;
+use tempfile::NamedTempFile;
 use tokio::fs::OpenOptions;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use crate::{ServerProjectId, ServerUserId};
 
@@ -35,12 +36,13 @@ pub async fn set_acl(path: &str, user_slug:UserUnixSlugStr, perms: &str) -> Resu
     Ok(())
 }
 
-pub async fn append_ssh_match_user(
-    file_append: &mut tokio::fs::File,
-    user_slug:UserUnixSlugStr,
-) -> Result<(), tokio::io::Error> {
-    // Blocs multi-lignes
-    let block = format!(
+
+pub async fn reload_sshd() -> Result<(), tokio::io::Error> {
+    run_sudo_cmd(&["systemctl", "reload", "sshd"]).await
+}
+
+pub fn ssh_config_block(user_slug:UserUnixSlugStr) -> String{
+    format!(
         r#"
 
 Match User {user_slug}
@@ -50,16 +52,11 @@ Match User {user_slug}
   X11Forwarding no
 
 "#
-    );
-    file_append.write(block.as_bytes()).await?;
-    Ok(())
+    )
 }
 
-pub async fn reload_sshd() -> Result<(), tokio::io::Error> {
-    run_sudo_cmd(&["systemctl", "reload", "sshd"]).await
-}
 
-pub async fn ensure_sshd_match_user(user_slug:UserUnixSlugStr) -> Result<(), tokio::io::Error> {
+pub async fn ensure_user_in_sshd(user_slug:UserUnixSlugStr) -> Result<(), tokio::io::Error> {
     let path = "/etc/ssh/sshd_config";
     let file = OpenOptions::new().read(true).open(path).await?;
     let mut lines = BufReader::new(file).lines();
@@ -71,10 +68,48 @@ pub async fn ensure_sshd_match_user(user_slug:UserUnixSlugStr) -> Result<(), tok
         }
     }
     let mut file_append = OpenOptions::new().append(true).open(path).await?;
-    append_ssh_match_user(&mut file_append, user_slug).await?;
+    let block = ssh_config_block(user_slug);
+    file_append.write(block.as_bytes()).await?;
     reload_sshd().await?;
     Ok(())
 }
+
+pub async fn ensure_user_removed_in_sshd(user_slug: UserSlugStr) -> Result<(), tokio::io::Error> {
+    let path = "/etc/ssh/sshd_config";
+    let file = OpenOptions::new().read(true).open(path).await?;
+    let reader = BufReader::new(file);
+
+    let mut lines = reader.lines();
+    let match_line = format!("Match User {}", user_slug);
+    let mut inside_block = false;
+
+    // Fichier temporaire
+    let mut tmp_file = NamedTempFile::new_in("/etc/ssh").map_err(|e| {
+        std::io::Error::new(std::io::ErrorKind::Other, format!("tmpfile: {}", e))
+    })?;
+
+    while let Some(line) = lines.next_line().await? {
+        if line.trim() == match_line {
+            inside_block = true;
+            continue; // skip this line
+        }
+
+        if inside_block {
+            if line.trim().is_empty() {
+                inside_block = false;
+            }
+            continue; // skip lines inside block
+        }
+
+        writeln!(tmp_file, "{}", line)?;
+    }
+
+    tmp_file.flush()?;
+    tokio::fs::rename(tmp_file.path(), path).await?;
+    reload_sshd().await?;
+    Ok(())
+}
+
 
 pub async fn bind_project_to_user_chroot(
     user_slug:UserUnixSlugStr,
@@ -102,4 +137,12 @@ pub fn user_projects_path(user_slug:UserUnixSlugStr) -> String {
 
 pub fn user_path(user_slug:UserUnixSlugStr) -> String {
     format!("/sftp/users/{}", user_slug)
+}
+
+pub fn ssh_path(user_slug:UserUnixSlugStr) -> String {
+    format!("{}/.ssh", user_path(user_slug))
+}
+
+pub fn ssh_key_path(user_slug:UserUnixSlugStr) -> String {
+    format!("{}/authorized_keys", ssh_path(user_slug))
 }

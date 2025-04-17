@@ -1,7 +1,4 @@
-use crate::cmd::{
-    bind_project_to_user_chroot, ensure_sshd_match_user, project_path, run_sudo_cmd, set_acl, user_path,
-    user_project_path, user_projects_path,
-};
+use crate::cmd::{bind_project_to_user_chroot, ensure_user_in_sshd, ensure_user_removed_in_sshd, project_path, run_sudo_cmd, set_acl, ssh_key_path, ssh_path, user_path, user_project_path, user_projects_path};
 use crate::{ensure_authorization, AppState, ServerProjectId, ServerUserId};
 use axum::extract::{State};
 use axum::http::{HeaderMap, StatusCode};
@@ -12,6 +9,7 @@ use common::server_action::{ServerAction, ServerActionResponse};
 use common::{ProjectId, ProjectUnixSlugStr, UserId, UserSlug, UserUnixSlugStr};
 use secrecy::ExposeSecret;
 use std::path::Path;
+use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
 pub async fn server_action(
@@ -97,6 +95,16 @@ pub async fn create_user(user_slug: UserUnixSlugStr) -> Result<(), tokio::io::Er
         &["chown",&format!("{0}:{0}", user_slug), &user_projects_path_str],
     )
     .await?;
+
+    let ssh_path = ssh_path(user_slug.clone());
+    let ssh_key_path = ssh_key_path(user_slug.clone());
+    tokio::fs::create_dir_all(&ssh_path).await?;
+    let ssh_key_file = tokio::fs::File::create(&ssh_key_path).await?;
+    run_sudo_cmd( &["chown","-R", "root:root", &user_path_str]).await?;
+    run_sudo_cmd( &["chown","-R", &format!("{0}:{0}", &user_slug), &ssh_path]).await?;
+    run_sudo_cmd( &["chmod","700", &ssh_path]).await?;
+    run_sudo_cmd( &["chmod","600", &ssh_key_path]).await?;
+    ensure_user_in_sshd(user_slug).await?;
     Ok(())
 }
 
@@ -152,20 +160,16 @@ pub async fn remove_user_from_project(
 }
 
 pub async fn add_ssh_key(user_slug: UserUnixSlugStr, ssh_key: String) -> Result<(), tokio::io::Error> {
-    let user_path_str = user_path(user_slug.clone());
-    let ssh_path = format!("{}/.ssh", user_path_str);
-    let ssh_key_path = format!("{}/authorized_keys", user_path_str);
-    tokio::fs::create_dir_all(&ssh_path).await?;
-    let ssh_key_file = tokio::fs::File::create(&ssh_key_path).await?;
+    let ssh_key_file_path =  ssh_key_path(user_slug.clone());
+    let ssh_key_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&ssh_key_file_path)
+        .await?;
     let mut file = tokio::io::BufWriter::new(ssh_key_file);
     file.write_all(ssh_key.as_bytes()).await?;
+    file.write_all(b"\n").await?;
     file.flush().await?;
-    run_sudo_cmd( &["chown","-R", "root:root", &user_path_str]).await?;
-    run_sudo_cmd( &["chown","-R", &format!("{0}:{0}", &user_slug), &ssh_path]).await?;
-    run_sudo_cmd( &["chmod","700", &ssh_path]).await?;
-    run_sudo_cmd( &["chmod","600", &ssh_key_path]).await?;
-    ensure_sshd_match_user(user_slug).await?;
-
     Ok(())
 }
 
@@ -189,9 +193,8 @@ pub async fn remove_user(user_slug: UserUnixSlugStr) -> Result<(), tokio::io::Er
             }
         }
     }
-
+    ensure_user_removed_in_sshd(user_slug.clone()).await?;
     run_sudo_cmd( &["userdel",&user_slug]).await?;
-
     tokio::fs::remove_dir_all(user_path(user_slug)).await?;
 
     Ok(())
