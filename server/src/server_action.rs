@@ -1,4 +1,4 @@
-use crate::cmd::{bind_project_to_user_chroot, ensure_user_in_sshd, ensure_user_removed_in_sshd, project_path, run_sudo_cmd, set_acl, ssh_key_path, ssh_path, user_path, user_project_path, user_projects_path};
+use crate::cmd::{bind_project_to_user_chroot, ensure_user_in_sshd, ensure_user_removed_in_sshd, project_path, remove_block, run_sudo_cmd, set_acl, ssh_key_path, ssh_path, user_path, user_project_path, user_projects_path};
 use crate::{ensure_authorization, AppState, ServerProjectId, ServerUserId};
 use axum::extract::{State};
 use axum::http::{HeaderMap, StatusCode};
@@ -10,7 +10,7 @@ use common::{ProjectId, ProjectUnixSlugStr, UserId, UserSlug, UserUnixSlugStr};
 use secrecy::ExposeSecret;
 use std::path::Path;
 use tokio::fs::OpenOptions;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub async fn server_action(
     headers: HeaderMap,
@@ -69,6 +69,18 @@ pub async fn handle_server_action(
                         Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Error creating project".to_string(),
+                        ))
+                    }
+                }
+            }
+            UserAction::RemoveSshKey { user_slug, ssh_key } => {
+                match remove_ssh_key(user_slug.to_unix(), ssh_key).await {
+                    Ok(_) => Ok(Json(ServerActionResponse::Ok)),
+                    Err(e) => {
+                        tracing::debug!("Error adding ssh key: {:?}", e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Error adding ssh key".to_string(),
                         ))
                     }
                 }
@@ -172,6 +184,17 @@ pub async fn add_ssh_key(user_slug: UserUnixSlugStr, ssh_key: String) -> Result<
     file.flush().await?;
     Ok(())
 }
+
+pub async fn remove_ssh_key(user_slug: UserUnixSlugStr, ssh_key: String) -> Result<(), tokio::io::Error> {
+    remove_block(
+        &ssh_key_path(user_slug),
+        &ssh_key,
+    ).await?;
+    Ok(())
+}
+
+
+
 
 pub async fn remove_project(project_slug:ProjectUnixSlugStr) -> Result<(), std::io::Error> {
     let proj_path = project_path(project_slug);

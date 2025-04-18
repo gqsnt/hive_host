@@ -16,6 +16,10 @@ pub enum UserAction{
         user_slug:UserSlug,
         ssh_key:String,
     },
+    RemoveSshKey{
+        user_slug:UserSlug,
+        ssh_key:String,
+    },
     Delete{
         user_slug:UserSlug
     },

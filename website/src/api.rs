@@ -1,6 +1,6 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-
+use secrecy::ExposeSecret;
 #[cfg(not(feature = "ssr"))]
 pub fn fetch_api<T>(
     path: &str,
@@ -37,8 +37,6 @@ where
     })
 }
 
-
-
 #[cfg(feature = "ssr")]
 pub async fn fetch_api<T>(path: &str) -> Option<T>
 where
@@ -54,4 +52,30 @@ where
         .json()
         .await
         .ok()
+}
+
+
+#[cfg(feature = "ssr")]
+pub mod ssr{
+    use leptos::prelude::ServerFnError;
+    use secrecy::ExposeSecret;
+    use serde::de::DeserializeOwned;
+    use serde::Serialize;
+    use common::server_action::{ServerAction, ServerActionResponse};
+    
+
+    pub async fn request_server_action(
+        action:ServerAction,
+    ) -> Result<ServerActionResponse, ServerFnError> {
+        let client = reqwest::Client::new();
+        let server_vars = crate::ssr::server_vars()?;
+        Ok(client.post(
+            "http://127.0.0.1:3002/server_action"
+        )
+            .json(&action)
+            .bearer_auth(server_vars.token_action_auth.expose_secret())
+            .send()
+            .await?
+            .json::<ServerActionResponse>().await?)
+    }
 }

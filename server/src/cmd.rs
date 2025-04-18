@@ -5,6 +5,7 @@ use async_tempfile::TempFile;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
+use uuid::Uuid;
 use crate::{ServerProjectId, ServerUserId};
 
 pub async fn run_sudo_cmd(args: &[&str]) -> Result<(), tokio::io::Error> {
@@ -77,36 +78,69 @@ pub async fn ensure_user_in_sshd(user_slug:UserUnixSlugStr) -> Result<(), tokio:
 
 pub async fn ensure_user_removed_in_sshd(user_slug: UserSlugStr) -> Result<(), tokio::io::Error> {
     let path = "/etc/ssh/sshd_config";
-    let file = OpenOptions::new().read(true).open(path).await?;
-    let reader = BufReader::new(file);
-
-    let mut lines = reader.lines();
-    let match_line = format!("Match User {}", user_slug);
-    let mut inside_block = false;
-
-    // Fichier temporaire
-    let mut tmp_file = TempFile::new_in(PathBuf::from("/etc/ssh")).await.unwrap();
-
-    while let Some(line) = lines.next_line().await? {
-        if line.trim() == match_line {
-            inside_block = true;
-            continue; // skip this line
-        }
-
-        if inside_block {
-            if line.trim().is_empty() {
-                inside_block = false;
-            }
-            continue; // skip lines inside block
-        }
-        tmp_file.write(line.as_bytes()).await?;
-    }
-
-    tmp_file.flush().await?;
-    tokio::fs::rename(tmp_file.file_path(), path).await?;
+    remove_block(path, &ssh_config_block(user_slug)).await?;
     reload_sshd().await?;
     Ok(())
 }
+
+pub async fn remove_block<P>(file_path: P, block: &str) -> tokio::io::Result<()>
+where
+    P: AsRef<std::path::Path>,
+{
+    let path = file_path.as_ref();
+
+    // Nothing to do if the provided block string is empty or whitespace­-only
+    if block.trim().is_empty() {
+        return Ok(());
+    }
+
+    // Identify the start and end markers in the block
+    let mut block_lines = block.lines();
+    let start_marker = block_lines
+        .next()
+        .ok_or_else(|| tokio::io::Error::new(tokio::io::ErrorKind::InvalidInput, "Empty removal block"))?;
+    let end_marker = block_lines.last().unwrap_or(start_marker);
+
+    // Open source file for reading
+    let src = tokio::fs::File::open(path).await?;
+    let mut reader = BufReader::new(src).lines();
+
+    // Prepare a temporary file alongside the original
+    let mut tmp = TempFile::new_with_uuid_in(
+        Uuid::new_v4(),
+        path.parent().unwrap()
+    ).await.unwrap();
+
+    // Walk through each line, skipping the block once it's found
+    let mut skipping = false;
+    while let Some(line) = reader.next_line().await? {
+        if !skipping && line.contains(start_marker) {
+            // We've hit the start of the block: begin skipping
+            skipping = true;
+            continue;
+        }
+
+        if skipping {
+            // We're in the block: check for its end
+            if line.contains(end_marker) {
+                // End of block reached: resume writing subsequent lines
+                skipping = false;
+            }
+            continue;
+        }
+
+        // Not in skip-mode: write the line back
+        tmp.write_all(line.as_bytes()).await?;
+        tmp.write_all(b"\n").await?;
+    }
+
+    // Finalize and atomically replace original
+    tmp.flush().await?;
+    tokio::fs::rename(&tmp.file_path(), path).await?;
+    Ok(())
+}
+
+
 
 
 pub async fn bind_project_to_user_chroot(

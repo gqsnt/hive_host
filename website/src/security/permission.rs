@@ -1,55 +1,61 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
+use std::str::FromStr;
 
-use common::{ProjectSlug};
-use common::server_project_action::{ ServerProjectAction,  ServerProjectActionResponse};
+use common::permission::Permission;
+use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
+use common::{ProjectId, ProjectSlug, ProjectSlugStr, UserId};
 
 pub fn token_url(token: String) -> String {
-   format!("http://127.0.1:3002/token/{}", token)
+    format!("http://127.0.1:3002/token/{}", token)
 }
-
 
 #[server]
 pub async fn request_server_project_action(
-    project_slug: ProjectSlug,
-    action:ServerProjectAction,
+    project_slug: ProjectSlugStr,
+    action: ServerProjectAction,
 ) -> Result<ServerProjectActionResponse, ServerFnError> {
-    use secrecy::ExposeSecret;
     use common::server_project_action::{IsProjectServerAction, ServerProjectActionRequest};
+    use secrecy::ExposeSecret;
+
+    let project_slug = ProjectSlug::from_str(project_slug.as_str())
+        .map_err(|_| {
+            leptos_axum::redirect("/user/projects");
+            ServerFnError::new("Invalid project slug")
+        })?;
+    
 
     let auth = crate::ssr::auth(false)?;
     ssr::ensure_permission(&auth, project_slug.id, action.permission()).await?;
     let server_vars = crate::ssr::server_vars()?;
     let client = reqwest::Client::new();
     let with_token = action.with_token();
-    let mut req = ServerProjectActionRequest{
-        token:None,
+    let mut req = ServerProjectActionRequest {
+        token: None,
         action,
         project_slug,
     };
-    if with_token{
+    if with_token {
         let token = sqlx::types::Uuid::new_v4().to_string();
         req.token = Some(token.clone());
-        let _ = client.post(
-            "http://127.0.0.1:3002/server_project_action"
-        )
+        let _ = client
+            .post("http://127.0.0.1:3002/server_project_action")
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send().await?;
+            .send()
+            .await?;
         Ok(ServerProjectActionResponse::Token(token))
-    }else{
-        Ok(client.post(
-            "http://127.0.0.1:3002/server_project_action"
-        )
+    } else {
+        Ok(client
+            .post("http://127.0.0.1:3002/server_project_action")
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send().await?.json::<ServerProjectActionResponse>().await?)
+            .send()
+            .await?
+            .json::<ServerProjectActionResponse>()
+            .await?)
     }
-
 }
-
-
-
 
 pub enum PermissionResult {
     Allow,
@@ -58,16 +64,14 @@ pub enum PermissionResult {
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use crate::security::permission::{PermissionResult};
-    use common::permission::Permission;
-    use crate::ssr::{permissions, pool, Permissions};
-    use leptos::logging::log;
-    use leptos::prelude::ServerFnError;
-    use secrecy::ExposeSecret;
-    use common::{ProjectId, UserId};
-    use common::server_action::{ServerAction, ServerActionResponse};
+    use crate::security::permission::PermissionResult;
     use crate::security::ssr::AppAuthSession;
     use crate::security::utils::ssr::get_auth_session_user_id;
+    use crate::ssr::{permissions, pool, Permissions};
+    use common::permission::Permission;
+    use common::{ProjectId, UserId};
+    use leptos::logging::log;
+    use leptos::prelude::ServerFnError;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, sqlx::Type)]
     #[sqlx(type_name = "permission_type", rename_all = "lowercase")]
@@ -87,23 +91,10 @@ pub mod ssr {
         }
     }
 
-
-    pub async fn request_server_action(
-        action:ServerAction,
-    ) -> Result<ServerActionResponse, ServerFnError> {
-        let client = reqwest::Client::new();
-        let server_vars = crate::ssr::server_vars()?;
-        Ok(client.post(
-            "http://127.0.0.1:3002/server_action"
-        )
-            .json(&action)
-            .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send()
-            .await?
-            .json::<ServerActionResponse>().await?)
+    #[derive(Debug, Clone, sqlx::FromRow)]
+    pub struct SqlPermission {
+        pub(crate) permission: SqlPermissionType,
     }
-
-
 
     pub async fn request_project_permission(
         permissions: Permissions,
@@ -112,11 +103,11 @@ pub mod ssr {
     ) -> Result<Option<Permission>, ServerFnError> {
         let pool = pool()?;
         let permission = sqlx::query_as!(
-            SqlPermission,
-            r#"SELECT permission as "permission: SqlPermissionType" FROM permissions WHERE user_id = $1 AND project_id = $2"#,
-            user_id,
-            project_id
-        )
+    SqlPermission,
+    r#"SELECT permission as "permission: SqlPermissionType" FROM permissions WHERE user_id = $1 AND project_id = $2"#,
+    user_id,
+    project_id
+)
             .fetch_optional(&pool)
             .await?;
         if let Some(permission) = permission {
@@ -126,11 +117,6 @@ pub mod ssr {
         } else {
             Ok(None)
         }
-    }
-
-    #[derive(Debug, Clone, sqlx::FromRow)]
-    pub struct SqlPermission {
-        permission: SqlPermissionType,
     }
 
     pub async fn ensure_permission(
@@ -153,35 +139,34 @@ pub mod ssr {
                 );
                 permission_allow()
             } else if let Some(permission) =
-                    request_project_permission(permissions, user_id, project_id).await?
-                {
-                    if permission_type <= permission {
-                        log!(
-                            "Permission granted. for user_id: {}, project_id: {}",
-                            user_id,
-                            project_id
-                        );
-                        permission_allow()
-                    } else {
-                        log!(
-                            "Permission denied. for user_id: {}, project_id: {}",
-                            user_id,
-                            project_id
-                        );
-                        permission_denied("/user")
-                    }
+                request_project_permission(permissions, user_id, project_id).await?
+            {
+                if permission_type <= permission {
+                    log!(
+                        "Permission granted. for user_id: {}, project_id: {}",
+                        user_id,
+                        project_id
+                    );
+                    permission_allow()
                 } else {
                     log!(
                         "Permission denied. for user_id: {}, project_id: {}",
                         user_id,
                         project_id
                     );
-                    permission_denied("/user")
+                    permission_denied("/user/projects")
                 }
+            } else {
+                log!(
+                    "Permission denied. for user_id: {}, project_id: {}",
+                    user_id,
+                    project_id
+                );
+                permission_denied("/user/projects")
+            }
         } else {
             log!(
-                "Permission denied. for user_id: {}, project_id: {}",
-                -1,
+                "Permission denied. for anonymous: project_id: {}",
                 project_id
             );
             permission_denied("/login")

@@ -26,7 +26,7 @@ async fn main() {
     use tower_http::compression::predicate::{NotForContentType, SizeAbove};
     use tower_http::CompressionLevel;
     use common::UserId;
-    use website::security::User;
+    use website::models::User;
 
     dotenvy::dotenv().ok();
 

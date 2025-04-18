@@ -3,9 +3,13 @@ use leptos::prelude::{ActionForm, ClassAttribute, ServerAction};
 use crate::app::components::csrf_field::CSRFField;
 use leptos::prelude::ElementChild;
 use crate::security::signup::Signup;
+use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::IntoAnyAttribute;
+
 
 #[component]
-pub  fn SignupPage(action: ServerAction<Signup>) -> impl IntoView {
+pub  fn SignupPage() -> impl IntoView {
+    let action = ServerAction::<Signup>::new();
     view! {
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">

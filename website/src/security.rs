@@ -1,12 +1,15 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
+
 use serde::{Deserialize, Serialize};
 use common::{Slug, UserId, UserSlug};
+use crate::models::User;
 
 pub mod signup;
 pub mod login;
 pub mod permission;
 pub mod utils;
+
 
 #[server]
 pub async fn logout() -> Result<(), ServerFnError> {
@@ -21,50 +24,13 @@ pub async fn logout() -> Result<(), ServerFnError> {
 #[server]
 pub async fn get_user() -> Result<Option<User>, ServerFnError> {
     let auth = crate::ssr::auth(true)?;
+    if auth.is_anonymous(){
+        leptos_axum::redirect("/login");
+        return Ok(None);
+    }
     Ok(auth.current_user)
 }
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default)]
-pub enum RoleType {
-    #[default]
-    User,
-    Admin,
-}
-
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct User {
-    pub id: UserId,
-    pub email: String,
-    pub role_type: RoleType,
-    pub username:String,
-}
-
-impl User{
-    pub fn get_slug(&self) -> UserSlug {
-        Slug::new(self.id, self.username.clone())
-    }
-}
-
-impl PartialEq for User {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl Eq for User {}
-
-impl Default for User {
-    fn default() -> Self {
-        Self {
-            id: -1,
-            email: "guest@mail.com".to_string(),
-            role_type: RoleType::default(),
-            username: "guest".to_string(),
-        }
-    }
-}
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
@@ -72,12 +38,11 @@ pub mod ssr {
     use async_trait::async_trait;
     use axum_session_auth::Authentication;
     use axum_session_sqlx::SessionPgPool;
-    use secrecy::{SecretString};
+    use secrecy::SecretString;
     use serde::{Deserialize, Serialize};
     use sqlx::PgPool;
     use common::UserId;
-    use crate::security::{RoleType, User};
-
+    use crate::models::{RoleType, User};
     #[derive(
         Debug,
         Clone,

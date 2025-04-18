@@ -27,7 +27,7 @@ common= {path = "../common"}
 
 tower = {workspace = true, optional = true}
 tower-http = { workspace = true, features = ["fs", "compression-full"], optional = true }
-sqlx = {version = "0.8.3", optional = true, features = ["postgres", "time", "runtime-tokio-rustls"]}
+sqlx = {workspace = true, optional = true, features = ["postgres", "time", "runtime-tokio-rustls"]}
 serde = {workspace = true,features = ["derive"]}
 dotenvy = {workspace = true, optional = true}
 anyhow = {version = "1.0.97", optional = true}
@@ -82,6 +82,7 @@ ssr = [
     "dep:async-trait",
     "dep:memory-serve",
     "dep:reqwest",
+    "common/ssr"
 ]
 
 # Defines a size-optimized profile for the WASM bundle in release mode

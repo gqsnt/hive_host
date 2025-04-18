@@ -1,8 +1,7 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
 use crate::BoolInput;
-use crate::security::{User};
-
+use crate::models::User;
 #[server(Signup, "/api")]
 pub async fn signup(
     csrf: String,
@@ -12,7 +11,7 @@ pub async fn signup(
     password_confirmation: String,
     remember: Option<BoolInput>,
 ) -> Result<User, ServerFnError> {
-    use crate::security::RoleType;
+    use crate::models::RoleType;
     use secrecy::ExposeSecret;
     use common::server_action::user_action::UserAction;
     use leptos::logging::log;
@@ -63,7 +62,7 @@ pub async fn signup(
         username,
     };
     let user_slug = user.get_slug();
-    if let Err(e) = crate::security::permission::ssr::request_server_action(UserAction::Create {
+    if let Err(e) = crate::api::ssr::request_server_action(UserAction::Create {
         user_slug:user_slug.clone(),
     }.into()).await{
         log!("Error creating user: {:?}", e);

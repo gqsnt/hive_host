@@ -1,14 +1,17 @@
 use leptos::{component, view, IntoView};
-use leptos::prelude::{ActionForm, ServerAction};
+use leptos::prelude::{Action, ActionForm, ServerAction};
 use leptos_router::components::A;
 use crate::app::components::csrf_field::CSRFField;
 use leptos::prelude::ElementChild;
 use leptos::prelude::AddAnyAttr;
 use leptos::prelude::ClassAttribute;
 use crate::security::login::Login;
+use leptos::prelude::IntoAnyAttribute;
+use leptos::prelude::IntoMaybeErased;
 
 #[component]
-pub  fn LoginPage(action: ServerAction<Login>) -> impl IntoView {
+pub  fn LoginPage() -> impl IntoView {
+    let action = ServerAction::<Login>::new();
     view! {
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">

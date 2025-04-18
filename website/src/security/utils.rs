@@ -9,11 +9,14 @@ pub mod ssr{
     use leptos::prelude::{use_context, ServerFnError};
     use secrecy::{ExposeSecret, SecretString};
     use uuid::Uuid;
-    use common::UserId;
+    use common::{UserId, UserSlug};
     use crate::security::ssr::AppAuthSession;
 
     pub fn get_auth_session_user_id(auth_session: &AppAuthSession) -> Option<UserId> {
         auth_session.current_user.as_ref().map(|u| u.id)
+    }
+    pub fn get_auth_session_user_slug(auth_session: &AppAuthSession) -> Option<UserSlug> {
+        auth_session.current_user.as_ref().map(|u| u.get_slug())
     }
 
     pub fn gen_128bit_base64() -> String {

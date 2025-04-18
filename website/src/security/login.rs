@@ -1,7 +1,7 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
 use crate::BoolInput;
-use crate::security::User;
+use crate::models::User;
 
 #[server(Login, "/api")]
 pub async fn login(

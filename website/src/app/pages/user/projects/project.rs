@@ -1,21 +1,22 @@
+use std::fmt::format;
 use leptos::{component, view, IntoView, Params};
 use leptos::either::{Either, EitherOf4};
 use leptos::leptos_dom::log;
-use leptos::prelude::{Action, ClassAttribute, Get, OnAttribute, Resource, Suspend, Suspense};
-use leptos_router::hooks::use_params;
-use common::ProjectSlug;
+use leptos::prelude::{Action, ClassAttribute, Get, IntoAny, OnAttribute, Resource, ServerFnError, Suspend, Suspense};
+use leptos_router::hooks::{use_navigate, use_params};
+use common::{ProjectSlug, ProjectSlugStr};
 use common::server_project_action::io_action::dir_action::DirAction;
 use common::server_project_action::io_action::file_action::FileAction;
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
-use crate::api::fetch_api;
 use crate::security::permission::{request_server_project_action, token_url};
 use leptos_router::params::Params;
 use leptos::prelude::ElementChild;
-
+use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::IntoAnyAttribute;
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectParams {
-    pub project_slug: ProjectSlug,
+    pub project_slug: String,
 }
 
 
@@ -26,11 +27,10 @@ pub fn ProjectPage() -> impl IntoView {
         params
             .get()
             .map(|pp| pp.project_slug)
-            .unwrap()
+            .expect("Project slug not found")
     };
-    let project = Resource::new_blocking(get_project_slug, move |project_slug| {
-        log!("running here {}", project_slug.id);
-        crate::projects::get_project(project_slug.id)
+    let project = Resource::new(get_project_slug, move |project_slug| {
+        crate::projects::get_project(project_slug)
     });
 
     view! {
@@ -76,27 +76,20 @@ pub fn ProjectPage() -> impl IntoView {
                                     {move || {
                                         match token_responce.get() {
                                             Some(Some(response)) => {
-                                                Either::Left(
-                                                    match response {
-                                                        ServerProjectActionResponse::Ok => {
-                                                            EitherOf4::A(
-
-                                                                view! { <p>"Ok"</p> },
-                                                            )
-                                                        }
-                                                        ServerProjectActionResponse::Token(s) => {
-                                                            EitherOf4::B(view! { <p>Token: {s}</p> })
-                                                        }
-                                                        ServerProjectActionResponse::Content(content) => {
-                                                            EitherOf4::C(view! { <p>Content: {content}</p> })
-                                                        }
-                                                        ServerProjectActionResponse::Tree(tree) => {
-                                                            EitherOf4::D(view! { <p>Tree:</p> })
-                                                        }
-                                                    },
-                                                )
+                                                match response {
+                                                    ServerProjectActionResponse::Ok => "Ok".to_string(),
+                                                    ServerProjectActionResponse::Token(s) => {
+                                                        format!("Token: {}", s)
+                                                    }
+                                                    ServerProjectActionResponse::Content(content) => {
+                                                        format!("Content: {}", content)
+                                                    }
+                                                    ServerProjectActionResponse::Tree(tree) => {
+                                                        format!("Tree: {:?}", tree)
+                                                    }
+                                                }
                                             }
-                                            _ => Either::Right(view! { <p>"No response"</p> }),
+                                            _ => "No response".to_string(),
                                         }
                                     }}
                                 </p>
@@ -111,13 +104,13 @@ pub fn ProjectPage() -> impl IntoView {
 }
 
 fn get_action_server_project_action(
-) -> Action<(ProjectSlug, ServerProjectAction), Option<ServerProjectActionResponse>>{
-    Action::new(|input: &(ProjectSlug, ServerProjectAction)| {
+) -> Action<(ProjectSlugStr, ServerProjectAction), Option<ServerProjectActionResponse>>{
+    Action::new(|input: &(ProjectSlugStr, ServerProjectAction)| {
         let (project_slug, action) = input.clone();
         async move {
             if let Ok(r) = request_server_project_action(project_slug, action).await{
                 return if let ServerProjectActionResponse::Token(token) = r.clone(){
-                    fetch_api(token_url(token).as_str()).await
+                    crate::api::fetch_api(token_url(token).as_str()).await
                 }else{
                     Some(r)
                 }

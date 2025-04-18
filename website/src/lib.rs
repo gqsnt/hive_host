@@ -1,4 +1,3 @@
-
 use http::StatusCode;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
@@ -10,6 +9,7 @@ pub mod rate_limiter;
 pub mod tasks;
 pub mod api;
 pub mod security;
+pub mod models;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -180,8 +180,6 @@ pub mod ssr {
         path: Path<String>,
         request: Request<AxumBody>,
     ) -> impl IntoResponse {
-        log!("{:?}", path);
-
         handle_server_fns_with_context(
             move || {
                 provide_context(auth_session.clone());

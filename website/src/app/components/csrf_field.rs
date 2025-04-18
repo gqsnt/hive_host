@@ -2,6 +2,9 @@ use leptos::{component, server, view, IntoView};
 use leptos::either::Either;
 use leptos::prelude::{Get, Resource, ServerFnError, Transition};
 use leptos::prelude::ElementChild;
+use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::IntoAnyAttribute;
+
 
 #[component]
 pub fn CSRFField() -> impl IntoView {
@@ -38,7 +41,7 @@ pub fn CSRFField() -> impl IntoView {
 
 
 #[server]
-async fn generate_csrf() -> Result<String, ServerFnError> {
+pub async fn generate_csrf() -> Result<String, ServerFnError> {
     use crate::security::utils::ssr::gen_easy_hash;
 
     let auth = crate::ssr::auth(true)?;
