@@ -23,17 +23,33 @@ use crate::app::pages::user::projects::new_project::CreateProject;
 pub mod project;
 pub mod new_project;
 
+
+
 #[component]
 pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl IntoView {
     let projects = Resource::new(move || (create_project_action.version().get()), move |_| crate::projects::get_projects());
 
+    let projects = move ||
+        projects.get().map(|p|p.unwrap_or_default())
+            .unwrap_or_default();
+    
     let get_project_slug = ||{
-        let location = use_location();
-        location.pathname.get().clone().split("/").last().filter(|&s| !s.eq("projects")).unwrap_or("0").to_string()
+        let location = use_location().pathname.get().clone();
+        let split = location.split("/").collect::<Vec<_>>();
+        // find projets string and return next or "0"
+        let mut found = false;
+        for s in split.iter() {
+            if found {
+                return s.to_string();
+            }
+            if s.eq(&"projects") {
+                found = true;
+            }
+        }
+        "0".to_string()
     };
     let (project_id, set_project_id) = signal(get_project_slug());
-
-    log!("Project ID Start: {:?}", project_id.get());
+    
     let handle_select_project = move |value:String| {
         let navigate = leptos_router::hooks::use_navigate();
         set_project_id(value.clone());
@@ -44,7 +60,6 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
     };
     Effect::new(move ||{
        let project_id =  get_project_slug();
-        log!("Project ID: {:?}", project_id);
         set_project_id(project_id.clone());
     });
 
@@ -52,7 +67,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
     view! {
         <div>
             <h2>"Projects"</h2>
-            <div class=" mt-2 flex items-center content-center space-x-2">
+            <div class="mt-2 mb-6 flex items-center content-center space-x-2 border-b border-white/10 pb-6">
                 <div class="grid grid-cols-1">
                     <select
                         name="project_id"
@@ -62,30 +77,34 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                     >
                         <option value="0">"New Project"</option>
                         <Suspense fallback=|| {
-                            "Loading...".into_view()
+                            view! { <option value="0">"No Projects Found"</option> }
                         }>
                             {move || Suspend::new(async move {
-                                view! {
-                                    <For
-                                        each=move || projects.get().clone().unwrap().unwrap()
-                                        key=|project| project.id
-                                        let(project)
-                                    >
-                                        {
-                                            let project_slug = project.get_slug().to_str();
-                                            let p_clone = project_slug.clone();
-                                            view! {
-                                                <option
-                                                    prop:selected=move || {
-                                                        project_id.get().to_string().eq(p_clone.as_str())
+                                let projects = projects();
+                                if projects.is_empty() {
+                                    return Either::Right(
+                                        view! { <option value="0">"No Projects Found"</option> },
+                                    );
+                                } else {
+                                    return Either::Left(
+                                        view! {
+                                            <For
+                                                each=move || projects.clone()
+                                                key=|project| project.id
+                                                children=move |project| {
+                                                    let project_slug = project.get_slug().to_str();
+                                                    view! {
+                                                        <option
+                                                            value=project_slug.clone()
+                                                            selected=move || project_id.get() == project_slug
+                                                        >
+                                                            {project.name}
+                                                        </option>
                                                     }
-                                                    value=project_slug
-                                                >
-                                                    {project.name}
-                                                </option>
-                                            }
-                                        }
-                                    </For>
+                                                }
+                                            />
+                                        },
+                                    );
                                 }
                             })}
 

@@ -20,6 +20,10 @@ use crate::security::{get_user, Logout};
 use crate::security::signup::Signup;
 use leptos::prelude::IntoMaybeErased;
 use crate::app::pages::user::projects::new_project::{CreateProject, NewProjectPage};
+use crate::app::pages::user::projects::project::project_dashboard::ProjectDashboard;
+use crate::app::pages::user::projects::project::project_files::ProjectFiles;
+use crate::app::pages::user::projects::project::project_settings::ProjectSettings;
+use crate::app::pages::user::projects::project::project_team::ProjectTeam;
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -58,9 +62,9 @@ pub fn App() -> impl IntoView {
 
         // content for this welcome page
         <Router>
-            <div>
-                <main class="isolate">
-                    <div class="relative">
+            <div class="h-full">
+                <main class="isolate h-full">
+                    <div class="relative h-full">
                         <Routes fallback=|| "Page not found.">
                             <Route path=path!("") view=HomePage />
                             <Route path=path!("signup") view=move || view! { <SignupPage /> } />
@@ -102,7 +106,12 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone{
             view=move || view! { <ProjectsPage create_project_action /> }
         >
             <Route path=path!("") view=move || view! { <NewProjectPage create_project_action /> } />
-            <Route path=path!(":project_slug") view=ProjectPage ssr=SsrMode::Async />
+            <ParentRoute path=path!(":project_slug") view=ProjectPage ssr=SsrMode::Async>
+                <Route path=path!("") view=ProjectDashboard />
+                <Route path=path!("settings") view=ProjectSettings />
+                <Route path=path!("files") view=ProjectFiles />
+                <Route path=path!("team") view=ProjectTeam />
+            </ParentRoute>
 
         </ParentRoute>
     }.into_inner()

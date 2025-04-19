@@ -286,8 +286,8 @@ pub fn UserPage() -> impl IntoView {
                                                         </svg>
                                                     </button>
                                                 </div>
-                                                <div class="bg-gray-900 text-white p-4 sm:p-6 lg:p-8">
-                                                    <div class="space-y-12">
+                                                <div class="bg-gray-900 text-white p-4 sm:p-6 lg:p-8 h-full grow">
+                                                    <div class="space-y-12 h-full">
                                                         <Outlet/>
                                                     </div>
                                                 </div>

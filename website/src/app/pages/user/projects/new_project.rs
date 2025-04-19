@@ -6,23 +6,48 @@ use leptos::leptos_dom::log;
 use leptos::server::ServerAction;
 use crate::app::components::csrf_field::CSRFField;
 use crate::models::Project;
+use leptos::prelude::IntoAnyAttribute;
+
 
 #[component]
 pub fn NewProjectPage(create_project_action: ServerAction<CreateProject>) -> impl IntoView {
+    // Reuse styling from settings page
+    let input_class = "block w-full rounded-md bg-white/5 px-3 py-1.5 text-base text-white outline-1 -outline-offset-1 outline-white/10 placeholder:text-gray-500 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-500 sm:text-sm/6 cursor-pointer";
+    let label_class = "block text-sm/6 font-medium text-white";
+    let section_title_class = "text-base/7 font-semibold text-white mt-2";
+    let section_desc_class = "mt-1 text-sm/6 text-gray-400";
+    let button_primary_class = "rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 disabled:opacity-50";
+
     view! {
-        <div>
-            <h2>"New Project"</h2>
+        // Separator before New Project section
+        <div class="border-b border-white/10 pb-12">
+            <h2 class=section_title_class>"New Project"</h2>
+            <p class=section_desc_class>"Create a new project."</p>
+
             <ActionForm action=create_project_action>
                 <CSRFField />
-                <div class="flex flex-col">
-                    <input type="text" name="name" value="" />
-                    <button type="submit">"Create Project"</button>
+
+                <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
+                    <div class="sm:col-span-4">
+                        <label for="name" class=label_class>
+                            "Project Name"
+                        </label>
+                        <div class="mt-2">
+                            <input type="text" name="name" required class=input_class />
+                        </div>
+                    </div>
                 </div>
 
+                <div class="mt-6 flex items-center justify-end gap-x-6">
+                    <button type="submit" class=button_primary_class>
+                        "Create Project"
+                    </button>
+                </div>
             </ActionForm>
         </div>
     }
 }
+
 
 
 #[server]
