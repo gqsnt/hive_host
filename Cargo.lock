@@ -694,6 +694,8 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "sqlx",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]

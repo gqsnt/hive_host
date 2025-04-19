@@ -1,7 +1,10 @@
 use common::{ProjectId, ProjectSlug, Slug, UserId, UserSlug};
 use serde::{Deserialize, Serialize};
+use common::permission::Permission;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default)]
+#[cfg_attr(feature="ssr", derive(sqlx::Type))]
+#[cfg_attr(feature="ssr",sqlx(type_name = "role_type", rename_all = "lowercase"))]
 pub enum RoleType {
     #[default]
     User,
@@ -61,4 +64,13 @@ pub struct SshKeyInfo{
     pub id: i64,
     pub name: String,
     pub user_id:UserId,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+pub struct UserPermission {
+    pub user_id: UserId,
+    pub project_id: ProjectId,
+    pub permission: Permission,
 }

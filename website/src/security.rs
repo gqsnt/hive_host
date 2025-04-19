@@ -43,34 +43,7 @@ pub mod ssr {
     use sqlx::PgPool;
     use common::UserId;
     use crate::models::{RoleType, User};
-    #[derive(
-        Debug,
-        Clone,
-        Copy,
-        PartialEq,
-        Eq,
-        Ord,
-        PartialOrd,
-        Serialize,
-        Deserialize,
-        Default,
-        sqlx::Type,
-    )]
-    #[sqlx(type_name = "role_type", rename_all = "lowercase")]
-    pub enum SqlRoleType {
-        Admin,
-        #[default]
-        User,
-    }
-
-    impl From<SqlRoleType> for RoleType {
-        fn from(value: SqlRoleType) -> Self {
-            match value {
-                SqlRoleType::Admin => RoleType::Admin,
-                SqlRoleType::User => RoleType::User,
-            }
-        }
-    }
+    
 
     pub type AppAuthSession = axum_session_auth::AuthSession<User, UserId, SessionPgPool, PgPool>;
 
@@ -100,7 +73,7 @@ pub mod ssr {
         pub async fn get_from_id(id: UserId, pool: &PgPool) -> Option<Self> {
             let user = sqlx::query_as!(
                 SqlUserShort,
-                r#"SELECT id, email, role as "role: SqlRoleType",username FROM users WHERE id = $1"#,
+                r#"SELECT id, email, role as "role: RoleType",username FROM users WHERE id = $1"#,
                 id
             )
                 .fetch_one(pool)
@@ -120,7 +93,7 @@ pub mod ssr {
         ) -> Option<(Self, SecretString)> {
             let user = sqlx::query_as!(
                 SqlUserLong,
-                r#"SELECT id, email, password, role as "role: SqlRoleType", username FROM users WHERE email = $1"#,
+                r#"SELECT id, email, password, role as "role: RoleType", username FROM users WHERE email = $1"#,
                 email
             )
                 .fetch_one(pool)
@@ -143,7 +116,7 @@ pub mod ssr {
         pub id: UserId,
         pub email: String,
         pub password: SecretString,
-        pub role: SqlRoleType,
+        pub role: RoleType,
         pub username: String,
     }
 
@@ -151,7 +124,7 @@ pub mod ssr {
     pub struct SqlUserShort {
         pub id: UserId,
         pub email: String,
-        pub role: SqlRoleType,
+        pub role: RoleType,
         pub username: String,
     }
 }

@@ -29,25 +29,25 @@ pub  fn LoginPage() -> impl IntoView {
                 <ActionForm action=action>
                     <CSRFField />
                     <div>
-                        <label class="block text-sm/6 font-medium text-gray-900">
+                        <label class="form-label">
                             Email address <div class="mt-2">
                                 <input
                                     type="email"
                                     name="email"
                                     autocomplete="email"
                                     required
-                                    class="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
+                                    class="form-input"
                                 />
                             </div>
                         </label>
                     </div>
 
-                    <div>
-                        <label class="block text-sm/6 font-medium text-gray-900 flex items-center justify-between">
+                    <div class="mt-2">
+                        <label class="form-label flex items-center justify-between">
                             Password <div class="text-sm">
                                 <A
                                     href="/forget_password"
-                                    attr:class="font-semibold text-indigo-600 hover:text-indigo-500"
+                                    attr:class="font-semibold text-gray-200 hover:text-gray-400"
                                 >
                                     Forgot password?
                                 </A>
@@ -59,13 +59,13 @@ pub  fn LoginPage() -> impl IntoView {
                                 name="password"
                                 autocomplete="current-password"
                                 required
-                                class="block w-full rounded-md bg-white px-3 py-1.5 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
+                                class="form-input"
                             />
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block text-sm/6 font-medium text-gray-900 flex">
+                    <div class="mt-2">
+                        <label class="form-label flex">
                             Remember me <div class="flex h-6 shrink-0 items-center">
                                 <div class="ml-2 group grid size-4 grid-cols-1">
                                     <input
@@ -98,11 +98,8 @@ pub  fn LoginPage() -> impl IntoView {
                             </div>
                         </label>
                     </div>
-                    <div>
-                        <button
-                            type="submit"
-                            class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm/6 font-semibold text-white shadow-xs hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                        >
+                    <div class="mt-2">
+                        <button type="submit" class="btn-primary">
                             Sign in
                         </button>
                     </div>

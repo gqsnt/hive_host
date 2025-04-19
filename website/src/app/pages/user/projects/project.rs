@@ -6,7 +6,7 @@ pub mod project_settings;
 pub mod project_team;
 
 use std::fmt::format;
-use leptos::{component, view, IntoView, Params};
+use leptos::{component, server, view, IntoView, Params};
 use leptos::context::provide_context;
 use leptos::either::{Either, EitherOf4};
 use leptos::leptos_dom::log;
@@ -16,7 +16,7 @@ use common::{ProjectSlug, ProjectSlugStr};
 use common::server_project_action::io_action::dir_action::DirAction;
 use common::server_project_action::io_action::file_action::FileAction;
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
-use crate::security::permission::{request_server_project_action, token_url};
+use crate::security::permission::{request_server_project_action_front, token_url};
 use leptos_router::params::{Params, ParamsError};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoMaybeErased;
@@ -25,6 +25,7 @@ use leptos_router::components::{Outlet, A};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 use crate::app::pages::user::UserPage;
+use crate::models::Project;
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectParams {
@@ -36,7 +37,7 @@ pub struct ProjectParams {
 pub type MemoProjectParams = Memo<Result<ProjectParams,ParamsError>>;
 
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, EnumIter, Hash, Debug)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug, EnumIter)]
 pub enum ProjectSection {
     #[default]
     Dashboard,
@@ -119,7 +120,6 @@ pub fn ProjectPage() -> impl IntoView {
             }
 
         }
-        log!("Project Section not found");
         ProjectSection::default()
     };
 
@@ -129,38 +129,24 @@ pub fn ProjectPage() -> impl IntoView {
         let sec = get_project_section();
         set_current.set(sec);
     });
-
-    // Classes communes
-    let nav_bg = "bg-gray-800";
-    let container = "mx-auto max-w-7xl px-2 sm:px-6 lg:px-8";
-    let inner = "relative flex h-16 items-center justify-center space-x-4";
-
-   
     
      view! {
-         <nav class=nav_bg>
-             <div class=container>
-                 <div class=inner>
-                     <SectionItem
-                         section=ProjectSection::Dashboard
-                         current_section=current
-                         project_slug=get_project_slug
-                     />
-                     <SectionItem
-                         section=ProjectSection::Files
-                         current_section=current
-                         project_slug=get_project_slug
-                     />
-                     <SectionItem
-                         section=ProjectSection::Team
-                         current_section=current
-                         project_slug=get_project_slug
-                     />
-                     <SectionItem
-                         section=ProjectSection::Settings
-                         current_section=current
-                         project_slug=get_project_slug
-                     />
+         <nav class="nav-main">
+             <div class="nav-container">
+                 <div class="nav-inner">
+                     {move || {
+                         ProjectSection::iter()
+                             .map(|s| {
+                                 view! {
+                                     <SectionNav
+                                         section=s
+                                         current_section=current
+                                         project_slug=get_project_slug
+                                     />
+                                 }
+                             })
+                             .collect_view()
+                     }}
                  </div>
              </div>
          </nav>
@@ -173,24 +159,24 @@ pub fn ProjectPage() -> impl IntoView {
 
 
 #[component]
-fn SectionItem(
+fn SectionNav(
     #[prop(into)] section: ProjectSection,
     #[prop(into)] current_section: ReadSignal<ProjectSection>,
     #[prop(into)] project_slug: Signal<String>,
 ) -> impl IntoView {
-    let base_classes= "rounded-md px-3 py-2 text-sm font-medium";
-    let inactive_classes = "text-gray-300 hover:bg-gray-700 hover:text-white";
-    let active_classes = "bg-gray-900 text-white";
-    
+
     
     view! {
         <A
-            href=section.href(project_slug.get().as_str())
+            href=move || section.href(project_slug.get().as_str())
             attr:class=move || {
                 format!(
-                    "{} {}",
-                    base_classes,
-                    if current_section() == section { active_classes } else { inactive_classes },
+                    "nav-link {}",
+                    if current_section() == section {
+                        "nav-link-active"
+                    } else {
+                        "nav-link-inactive"
+                    },
                 )
             }
         >
@@ -204,7 +190,7 @@ fn get_action_server_project_action(
     Action::new(|input: &(ProjectSlugStr, ServerProjectAction)| {
         let (project_slug, action) = input.clone();
         async move {
-            if let Ok(r) = request_server_project_action(project_slug, action).await{
+            if let Ok(r) = request_server_project_action_front(project_slug, action).await{
                 return if let ServerProjectActionResponse::Token(token) = r.clone(){
                     crate::api::fetch_api(token_url(token).as_str()).await
                 }else{
@@ -216,4 +202,31 @@ fn get_action_server_project_action(
     })
 }
 
+#[server]
+pub async fn get_project(project_slug:ProjectSlugStr) -> Result<Project, ServerFnError> {
+    
+    use common::permission::Permission;
+    use std::str::FromStr;
+    use crate::security::permission::PermissionResult;
 
+    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
+        leptos_axum::redirect("/user/projects");
+        ServerFnError::new(e.to_string())
+    })?.id;
+    
+    let pool = crate::ssr::pool()?;
+    let auth = crate::ssr::auth(false)?;
+    match crate::security::permission::ssr::ensure_permission(&auth, project_id, Permission::Read).await? {
+        PermissionResult::Allow => {
+            let project = sqlx::query_as!(Project, "SELECT * FROM projects WHERE id = $1", project_id)
+                .fetch_one(&pool)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
+            Ok(project)
+        }
+        PermissionResult::Redirect(path) => {
+            leptos_axum::redirect(path.as_str());
+            Err(ServerFnError::new("Permission denied"))
+        }
+    }
+}

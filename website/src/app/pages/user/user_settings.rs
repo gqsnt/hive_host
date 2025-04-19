@@ -30,36 +30,29 @@ pub  fn UserSettingsPage() -> impl IntoView{
     let get_csrf = move ||{
         csrf.get().map(|c| c.clone().unwrap_or_default()).unwrap_or_default()
     };
-
-    let input_class = "block w-full rounded-md bg-white/5 px-3 py-1.5 text-base text-white outline-1 -outline-offset-1 outline-white/10 placeholder:text-gray-500 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-500 sm:text-sm/6 cursor-pointer";
-    let label_class = "block text-sm/6 font-medium text-white";
-    let section_title_class = "text-base/7 font-semibold text-white mt-2";
-    let section_desc_class = "mt-1 text-sm/6 text-gray-400";
-    let button_primary_class = "rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 disabled:opacity-50";
-    let button_danger_class = "rounded-md bg-red-500 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-red-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:opacity-50 cursor-pointer";
-
+    
 
     view! {
         // --- Profile Section (Empty as requested) ---
-        <div class="border-b border-white/10 pb-12">
-            <h2 class=section_title_class>"Profile"</h2>
-            <p class=section_desc_class>
+        <div class="h-full">
+            <h2 class="section-title">"Profile"</h2>
+            <p class="section-desc">
                 "This section is currently empty. Future profile settings will appear here."
             </p>
             // </div>
             <div class="mt-10"></div>
 
             // --- Security Section (Password Change) ---
-            <div class="border-b border-white/10 pb-12">
-                <h2 class=section_title_class>"Security"</h2>
-                <p class=section_desc_class>"Update your account password."</p>
+            <div class="section-border">
+                <h2 class="section-title">"Security"</h2>
+                <p class="section-desc">"Update your account password."</p>
 
                 // Separate form for password change for clarity
                 <ActionForm action=update_password_action>
                     <input type="hidden" value=get_csrf name="csrf" />
                     <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
                         <div class="sm:col-span-4">
-                            <label for="old_password" class=label_class>
+                            <label for="old_password" class="form-label">
                                 "Old Password"
                             </label>
                             <div class="mt-2">
@@ -67,13 +60,13 @@ pub  fn UserSettingsPage() -> impl IntoView{
                                     type="password"
                                     name="old_password"
                                     required
-                                    class=input_class
+                                    class="form-input"
                                 />
                             </div>
                         </div>
 
                         <div class="sm:col-span-4">
-                            <label for="new_password" class=label_class>
+                            <label for="new_password" class="form-label">
                                 "New Password"
                             </label>
                             <div class="mt-2">
@@ -81,13 +74,13 @@ pub  fn UserSettingsPage() -> impl IntoView{
                                     type="password"
                                     name="new_password"
                                     required
-                                    class=input_class
+                                    class="form-input"
                                 />
                             </div>
                         </div>
 
                         <div class="sm:col-span-4">
-                            <label for="confirm_password" class=label_class>
+                            <label for="confirm_password" class="form-label">
                                 "Confirm New Password"
                             </label>
                             <div class="mt-2">
@@ -95,7 +88,7 @@ pub  fn UserSettingsPage() -> impl IntoView{
                                     type="password"
                                     name="confirm_password"
                                     required
-                                    class=input_class
+                                    class="form-input"
                                 />
                             </div>
                         </div>
@@ -137,16 +130,16 @@ pub  fn UserSettingsPage() -> impl IntoView{
                         <button
                             type="submit"
                             disabled=move || update_password_action.pending().get()
-                            class=button_primary_class
+                            class="btn-primary"
                         >
                             "Change Password"
                         </button>
                     </div>
                 </ActionForm>
             </div>
-            <div class="border-b border-white/10 pb-12">
-                <h2 class=section_title_class>"SSH Keys"</h2>
-                <p class=section_desc_class>
+            <div class="section-border">
+                <h2 class="section-title">"SSH Keys"</h2>
+                <p class="section-desc">
                     "Manage SSH keys used for accessing your account via Git."
                 </p>
 
@@ -239,7 +232,7 @@ pub  fn UserSettingsPage() -> impl IntoView{
                                                                                                             <input type="hidden" name="ssh_key_id" value=key.id />
                                                                                                             <button
                                                                                                                 type="submit"
-                                                                                                                class=button_danger_class
+                                                                                                                class="btn-danger"
                                                                                                                 disabled=move || delete_ssh_action.pending().get()
                                                                                                             >
                                                                                                                 "Delete"
@@ -321,7 +314,7 @@ pub  fn UserSettingsPage() -> impl IntoView{
                             <div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-6">
                                 // Adjust span if needed based on parent width
                                 <div class="sm:col-span-6">
-                                    <label for="ssh_key_name" class=label_class>
+                                    <label for="ssh_key_name" class="form-label">
                                         "Key Name / Label"
                                     </label>
                                     <div class="mt-2">
@@ -330,13 +323,13 @@ pub  fn UserSettingsPage() -> impl IntoView{
                                             name="ssh_key_name"
                                             required
                                             placeholder="e.g., My Work Laptop"
-                                            class=input_class
+                                            class="form-input"
                                         />
                                     </div>
                                 </div>
 
                                 <div class="col-span-full">
-                                    <label for="ssh_key_value" class=label_class>
+                                    <label for="ssh_key_value" class="form-label">
                                         "SSH Key"
                                     </label>
                                     <div class="mt-2">
@@ -386,7 +379,7 @@ pub  fn UserSettingsPage() -> impl IntoView{
                                 <button
                                     type="submit"
                                     disabled=move || add_ssh_action.pending().get()
-                                    class=button_primary_class
+                                    class="btn-primary"
                                 >
                                     "Add SSH Key"
                                 </button>

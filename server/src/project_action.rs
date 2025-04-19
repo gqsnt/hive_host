@@ -9,7 +9,10 @@ use common::server_project_action::{
 };
 use common::{ProjectId, ProjectUnixSlugStr};
 use secrecy::ExposeSecret;
-use crate::cmd::project_path;
+use common::server_project_action::io_action::IoAction;
+use common::server_project_action::permission::PermissionAction;
+use crate::cmd::{project_path, set_acl};
+use crate::server_action::{add_user_to_project, remove_user_from_project, update_user_in_project};
 
 pub async fn project_action_token(
     State(state): State<AppState>,
@@ -49,11 +52,57 @@ pub async fn handle_server_project_action(
     project_slug: ProjectUnixSlugStr,
     action: ServerProjectAction,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
-    Ok(Json(ServerProjectActionResponse::Content(
-        "SUPER SECRET MESSAGE IN A FILE".to_string(),
-    )))
+    match action{
+        ServerProjectAction::Io(io) => handle_server_project_action_io(project_slug, io).await,
+        ServerProjectAction::Permission(permission) => handle_server_project_action_permission(project_slug, permission).await,
+    }
 }
 
+
+pub async fn handle_server_project_action_permission(
+    project_slug: ProjectUnixSlugStr,
+    action: PermissionAction,
+) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
+    match action {
+        PermissionAction::Grant { user_slug, permission } => {
+            if let Err(e) = add_user_to_project(
+                user_slug.to_unix(),
+                project_slug,
+                permission,
+            ).await{
+                tracing::debug!("Error adding user to project: {:?}", e);
+            }
+        }
+        PermissionAction::Revoke { user_slug } => {
+            if let Err(e) = remove_user_from_project(
+                user_slug.to_unix(),
+                project_slug
+            ).await{
+                tracing::debug!("Error removing user from project: {:?}", e);
+            }
+        }
+        PermissionAction::Update { user_slug, permission } => {
+            if let Err(e) = update_user_in_project(
+                user_slug.to_unix(),
+                project_slug,
+                permission,
+            ).await{
+                tracing::debug!("Error updating user in project: {:?}", e);
+            }
+        }
+    }
+    Ok(Json(ServerProjectActionResponse::Ok))
+}
+pub async fn handle_server_project_action_io(
+    project_slug: ProjectUnixSlugStr,
+    action: IoAction,
+) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
+    match action {
+        IoAction::Dir(_) => {}
+        IoAction::File(_) => {}
+    }
+    Ok(Json(ServerProjectActionResponse::Ok))
+}
 
 
 pub async fn ensure_path_in_project_path(

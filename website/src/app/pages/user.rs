@@ -286,8 +286,8 @@ pub fn UserPage() -> impl IntoView {
                                                         </svg>
                                                     </button>
                                                 </div>
-                                                <div class="bg-gray-900 text-white p-4 sm:p-6 lg:p-8 h-full grow">
-                                                    <div class="space-y-12 h-full">
+                                                <div class="bg-gray-900 text-white p-4 sm:p-6 lg:p-8 h-full">
+                                                    <div class=" h-full">
                                                         <Outlet/>
                                                     </div>
                                                 </div>
@@ -309,35 +309,29 @@ fn NavItem(
     #[prop(into)] page: UserPage,
     #[prop(into)] current_page: ReadSignal<UserPage>,
 ) -> impl IntoView {
-    let base_classes = "group flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold";
-    let active_classes = "bg-gray-800 text-white";
-    let inactive_classes = "text-gray-400 hover:bg-gray-800 hover:text-white";
-
-    let svg_base_classes = "size-6 shrink-0";
-    let svg_active_classes = "text-white"; // Icon color when active
-    let svg_inactive_classes = "text-gray-400 group-hover:text-white"; // Icon color when inactive/hovered
-
     view! {
         <li>
             <A
                 href=page.href()
                 attr:class=move || {
                     format!(
-                        "{} {}",
-                        base_classes,
-                        if current_page() == page { active_classes } else { inactive_classes },
+                        "sidebar-link {}",
+                        if current_page() == page {
+                            "sidebar-link-active"
+                        } else {
+                            "sidebar-link-inactive"
+                        },
                     )
                 }
             >
                 <svg
                     class=move || {
                         format!(
-                            "{} {}",
-                            svg_base_classes,
+                            "sidebar-link-svg {}",
                             if current_page() == page {
-                                svg_active_classes
+                                "sidebar-link-svg-active"
                             } else {
-                                svg_inactive_classes
+                                "sidebar-link-svg-inactive"
                             },
                         )
                     }

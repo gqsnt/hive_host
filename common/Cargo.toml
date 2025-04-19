@@ -6,7 +6,8 @@ edition = "2024"
 [dependencies]
 serde={workspace = true, features = ["derive"]}
 sqlx={ workspace = true, features = ["runtime-async-std", "postgres", "uuid", "chrono"], optional = true }
-
+strum = {workspace = true, features = ["derive"]}
+strum_macros = {workspace = true}
 
 
 [features]

@@ -18,9 +18,6 @@ pub struct ServerProjectActionRequest {
 
 #[derive(Serialize, Deserialize, Debug,Clone)]
 pub enum ServerProjectAction{
-    Create{
-        owner_slug:UserSlug,
-    },
     Io(io_action::IoAction),
     Permission(permission::PermissionAction),
 }
@@ -28,7 +25,6 @@ pub enum ServerProjectAction{
 impl IsProjectServerAction for ServerProjectAction{
     fn with_token(&self) -> bool {
         match self{
-            ServerProjectAction::Create { .. } => false,
             ServerProjectAction::Io(action) => action.with_token(),
             ServerProjectAction::Permission(action) => action.with_token()
         }
@@ -36,7 +32,6 @@ impl IsProjectServerAction for ServerProjectAction{
 
     fn permission(&self) -> Permission {
         match self{
-            ServerProjectAction::Create { .. } => Permission::Owner,
             ServerProjectAction::Io(action) => action.permission(),
             ServerProjectAction::Permission(action) =>action.permission()
         }

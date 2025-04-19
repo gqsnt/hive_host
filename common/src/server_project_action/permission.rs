@@ -12,9 +12,8 @@ pub enum PermissionAction{
     },
     Revoke{
         user_slug:UserSlug,
-        permission:Permission,
     },
-    Change{
+    Update {
         user_slug:UserSlug,
         permission:Permission,
     },

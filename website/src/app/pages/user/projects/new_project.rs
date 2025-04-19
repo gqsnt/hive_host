@@ -11,35 +11,29 @@ use leptos::prelude::IntoAnyAttribute;
 
 #[component]
 pub fn NewProjectPage(create_project_action: ServerAction<CreateProject>) -> impl IntoView {
-    // Reuse styling from settings page
-    let input_class = "block w-full rounded-md bg-white/5 px-3 py-1.5 text-base text-white outline-1 -outline-offset-1 outline-white/10 placeholder:text-gray-500 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-500 sm:text-sm/6 cursor-pointer";
-    let label_class = "block text-sm/6 font-medium text-white";
-    let section_title_class = "text-base/7 font-semibold text-white mt-2";
-    let section_desc_class = "mt-1 text-sm/6 text-gray-400";
-    let button_primary_class = "rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 disabled:opacity-50";
 
     view! {
         // Separator before New Project section
-        <div class="border-b border-white/10 pb-12">
-            <h2 class=section_title_class>"New Project"</h2>
-            <p class=section_desc_class>"Create a new project."</p>
+        <div class="section-border">
+            <h2 class="section-title">"New Project"</h2>
+            <p class="section-desc">"Create a new project."</p>
 
             <ActionForm action=create_project_action>
                 <CSRFField />
 
                 <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
                     <div class="sm:col-span-4">
-                        <label for="name" class=label_class>
+                        <label for="name" class="form-label">
                             "Project Name"
                         </label>
                         <div class="mt-2">
-                            <input type="text" name="name" required class=input_class />
+                            <input type="text" name="name" required class="form-input" />
                         </div>
                     </div>
                 </div>
 
                 <div class="mt-6 flex items-center justify-end gap-x-6">
-                    <button type="submit" class=button_primary_class>
+                    <button type="submit" class="btn-primary">
                         "Create Project"
                     </button>
                 </div>
@@ -69,7 +63,7 @@ pub async fn create_project(
         csrf,
     )?;
     let user_slug = crate::security::utils::ssr::get_auth_session_user_slug(&auth).unwrap();
-    match crate::projects::ssr::create_project(user_slug, name).await{
+    match ssr::create_project(user_slug, name).await{
         Ok(project) => {
             log!("Project created: {:?}", project);
             leptos_axum::redirect(format!("/user/projects/{}", project.get_slug().to_str()).as_str());
@@ -80,4 +74,46 @@ pub async fn create_project(
     }
     
     Ok(())
+}
+
+#[cfg(feature = "ssr")]
+pub mod ssr{
+    use leptos::prelude::ServerFnError;
+    use common::server_action::user_action::UserAction;
+    use common::{Slug, UserSlug};
+    use common::permission::Permission;
+    use crate::models::Project;
+
+    pub async fn create_project(user_slug: UserSlug, name: String) -> Result<Project, ServerFnError> {
+
+        use crate::api::ssr::request_server_action;
+
+
+        let pool = crate::ssr::pool()?;
+        let project = sqlx::query!("INSERT INTO projects (name) VALUES ($1) returning id", name)
+            .fetch_one(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
+        sqlx::query!(
+            "INSERT INTO permissions (user_id, project_id, permission) VALUES ($1, $2, $3)",
+            user_slug.id,
+            project.id,
+            Permission::Owner as Permission
+        )
+            .execute(&pool)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
+        request_server_action(
+            UserAction::AddProject {
+                user_slug,
+                project_slug:Slug::new(project.id, name.clone()),
+            }
+                .into(),
+        )
+            .await?;
+        Ok(Project{
+            id: project.id,
+            name,
+        })
+    }
 }

@@ -1,1 +1,104 @@
 @import "tailwindcss";
+
+
+@layer components {
+    /* Section styling */
+    .section-border {
+        @apply border-b border-white/10 pb-12;
+    }
+    .section-title {
+        @apply text-base/7 font-semibold text-white mt-2;
+    }
+    .section-desc {
+        @apply mt-1 text-sm/6 text-gray-400;
+    }
+
+    /* Form elements */
+    .form-input {
+        @apply block w-full rounded-md bg-white/5 px-3 py-1.5 text-base text-white placeholder:text-gray-400 outline-1 -outline-offset-1 outline-white/10 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-500 sm:text-sm/6 cursor-pointer;
+    }
+    .form-label{
+        @apply block text-sm/6 font-medium text-white;
+    }
+    
+    .form-select {
+        @apply block w-full rounded-md bg-gray-700 text-white pr-8 pl-3 py-1.5 text-base placeholder-gray-400 outline-none focus:ring-2 focus:ring-indigo-500 sm:text-sm/6 cursor-pointer appearance-none;
+    }
+
+    .form-select option {
+        @apply bg-gray-700 text-white;
+    }
+    .form-select option:hover {
+        @apply bg-gray-600 text-white;
+    }
+
+    .select-icon {
+        @apply pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 size-5 text-gray-400;
+    }
+
+    /* Buttons */
+    .btn {
+        @apply inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-semibold shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2;
+    }
+    .btn-primary {
+        @apply inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-semibold shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 bg-indigo-500 text-white hover:bg-indigo-400 focus-visible:outline-indigo-500 disabled:opacity-50;
+    }
+    .btn-danger {
+        @apply inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-semibold shadow-xs focus-visible:outline-2 focus-visible:outline-offset-2 bg-red-500 text-white hover:bg-red-400 focus-visible:outline-red-500 disabled:opacity-50 cursor-pointer;
+    }
+
+    /* Table */
+    .table {
+        @apply min-w-full divide-y divide-gray-700;
+    }
+    .table-th {
+        @apply px-4 py-2 text-left text-sm font-semibold text-white;
+    }
+    .table-td {
+        @apply px-4 py-3 text-sm text-white;
+    }
+
+    /* Main navigation (project nav) */
+    .nav-main {
+        @apply bg-gray-800;
+    }
+    .nav-container {
+        @apply mx-auto max-w-7xl px-2 sm:px-6 lg:px-8;
+    }
+    .nav-inner {
+        @apply relative flex h-16 items-center justify-start space-x-4;
+    }
+    .nav-link {
+        @apply rounded-md px-4 py-3 text-sm font-medium;
+    }
+    .nav-link-active {
+        @apply bg-gray-900 text-white;
+    }
+    .nav-link-inactive {
+        @apply text-gray-300 hover:bg-gray-700 hover:text-white;
+    }
+
+    /* Sidebar navigation */
+    .sidebar-nav {
+        @apply flex flex-col;
+    }
+    .sidebar-link {
+        @apply flex gap-x-3 rounded-md p-2 text-sm/6 font-semibold;
+    }
+    .sidebar-link-active {
+        @apply bg-gray-800 text-white;
+    }
+    .sidebar-link-inactive {
+        @apply text-gray-400 hover:bg-gray-800 hover:text-white;
+    }
+    
+    .sidebar-link-svg{
+        @apply size-6 shrink-0;
+    }
+    .sidebar-link-svg-active{
+        @apply text-white
+    }
+    .sidebar-link-svg-inactive{
+        @apply text-gray-400 group-hover:text-white
+    }
+}

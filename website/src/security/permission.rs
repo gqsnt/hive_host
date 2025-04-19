@@ -11,12 +11,14 @@ pub fn token_url(token: String) -> String {
 }
 
 #[server]
-pub async fn request_server_project_action(
+pub async fn request_server_project_action_front(
     project_slug: ProjectSlugStr,
     action: ServerProjectAction,
 ) -> Result<ServerProjectActionResponse, ServerFnError> {
     use common::server_project_action::{IsProjectServerAction, ServerProjectActionRequest};
     use secrecy::ExposeSecret;
+    use crate::api::ssr::{request_server_project_action, request_server_project_action_token};
+
 
     let project_slug = ProjectSlug::from_str(project_slug.as_str())
         .map_err(|_| {
@@ -27,33 +29,10 @@ pub async fn request_server_project_action(
 
     let auth = crate::ssr::auth(false)?;
     ssr::ensure_permission(&auth, project_slug.id, action.permission()).await?;
-    let server_vars = crate::ssr::server_vars()?;
-    let client = reqwest::Client::new();
-    let with_token = action.with_token();
-    let mut req = ServerProjectActionRequest {
-        token: None,
-        action,
-        project_slug,
-    };
-    if with_token {
-        let token = sqlx::types::Uuid::new_v4().to_string();
-        req.token = Some(token.clone());
-        let _ = client
-            .post("http://127.0.0.1:3002/server_project_action")
-            .json(&req)
-            .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send()
-            .await?;
-        Ok(ServerProjectActionResponse::Token(token))
+    if action.with_token() {
+        request_server_project_action_token(project_slug, action).await
     } else {
-        Ok(client
-            .post("http://127.0.0.1:3002/server_project_action")
-            .json(&req)
-            .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send()
-            .await?
-            .json::<ServerProjectActionResponse>()
-            .await?)
+        request_server_project_action(project_slug, action).await
     }
 }
 
@@ -72,28 +51,11 @@ pub mod ssr {
     use common::{ProjectId, UserId};
     use leptos::logging::log;
     use leptos::prelude::ServerFnError;
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, sqlx::Type)]
-    #[sqlx(type_name = "permission_type", rename_all = "lowercase")]
-    pub enum SqlPermissionType {
-        Read = 0,
-        Write,
-        Owner,
-    }
-
-    impl From<SqlPermissionType> for Permission {
-        fn from(value: SqlPermissionType) -> Self {
-            match value {
-                SqlPermissionType::Read => Permission::Read,
-                SqlPermissionType::Write => Permission::Write,
-                SqlPermissionType::Owner => Permission::Owner,
-            }
-        }
-    }
+    
 
     #[derive(Debug, Clone, sqlx::FromRow)]
     pub struct SqlPermission {
-        pub(crate) permission: SqlPermissionType,
+        pub(crate) permission: Permission,
     }
 
     pub async fn request_project_permission(
@@ -104,7 +66,7 @@ pub mod ssr {
         let pool = pool()?;
         let permission = sqlx::query_as!(
     SqlPermission,
-    r#"SELECT permission as "permission: SqlPermissionType" FROM permissions WHERE user_id = $1 AND project_id = $2"#,
+    r#"SELECT permission as "permission: Permission" FROM permissions WHERE user_id = $1 AND project_id = $2"#,
     user_id,
     project_id
 )

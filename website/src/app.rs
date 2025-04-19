@@ -28,7 +28,7 @@ use crate::app::pages::user::projects::project::project_team::ProjectTeam;
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
-        <html class="h-full bg-white" lang="en">
+        <html class="h-full bg-gray-900" lang="en">
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -63,8 +63,8 @@ pub fn App() -> impl IntoView {
         // content for this welcome page
         <Router>
             <div class="h-full">
-                <main class="isolate h-full">
-                    <div class="relative h-full">
+                <main class="h-full">
+                    <div class="h-full">
                         <Routes fallback=|| "Page not found.">
                             <Route path=path!("") view=HomePage />
                             <Route path=path!("signup") view=move || view! { <SignupPage /> } />

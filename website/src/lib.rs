@@ -4,7 +4,6 @@ use thiserror::Error;
 
 pub mod app;
 pub mod error_template;
-pub mod projects;
 pub mod rate_limiter;
 pub mod tasks;
 pub mod api;

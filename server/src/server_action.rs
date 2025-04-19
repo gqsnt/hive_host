@@ -153,6 +153,22 @@ pub async fn add_user_to_project(
     Ok(())
 }
 
+
+pub async fn update_user_in_project(
+    user_slug: UserUnixSlugStr,
+    project_slug:ProjectUnixSlugStr,
+    permission: Permission,
+) -> Result<(), tokio::io::Error> {
+    let acl = if permission >= Permission::Write {
+        "rwX"
+    } else {
+        "r-X"
+    };
+    let proj_path = project_path(project_slug.clone());
+    set_acl(&proj_path, user_slug.clone(), acl).await?;
+    Ok(())
+}
+
 pub async fn remove_user_from_project(
     user_slug: UserUnixSlugStr,
     project_slug:ProjectUnixSlugStr,

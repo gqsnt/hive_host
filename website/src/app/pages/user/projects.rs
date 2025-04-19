@@ -1,10 +1,11 @@
-use leptos::prelude::{AddAnyAttr, Effect, For};
+use crate::app::components::select::FormSelect;
+use leptos::prelude::{AddAnyAttr, Callback, Effect, For, ServerFnError, Signal};
 use leptos::prelude::{signal, OnTargetAttribute};
 use leptos::prelude::{BindAttribute, PropAttribute};
 use leptos::prelude::{CustomAttribute, Get, RwSignal};
 use leptos::attr::selected;
 
-use leptos::{component, view, IntoView};
+use leptos::{component, server, view, IntoView};
 use leptos::either::Either;
 use leptos::ev::Targeted;
 use leptos::logging::log;
@@ -19,6 +20,8 @@ use leptos_router::hooks::{use_location, use_navigate};
 use leptos_router::location::Location;
 use web_sys::{Event, HtmlSelectElement};
 use crate::app::pages::user::projects::new_project::CreateProject;
+use crate::app::pages::user::projects::project::get_project;
+use crate::models::Project;
 
 pub mod project;
 pub mod new_project;
@@ -27,7 +30,7 @@ pub mod new_project;
 
 #[component]
 pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl IntoView {
-    let projects = Resource::new(move || (create_project_action.version().get()), move |_| crate::projects::get_projects());
+    let projects = Resource::new(move || (create_project_action.version().get()), move |_| get_projects());
 
     let projects = move ||
         projects.get().map(|p|p.unwrap_or_default())
@@ -62,69 +65,53 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
        let project_id =  get_project_slug();
         set_project_id(project_id.clone());
     });
+    let select_project_callback = Callback::new(move |e|{
+        handle_select_project(e);
+    });
 
 
     view! {
         <div>
             <h2>"Projects"</h2>
             <div class="mt-2 mb-6 flex items-center content-center space-x-2 border-b border-white/10 pb-6">
-                <div class="grid grid-cols-1">
-                    <select
-                        name="project_id"
-                        on:change:target=move |event| handle_select_project(event.target().value())
-                        prop:value=move || project_id.get().to_string()
-                        class="col-start-1 row-start-1 w-full appearance-none rounded-md bg-white py-1.5 pr-8 pl-3 text-base text-gray-900 outline-1 -outline-offset-1 outline-gray-300 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 sm:text-sm/6"
-                    >
-                        <option value="0">"New Project"</option>
-                        <Suspense fallback=|| {
-                            view! { <option value="0">"No Projects Found"</option> }
-                        }>
-                            {move || Suspend::new(async move {
-                                let projects = projects();
-                                if projects.is_empty() {
-                                    return Either::Right(
-                                        view! { <option value="0">"No Projects Found"</option> },
-                                    );
-                                } else {
-                                    return Either::Left(
-                                        view! {
-                                            <For
-                                                each=move || projects.clone()
-                                                key=|project| project.id
-                                                children=move |project| {
-                                                    let project_slug = project.get_slug().to_str();
-                                                    view! {
-                                                        <option
-                                                            value=project_slug.clone()
-                                                            selected=move || project_id.get() == project_slug
-                                                        >
-                                                            {project.name}
-                                                        </option>
-                                                    }
+                <FormSelect name="project_id".to_string() on_change=select_project_callback>
+                    <option value="0">"New Project"</option>
+                    <Suspense fallback=|| {
+                        view! { <option value="0">"No Projects Found"</option> }
+                    }>
+                        {move || Suspend::new(async move {
+                            let projects = projects();
+                            if projects.is_empty() {
+                                return Either::Right(
+                                    view! { <option value="0">"No Projects Found"</option> },
+                                );
+                            } else {
+                                return Either::Left(
+                                    view! {
+                                        <For
+                                            each=move || projects.clone()
+                                            key=|project| project.id
+                                            children=move |project| {
+                                                let project_slug = project.get_slug().to_str();
+                                                view! {
+                                                    <option
+                                                        value=project_slug.clone()
+                                                        selected=move || project_id.get() == project_slug
+                                                    >
+                                                        {project.name}
+                                                    </option>
                                                 }
-                                            />
-                                        },
-                                    );
-                                }
-                            })}
+                                            }
+                                        />
+                                    },
+                                );
+                            }
+                        })}
 
-                        </Suspense>
+                    </Suspense>
 
-                    </select>
-                    <svg
-                        class="pointer-events-none col-start-1 row-start-1 mr-2 size-5 self-center justify-self-end text-gray-500 sm:size-4"
-                        viewBox="0 0 16 16"
-                        fill="currentColor"
-                        aria-hidden="true"
-                        data-slot="icon"
-                    >
-                        <path
-                            fill-rule="evenodd"
-                            d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
-                            clip-rule="evenodd"
-                        />
-                    </svg>
-                </div>
+                </FormSelect>
+
                 <A
                     attr:class=" rounded-md bg-indigo-500 p-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
                     href="/user/projects"
@@ -140,4 +127,19 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
     }
 }
 
+#[server]
+pub async fn get_projects() -> Result<Vec<Project>, ServerFnError> {
+    use crate::security::utils::ssr::get_auth_session_user_id;
 
+
+    let pool = crate::ssr::pool()?;
+    let auth = crate::ssr::auth(false)?;
+    let projects = sqlx::query_as!(Project,
+        "SELECT * FROM projects WHERE id IN (SELECT project_id FROM permissions WHERE user_id = $1)",
+        get_auth_session_user_id(&auth).unwrap()
+    )
+        .fetch_all(&pool)
+        .await.
+        map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(projects)
+}

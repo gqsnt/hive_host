@@ -1,5 +1,6 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
+
 use crate::BoolInput;
 use crate::models::User;
 #[server(Signup, "/api")]
@@ -15,9 +16,9 @@ pub async fn signup(
     use secrecy::ExposeSecret;
     use common::server_action::user_action::UserAction;
     use leptos::logging::log;
-    use crate::security::ssr::SqlRoleType;
     use crate::security::utils::ssr::verify_easy_hash;
-
+    use crate::app::pages::user::projects::new_project::ssr::create_project;
+    
     let auth = crate::ssr::auth(true)?;
     let server_vars = crate::ssr::server_vars()?;
     verify_easy_hash(
@@ -46,7 +47,7 @@ pub async fn signup(
         r#"INSERT INTO users (email, password, role, username) VALUES ($1, $2, $3, $4) returning id"#,
         email,
         password_auth::generate_hash(&password.expose_secret().as_bytes()),
-        SqlRoleType::default() as SqlRoleType,
+        RoleType::default() as RoleType,
         username,
     )
         .fetch_one(&pool)
@@ -67,7 +68,7 @@ pub async fn signup(
     }.into()).await{
         log!("Error creating user: {:?}", e);
     };
-    if let Err(e) = crate::projects::ssr::create_project(user_slug, "Default".to_string()).await{
+    if let Err(e) = create_project(user_slug, "Default".to_string()).await{
         log!("Error creating default project: {:?}", e);
     };
     Ok(user)
