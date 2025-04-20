@@ -1,8 +1,11 @@
+use leptos::logging::log;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use secrecy::ExposeSecret;
-use leptos::prelude::Action;
+use leptos::prelude::{Action, ServerFnError};
+use leptos::server;
 use common::ProjectSlugStr;
+use common::server_action::ServerActionResponse;
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
 use crate::security::permission::{request_server_project_action_front, token_url};
 
@@ -38,6 +41,7 @@ where
             .ok()?
             .json()
             .await
+            .map_err(|e| log!("{e}"))
             .ok()
     })
 }
@@ -53,9 +57,11 @@ where
     client.post(path)
         .send()
         .await
+        .map_err(|e| log!("{e}"))
         .ok()?
         .json()
         .await
+        .map_err(|e| log!("{e}"))
         .ok()
 }
 
@@ -114,10 +120,8 @@ pub mod ssr{
             .await?
             .text()
             .await?;
-        log!("Response: {:?}", response);
         let response = serde_json::from_str::<ServerProjectActionResponse>(&response)
             .map_err(|e| {
-                log!("Error parsing response: {:?}", e);
                 ServerFnError::new(e.to_string())
             })?;
         
@@ -142,19 +146,38 @@ pub mod ssr{
     }
 }
 
-fn get_action_server_project_action(
-) -> Action<(ProjectSlugStr, ServerProjectAction), Option<ServerProjectActionResponse>>{
+
+pub type ServerProjectActionFront = Action<(ProjectSlugStr, ServerProjectAction), Result<ServerProjectActionResponse, ServerFnError>>;
+
+pub fn get_action_server_project_action(
+) -> ServerProjectActionFront{
     Action::new(|input: &(ProjectSlugStr, ServerProjectAction)| {
         let (project_slug, action) = input.clone();
         async move {
-            if let Ok(r) = request_server_project_action_front(project_slug, action).await{
-                return if let ServerProjectActionResponse::Token(token) = r.clone(){
-                    fetch_api(token_url(token).as_str()).await
-                }else{
-                    Some(r)
-                }
-            }
-             None
+            get_action_server_project_action_inner(project_slug, action).await
         }
     })
+}
+
+
+
+pub async fn get_action_server_project_action_inner(
+    project_slug:ProjectSlugStr,
+    action:ServerProjectAction
+)->Result<ServerProjectActionResponse, ServerFnError>{
+    if let Ok(r) = request_server_project_action_front(project_slug, action).await{
+        return if let ServerProjectActionResponse::Token(token) = r.clone(){
+            match fetch_api::<ServerProjectActionResponse>(token_url(token).as_str()).await{
+                None => {
+                    return Err(ServerFnError::new("Error fetching token response"));
+                }
+                Some(r) => {
+                    Ok(r)
+                }
+            }
+        }else{
+            Ok(r)
+        }
+    }
+    Err(ServerFnError::new("Error"))
 }

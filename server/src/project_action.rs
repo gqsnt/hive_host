@@ -10,8 +10,9 @@ use common::server_project_action::{
 };
 use common::{ProjectId, ProjectUnixSlugStr};
 use secrecy::ExposeSecret;
+use tokio::io::AsyncWriteExt;
 use common::server_project_action::io_action::dir_action::{DirAction, DirActionLsResponse, LsElement};
-use common::server_project_action::io_action::file_action::FileAction;
+use common::server_project_action::io_action::file_action::{FileAction, FileInfo};
 use common::server_project_action::io_action::IoAction;
 use common::server_project_action::permission::PermissionAction;
 use crate::cmd::{project_path, set_acl};
@@ -216,13 +217,152 @@ pub async fn handle_server_project_action_file(
     action: FileAction,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action {
-        FileAction::Create { path, name, content } => {}
-        FileAction::Rename { path, new_name } => {}
-        FileAction::Delete { path } => {}
-        FileAction::Move { path, new_path } => {}
-        FileAction::Copy { path, new_path } => {}
-        FileAction::View { path } => {}
-        FileAction::Update { path, content } => {}
+        FileAction::Create { path, name, content } => {
+            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, false).await?;
+            let new_path = path.join(name);
+            let writer = tokio::fs::File::create(&new_path)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible de créer le fichier : {}", e),
+                    )
+                })?;
+            let mut writer = tokio::io::BufWriter::new(writer);
+            if let Some(content) = content {
+                writer
+                    .write_all(content.as_bytes())
+                    .await
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Impossible d'écrire le fichier : {}", e),
+                        )
+                    })?;
+            }
+        }
+        FileAction::Rename { path, new_name } => {
+            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
+            let new_name = ensure_path_in_project_path(project_slug.clone(), &new_name, true, false).await?;
+            tokio::fs::rename(path, new_name)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible de renommer le fichier : {}", e),
+                    )
+                })?;
+        }
+        FileAction::Delete { path } => {
+            let path = ensure_path_in_project_path(project_slug, &path, true, true).await?;
+            tokio::fs::remove_file(path)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible de supprimer le fichier : {}", e),
+                    )
+                })?;
+        }
+        FileAction::Move { path, new_path } => {
+            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
+            let new_path = ensure_path_in_project_path(project_slug.clone(), &new_path, true, false).await?;
+            tokio::fs::rename(path, new_path)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible de déplacer le fichier : {}", e),
+                    )
+                })?;
+        }
+        FileAction::Copy { path, new_path } => {
+            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
+            let new_path = ensure_path_in_project_path(project_slug.clone(), &new_path, true, false).await?;
+            tokio::fs::copy(path, new_path)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible de copier le fichier : {}", e),
+                    )
+                })?;
+        }
+        FileAction::View { path } => {
+            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
+            let path_copy = path.clone();
+            let path_copy = path_copy.strip_prefix(project_path(project_slug.clone()))
+                .map_err(|e| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        format!("Impossible de lire le chemin : {}", e),
+                    )
+                })?;
+            let name = path.file_name()
+                .ok_or((StatusCode::BAD_REQUEST, "Impossible de lire le nom de fichier".to_string()))?
+                .to_string_lossy()
+                .to_string();
+            let file = tokio::fs::File::open(path)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible de lire le fichier : {}", e),
+                    )
+                })?;
+            let metadata = file.metadata()
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible de lire les méta : {}", e),
+                    )
+                })?;
+            let size = metadata.len();
+            let modified = metadata.modified().unwrap();
+            let modified: DateTime<Utc> = modified.into();
+            let last_modified = modified.format("%a, %d %b %Y %T").to_string();
+            let mut reader = tokio::io::BufReader::new(file);
+            let mut buf = Vec::new();
+            tokio::io::copy(&mut reader, &mut buf)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible de lire le fichier : {}", e),
+                    )
+                })?;
+           
+            return Ok(Json(ServerProjectActionResponse::File(FileInfo{
+                name,
+                content: String::from_utf8(buf).unwrap(),
+                size,
+                path: format!("./{}", path_copy.to_string_lossy().to_string()),
+                last_modified
+                
+            })));
+        }
+        FileAction::Update { path, content } => {
+            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
+            let mut file = tokio::fs::OpenOptions::new()
+                .write(true)
+                .open(path)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible d'ouvrir le fichier : {}", e),
+                    )
+                })?;
+            file.write_all(content.as_bytes())
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Impossible d'écrire le fichier : {}", e),
+                    )
+                })?;
+        }
     }
     Ok(Json(ServerProjectActionResponse::Ok))
 }

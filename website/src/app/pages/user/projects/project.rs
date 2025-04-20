@@ -16,7 +16,7 @@ use common::{ProjectSlug, ProjectSlugStr};
 use common::server_project_action::io_action::dir_action::DirAction;
 use common::server_project_action::io_action::file_action::FileAction;
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
-use crate::security::permission::{request_server_project_action_front, token_url};
+use crate::security::permission::{token_url};
 use leptos_router::params::{Params, ParamsError};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoMaybeErased;
@@ -191,25 +191,11 @@ pub async fn get_project(project_slug:ProjectSlugStr) -> Result<Project, ServerF
     use common::permission::Permission;
     use std::str::FromStr;
     use crate::security::permission::PermissionResult;
-
-    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
-        leptos_axum::redirect("/user/projects");
-        ServerFnError::new(e.to_string())
-    })?.id;
     
-    let pool = crate::ssr::pool()?;
-    let auth = crate::ssr::auth(false)?;
-    match crate::security::permission::ssr::ensure_permission(&auth, project_id, Permission::Read).await? {
-        PermissionResult::Allow => {
-            let project = sqlx::query_as!(Project, "SELECT * FROM projects WHERE id = $1", project_id)
-                .fetch_one(&pool)
-                .await
-                .map_err(|e| ServerFnError::new(e.to_string()))?;
-            Ok(project)
-        }
-        PermissionResult::Redirect(path) => {
-            leptos_axum::redirect(path.as_str());
-            Err(ServerFnError::new("Permission denied"))
-        }
-    }
+    let (_, pool, project_slug ) = crate::security::permission::ssr::handle_project_permission_request(project_slug, Permission::Read).await?;
+    let project = sqlx::query_as!(Project, "SELECT * FROM projects WHERE id = $1", project_slug.id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+    Ok(project)
 }

@@ -66,4 +66,6 @@ pub struct FileInfo{
     pub name:String,
     pub content:String,
     pub path:String,
+    pub size:u64,
+    pub last_modified:String,
 }

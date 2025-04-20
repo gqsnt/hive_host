@@ -1,14 +1,14 @@
+use std::str::FromStr;
 use leptos::prelude::ServerFnError;
 use leptos::server;
-use std::str::FromStr;
-
-use common::permission::Permission;
-use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
-use common::{ProjectId, ProjectSlug, ProjectSlugStr, UserId};
+use common::{ProjectSlug, ProjectSlugStr};
+use common::server_project_action::{IsProjectServerAction, ServerProjectAction, ServerProjectActionResponse};
 
 pub fn token_url(token: String) -> String {
     format!("http://127.0.1:3002/token/{}", token)
 }
+
+
 
 #[server]
 pub async fn request_server_project_action_front(
@@ -18,23 +18,37 @@ pub async fn request_server_project_action_front(
     use common::server_project_action::{IsProjectServerAction, ServerProjectActionRequest};
     use secrecy::ExposeSecret;
     use crate::api::ssr::{request_server_project_action, request_server_project_action_token};
-
-
-    let project_slug = ProjectSlug::from_str(project_slug.as_str())
-        .map_err(|_| {
-            leptos_axum::redirect("/user/projects");
-            ServerFnError::new("Invalid project slug")
-        })?;
+    use crate::security::permission::ssr::ensure_permission;
     
+    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
+        leptos_axum::redirect("/user/projects");
+        ServerFnError::new(e.to_string())
+    })?.id;
+
+
 
     let auth = crate::ssr::auth(false)?;
-    ssr::ensure_permission(&auth, project_slug.id, action.permission()).await?;
-    if action.with_token() {
-        request_server_project_action_token(project_slug, action).await
-    } else {
-        request_server_project_action(project_slug, action).await
+    match ensure_permission(&auth, project_id, action.permission()).await? {
+        PermissionResult::Allow => {
+            let pool = crate::ssr::pool()?;
+            let project = sqlx::query!(
+                r#"SELECT id, name FROM projects WHERE id = $1"#,
+                project_id
+            ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+            let project_slug = ProjectSlug::new(project.id, project.name);
+            if action.with_token() {
+                request_server_project_action_token(project_slug, action).await
+            } else {
+                request_server_project_action(project_slug, action).await
+            }
+        }
+        PermissionResult::Redirect(to_path) => {
+            leptos_axum::redirect(&to_path);
+            Err(ServerFnError::new("Permission denied"))
+        }
     }
 }
+
 
 pub enum PermissionResult {
     Allow,
@@ -43,20 +57,28 @@ pub enum PermissionResult {
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
+    use std::str::FromStr;
     use crate::security::permission::PermissionResult;
     use crate::security::ssr::AppAuthSession;
     use crate::security::utils::ssr::get_auth_session_user_id;
     use crate::ssr::{permissions, pool, Permissions};
     use common::permission::Permission;
-    use common::{ProjectId, UserId};
+    use common::{ProjectId, ProjectSlug, ProjectSlugStr, UserId};
     use leptos::logging::log;
     use leptos::prelude::ServerFnError;
-    
+    use sqlx::PgPool;
+    use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
 
     #[derive(Debug, Clone, sqlx::FromRow)]
     pub struct SqlPermission {
         pub(crate) permission: Permission,
     }
+
+
+
+
+
+
 
     pub async fn request_project_permission(
         permissions: Permissions,
@@ -80,6 +102,34 @@ pub mod ssr {
             Ok(None)
         }
     }
+
+
+    pub async fn handle_project_permission_request(
+        project_slug:ProjectSlugStr,
+        permission:Permission
+    ) ->  Result<(AppAuthSession,PgPool, ProjectSlug), ServerFnError>{
+        let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
+            leptos_axum::redirect("/user/projects");
+            ServerFnError::new(e.to_string())
+        })?.id;
+        let auth = crate::ssr::auth(false)?;
+        match ensure_permission(&auth, project_id, permission).await? {
+            PermissionResult::Allow => {
+                let pool = crate::ssr::pool()?;
+                let project = sqlx::query!(
+                r#"SELECT id, name FROM projects WHERE id = $1"#,
+                project_id
+            ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+                let project_slug = ProjectSlug::new(project.id, project.name);
+                Ok((auth, pool, project_slug))
+            }
+            PermissionResult::Redirect(to_path) => {
+                leptos_axum::redirect(&to_path);
+                Err(ServerFnError::new("Permission denied"))
+            }
+        }
+    }
+
 
     pub async fn ensure_permission(
         auth_session: &AppAuthSession,

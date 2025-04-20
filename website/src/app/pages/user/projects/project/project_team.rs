@@ -18,7 +18,7 @@ use crate::app::components::select::FormSelect;
 use crate::app::IntoView;
 use crate::app::pages::user::projects::project::MemoProjectParams;
 use crate::models::UserPermission;
-use crate::security::permission::{request_server_project_action_front, PermissionResult};
+use crate::security::permission::{PermissionResult};
 
 
 #[component]
@@ -334,7 +334,7 @@ pub async fn add_project_team_permission(
             ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
             let user_slug = UserSlug::new(other_user.id, other_user.username);
             let project_slug = ProjectSlug::new(project.id, project.name);
-            request_server_project_action_front(project_slug.to_str(), PermissionAction::Grant {
+            crate::security::permission::request_server_project_action_front(project_slug.to_str(), PermissionAction::Grant {
                 user_slug,
                 permission
             }.into()).await.map_err(|e| ServerFnError::new(e.to_string()))?;
