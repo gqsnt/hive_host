@@ -79,11 +79,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                                 Either::Left(
                                                                     view! {
                                                                         <ActionForm action=update_action>
-                                                                            <input
-                                                                                type="hidden"
-                                                                                name="project_slug"
-                                                                                value=slug()
-                                                                            />
+                                                                            <input type="hidden" name="project_slug" value=slug() />
                                                                             <input type="hidden" name="user_id" value=perm.user_id />
                                                                             <input type="hidden" name="csrf" value=get_csrf() />
                                                                             <div class="flex flex-col gap-y-2 lg:flex-row lg:items-center lg:gap-x-4">
@@ -122,11 +118,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                     <td class="px-4 py-3">
                                                         <Show when=is_owner>
                                                             <ActionForm action=delete_action on:submit=move |_| {}>
-                                                                <input
-                                                                    type="hidden"
-                                                                    name="project_slug"
-                                                                    value=slug()
-                                                                />
+                                                                <input type="hidden" name="project_slug" value=slug() />
                                                                 <input type="hidden" name="user_id" value=perm.user_id />
                                                                 <input type="hidden" name="csrf" value=get_csrf() />
                                                                 <button type="submit" class="btn-danger">
