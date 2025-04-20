@@ -19,3 +19,5 @@ tracing = "0.1.41"
 log = "0.4.27"
 async-tempfile= { version = "0.7.0", features = ["uuid"] }
 uuid = { version = "1.16.0", features = ["v4"] }
+
+chrono = {version = "0.4.40"}

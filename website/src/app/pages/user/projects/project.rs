@@ -185,23 +185,6 @@ fn SectionNav(
     }
 }
 
-fn get_action_server_project_action(
-) -> Action<(ProjectSlugStr, ServerProjectAction), Option<ServerProjectActionResponse>>{
-    Action::new(|input: &(ProjectSlugStr, ServerProjectAction)| {
-        let (project_slug, action) = input.clone();
-        async move {
-            if let Ok(r) = request_server_project_action_front(project_slug, action).await{
-                return if let ServerProjectActionResponse::Token(token) = r.clone(){
-                    crate::api::fetch_api(token_url(token).as_str()).await
-                }else{
-                    Some(r)
-                }
-            }
-             None
-        }
-    })
-}
-
 #[server]
 pub async fn get_project(project_slug:ProjectSlugStr) -> Result<Project, ServerFnError> {
     

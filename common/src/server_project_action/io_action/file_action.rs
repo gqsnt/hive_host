@@ -60,3 +60,10 @@ impl IsProjectServerAction for FileAction {
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct FileInfo{
+    pub name:String,
+    pub content:String,
+    pub path:String,
+}

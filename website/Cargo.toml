@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-leptos = { version = "0.8.0-rc1", features = ["nightly"] }
+leptos = { version = "0.8.0-rc1", features = ["nightly", "delegation"] }
 leptos_router = { version = "0.8.0-rc1", features = ["nightly"] }
 leptos_axum = { version = "0.8.0-rc1", optional = true }
 leptos_meta = { version = "0.8.0-rc1" }
@@ -51,6 +51,7 @@ send_wrapper = { version = "0.6.0", features = ["futures"] }
 uuid = {workspace = true}
 strum = {workspace = true, features = ["derive"]}
 strum_macros = {workspace = true}
+serde_json = "1.0.140"
 
 [features]
 hydrate = [

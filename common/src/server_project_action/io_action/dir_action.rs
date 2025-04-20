@@ -11,7 +11,7 @@ pub enum DirAction{
     Create{path:String},
     Rename{path:String, new_name:String},
     Delete{path:String},
-    Tree,
+    Ls{path:String},
     Download,
 }
 
@@ -25,7 +25,7 @@ impl IsProjectServerAction for DirAction{
             DirAction::Create { .. }
             |DirAction::Rename { .. }
             |DirAction::Delete { .. }
-            |DirAction::Tree => false,
+            |DirAction::Ls{..} => false,
             DirAction::Download => true
         }
     }
@@ -36,19 +36,21 @@ impl IsProjectServerAction for DirAction{
             |DirAction::Rename { .. }
             |DirAction::Delete { .. } => Permission::Write,
             DirAction::Download
-            |DirAction::Tree =>  Permission::Read
+            |DirAction::Ls{..} =>  Permission::Read
         }
     }
 }
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DirActionTreeResponse {
-    pub tree: Vec<DirTree>,
+pub struct DirActionLsResponse {
+    pub inner: Vec<LsElement>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum DirTree {
-    SubDir(String, Vec<DirTree>),
-    Dir(String),
+pub struct LsElement {
+    pub name: String,
+    pub is_dir: bool,
 }
+
+

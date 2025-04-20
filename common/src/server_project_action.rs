@@ -5,7 +5,8 @@ pub mod io_action;
 use serde::{Deserialize, Serialize};
 use crate::permission::Permission;
 use crate::{ProjectSlug, UserSlug};
-use crate::server_project_action::io_action::dir_action::DirActionTreeResponse;
+use crate::server_project_action::io_action::dir_action::{DirActionLsResponse};
+use crate::server_project_action::io_action::file_action::FileInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerProjectActionRequest {
@@ -43,7 +44,8 @@ pub enum ServerProjectActionResponse{
     Ok,
     Token(String),
     Content(String),
-    Tree(DirActionTreeResponse),
+    Ls(DirActionLsResponse),
+    File(FileInfo)
 }
 
 #[derive(Serialize, Deserialize, Debug,Clone)]

@@ -1,6 +1,11 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use secrecy::ExposeSecret;
+use leptos::prelude::Action;
+use common::ProjectSlugStr;
+use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
+use crate::security::permission::{request_server_project_action_front, token_url};
+
 #[cfg(not(feature = "ssr"))]
 pub fn fetch_api<T>(
     path: &str,
@@ -57,11 +62,10 @@ where
 
 #[cfg(feature = "ssr")]
 pub mod ssr{
+    use leptos::logging::log;
     use leptos::prelude::ServerFnError;
     use secrecy::ExposeSecret;
-    use serde::de::DeserializeOwned;
-    use serde::Serialize;
-    use common::{ProjectSlug, ProjectSlugStr};
+    use common::ProjectSlug;
     use common::server_action::{ServerAction, ServerActionResponse};
     use common::server_project_action::{ServerProjectAction, ServerProjectActionRequest, ServerProjectActionResponse};
 
@@ -102,14 +106,22 @@ pub mod ssr{
             action,
             project_slug,
         };
-        Ok(client
+        let response = client
             .post("http://127.0.0.1:3002/server_project_action")
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
             .send()
             .await?
-            .json::<ServerProjectActionResponse>()
-            .await?)
+            .text()
+            .await?;
+        log!("Response: {:?}", response);
+        let response = serde_json::from_str::<ServerProjectActionResponse>(&response)
+            .map_err(|e| {
+                log!("Error parsing response: {:?}", e);
+                ServerFnError::new(e.to_string())
+            })?;
+        
+        Ok(response)
     }
     
     
@@ -128,4 +140,21 @@ pub mod ssr{
             .await?
             .json::<ServerActionResponse>().await?)
     }
+}
+
+fn get_action_server_project_action(
+) -> Action<(ProjectSlugStr, ServerProjectAction), Option<ServerProjectActionResponse>>{
+    Action::new(|input: &(ProjectSlugStr, ServerProjectAction)| {
+        let (project_slug, action) = input.clone();
+        async move {
+            if let Ok(r) = request_server_project_action_front(project_slug, action).await{
+                return if let ServerProjectActionResponse::Token(token) = r.clone(){
+                    fetch_api(token_url(token).as_str()).await
+                }else{
+                    Some(r)
+                }
+            }
+             None
+        }
+    })
 }

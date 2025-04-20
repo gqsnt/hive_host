@@ -81,8 +81,8 @@ pub fn ProjectTeam() -> impl IntoView {
                                                                         <ActionForm action=update_action>
                                                                             <input
                                                                                 type="hidden"
-                                                                                name="project_id"
-                                                                                value=data.project_id
+                                                                                name="project_slug"
+                                                                                value=slug()
                                                                             />
                                                                             <input type="hidden" name="user_id" value=perm.user_id />
                                                                             <input type="hidden" name="csrf" value=get_csrf() />
@@ -124,8 +124,8 @@ pub fn ProjectTeam() -> impl IntoView {
                                                             <ActionForm action=delete_action on:submit=move |_| {}>
                                                                 <input
                                                                     type="hidden"
-                                                                    name="project_id"
-                                                                    value=data.project_id
+                                                                    name="project_slug"
+                                                                    value=slug()
                                                                 />
                                                                 <input type="hidden" name="user_id" value=perm.user_id />
                                                                 <input type="hidden" name="csrf" value=get_csrf() />
@@ -146,7 +146,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                 <div class="pt-6 section-border">
                                     <h3 class="section-title">"Add Member"</h3>
                                     <ActionForm action=add_action>
-                                        <input type="hidden" name="project_id" value=data.project_id />
+                                        <input type="hidden" name="project_slug" value=slug() />
                                         <input type="hidden" name="csrf" value=get_csrf() />
                                         <div class="mt-4 flex flex-col gap-y-4">
                                             <div class="flex flex-col gap-y-2 lg:flex-row lg:gap-x-6">
@@ -201,12 +201,16 @@ pub fn ProjectTeam() -> impl IntoView {
 #[server]
 pub async fn delete_project_team_member(
     csrf:String,
-    project_id: common::ProjectId,
+    project_slug:ProjectSlugStr,
     user_id: common::UserId,
 ) -> Result<(), leptos::prelude::ServerFnError> {
     use crate::api::ssr::request_server_project_action;
 
     use crate::security::utils::ssr::verify_easy_hash;
+    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
+        leptos_axum::redirect("/user/projects");
+        ServerFnError::new(e.to_string())
+    })?.id;
     let auth = crate::ssr::auth(false)?;
     let server_vars = crate::ssr::server_vars()?;
     verify_easy_hash(
@@ -248,12 +252,17 @@ pub async fn delete_project_team_member(
 #[server]
 pub async fn update_project_team_permission(
     csrf:String,
-    project_id:ProjectId,
+    project_slug:ProjectSlugStr,
     user_id: UserId,
     permission:Permission
 ) -> Result<(), ServerFnError>{
     use crate::api::ssr::request_server_project_action;
     use crate::security::utils::ssr::verify_easy_hash;
+
+    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
+        leptos_axum::redirect("/user/projects");
+        ServerFnError::new(e.to_string())
+    })?.id;
     
     let auth = crate::ssr::auth(false)?;
     let server_vars = crate::ssr::server_vars()?;
@@ -296,11 +305,16 @@ pub async fn update_project_team_permission(
 #[server]
 pub async fn add_project_team_permission(
     csrf:String,
-    project_id:ProjectId,
+    project_slug:ProjectSlugStr,
     email: String,
     permission:Permission
 ) -> Result<(), ServerFnError>{
     use crate::security::utils::ssr::verify_easy_hash;
+    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
+        leptos_axum::redirect("/user/projects");
+        ServerFnError::new(e.to_string())
+    })?.id;
+    
     let auth = crate::ssr::auth(false)?;
     let server_vars = crate::ssr::server_vars()?;
 

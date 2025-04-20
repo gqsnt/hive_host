@@ -1,0 +1,1 @@
+cargo build --bin server && sudo ./target/debug/server
