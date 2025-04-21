@@ -51,7 +51,7 @@ pub fn ProjectFiles() -> impl IntoView {
         |(path, slug, _)|  async  {
             match crate::api::get_action_server_project_action_inner(slug, DirAction::Ls {
                 path
-            }.into()).await{
+            }.into(), Default::default()).await{
                 Ok(ServerProjectActionResponse::Ls(files)) => Ok(files.inner),
                 _ => Err(ServerFnError::new("Invalid response")),
                 
@@ -94,13 +94,11 @@ pub fn ProjectFiles() -> impl IntoView {
 
    
     let handle_select_file = Callback::new(move |file_path: String| {
-        log!("Selected file: {}", file_path);
         set_selected_file(Some(file_path));
     });
 
 
     let handle_navigate_dir = Callback::new(move |dir_path: String| {
-        log!("Navigating to dir: {}", dir_path);
         set_current_path(dir_path);
         set_selected_file(None); 
     });

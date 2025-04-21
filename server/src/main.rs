@@ -2,7 +2,7 @@ use axum::routing::post;
 use axum::{Router};
 use moka::future::Cache;
 use secrecy::SecretString;
-use server::project_action::{project_action_token, server_project_action};
+use server::project_action::{server_project_action_token, server_project_action};
 use server::server_action::server_action;
 use server::AppState;
 use std::net::SocketAddr;
@@ -35,7 +35,7 @@ async fn main() {
     };
     let app = Router::<AppState>::new()
         .route("/server_project_action", post(server_project_action))
-        .route("/token/{token}", post(project_action_token))
+        .route("/token/{token}", post(server_project_action_token))
         .route("/server_action", post(server_action))
         .layer(CorsLayer::permissive())
         .with_state(app_state);

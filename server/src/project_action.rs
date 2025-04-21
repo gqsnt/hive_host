@@ -1,14 +1,17 @@
+use std::fmt::Debug;
 use std::path::PathBuf;
+use axum::body::to_bytes;
 use crate::{ensure_authorization, AppState, ServerProjectId};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
+use axum::response::IntoResponse;
 use chrono::{DateTime, Utc};
 use common::server_project_action::{
     IsProjectServerAction, ServerProjectAction, ServerProjectActionRequest,
     ServerProjectActionResponse,
 };
-use common::{ProjectId, ProjectUnixSlugStr};
+use common::{ProjectId, ProjectUnixSlugStr, StringContent};
 use secrecy::ExposeSecret;
 use tokio::io::AsyncWriteExt;
 use common::server_project_action::io_action::dir_action::{DirAction, DirActionLsResponse, LsElement};
@@ -18,14 +21,14 @@ use common::server_project_action::permission::PermissionAction;
 use crate::cmd::{project_path, set_acl};
 use crate::server_action::{add_user_to_project, remove_user_from_project, update_user_in_project};
 
-pub async fn project_action_token(
+pub async fn server_project_action_token(
     State(state): State<AppState>,
     Path(token): Path<String>,
+    Json(content): Json<StringContent>,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     if let Some((project_slug, action)) = state.server_project_action_cache.get(&token).await {
         state.server_project_action_cache.invalidate(&token).await;
-        tracing::debug!("Token match action {:?}", action);
-        handle_server_project_action(state, project_slug, action).await
+        handle_server_project_action(state, project_slug, action,content).await
     } else {
         Err((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))
     }
@@ -46,7 +49,7 @@ pub async fn server_project_action(
             }
             Ok(Json(ServerProjectActionResponse::Ok))
         } else {
-            handle_server_project_action(state, request.project_slug.to_unix(), request.action).await
+            handle_server_project_action(state, request.project_slug.to_unix(), request.action, StringContent::default()).await
         }
     })
 }
@@ -55,9 +58,10 @@ pub async fn handle_server_project_action(
     state: AppState,
     project_slug: ProjectUnixSlugStr,
     action: ServerProjectAction,
+    content: StringContent,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action{
-        ServerProjectAction::Io(io) => handle_server_project_action_io(project_slug, io).await,
+        ServerProjectAction::Io(io) => handle_server_project_action_io(project_slug, io, content).await,
         ServerProjectAction::Permission(permission) => handle_server_project_action_permission(project_slug, permission).await,
     }
 }
@@ -100,10 +104,11 @@ pub async fn handle_server_project_action_permission(
 pub async fn handle_server_project_action_io(
     project_slug: ProjectUnixSlugStr,
     action: IoAction,
+    content: StringContent,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action {
         IoAction::Dir(dir) => handle_server_project_action_dir(project_slug, dir).await,
-        IoAction::File(file) => handle_server_project_action_file(project_slug, file).await,
+        IoAction::File(file) => handle_server_project_action_file(project_slug, file, content).await,
     }
 }
 
@@ -215,12 +220,12 @@ pub async fn handle_server_project_action_dir(
 pub async fn handle_server_project_action_file(
     project_slug: ProjectUnixSlugStr,
     action: FileAction,
+    content: StringContent,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action {
-        FileAction::Create { path, name, content } => {
+        FileAction::Create { path } => {
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, false).await?;
-            let new_path = path.join(name);
-            let writer = tokio::fs::File::create(&new_path)
+            let writer = tokio::fs::File::create(&path)
                 .await
                 .map_err(|e| {
                     (
@@ -229,7 +234,7 @@ pub async fn handle_server_project_action_file(
                     )
                 })?;
             let mut writer = tokio::io::BufWriter::new(writer);
-            if let Some(content) = content {
+            if let Some(content) = content.inner{
                 writer
                     .write_all(content.as_bytes())
                     .await
@@ -342,7 +347,7 @@ pub async fn handle_server_project_action_file(
                 
             })));
         }
-        FileAction::Update { path, content } => {
+        FileAction::Update { path } => {
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
             let mut file = tokio::fs::OpenOptions::new()
                 .write(true)
@@ -354,6 +359,7 @@ pub async fn handle_server_project_action_file(
                         format!("Impossible d'ouvrir le fichier : {}", e),
                     )
                 })?;
+            let content = content.inner.unwrap_or_default();
             file.write_all(content.as_bytes())
                 .await
                 .map_err(|e| {

@@ -45,6 +45,20 @@ pub type UserSlugStr = String;
 pub type UserSlug = Slug<UserId, UserSlugStr, UserUnixSlugStr>;
 
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct StringContent{
+    pub inner: Option<String>,
+}
+
+impl StringContent{
+    pub fn new(content: String) -> Self {
+        StringContent {
+            inner: Some(content),
+        }
+    }
+}
+
+
 
 #[derive(Clone, Debug ,PartialEq, Eq, Serialize, Deserialize)]
 pub struct Slug<I, U, S>{

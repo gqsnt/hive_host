@@ -1,13 +1,15 @@
 use crate::api::get_action_server_project_action;
 use common::server_project_action::io_action::file_action::FileAction;
 use common::server_project_action::ServerProjectActionResponse;
-use common::ProjectSlugStr;
+use common::{ProjectSlugStr, StringContent};
 use leptos::either::Either;
-use leptos::prelude::{event_target_value, signal, ElementChild, GlobalAttributes, Show};
+use leptos::prelude::{event_target_value, signal, Effect, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, Read, Show};
 use leptos::prelude::{ClassAttribute, Get, Resource, Signal, Transition};
 use leptos::prelude::{GetUntracked, OnAttribute, OnTargetAttribute};
 use leptos::prelude::{IntoMaybeErased, PropAttribute, RwSignal, ServerFnError, Set, Suspend};
 use leptos::{component, view, IntoView};
+use leptos::html::{Input, Textarea};
+use leptos::logging::log;
 use web_sys::MouseEvent;
 
 #[component]
@@ -15,27 +17,38 @@ pub fn FileContentView(
     selected_file: Signal<Option<String>>,
     slug: Signal<ProjectSlugStr>,
 ) -> impl IntoView {
-    let file_content_signal = RwSignal::new(None::<String>);
-    let server_project_action = get_action_server_project_action();
+    
     let file_content_resource = Resource::new(
         move || (selected_file.get(), slug.get()),
-        |(file_path_opt, slug)| async {
+        |(file_path_opt, slug)| async move {
+
             match file_path_opt {
                 Some(file_path) => {
                     match crate::api::get_action_server_project_action_inner(
                         slug,
                         FileAction::View { path: file_path }.into(),
+                        Default::default(),
                     )
-                    .await
+                        .await
                     {
-                        Ok(ServerProjectActionResponse::File(file_info)) => Ok(file_info),
-                        _ => Err(ServerFnError::new("Invalid response")),
+                        Ok(ServerProjectActionResponse::File(file_info)) => {
+                            Ok(file_info)
+                        },
+                        Err(e) => {
+                            leptos::logging::error!("Error fetching file: {:?}", e);
+                            Err(ServerFnError::new("Failed to fetch file"))
+                        },
+                        _ => Err(ServerFnError::new("Invalid response type")),
                     }
                 }
                 _ => Err(ServerFnError::new("No file selected")),
             }
         },
     );
+
+
+
+
 
     view! {
         <Transition fallback=move || {
@@ -59,28 +72,39 @@ pub fn FileContentView(
                                 .map(|result| {
                                     match result {
                                         Ok(file_info) => {
-                                            let (file_content_signal_untrack,_) = signal(file_info.content.clone());
-                                            let path_clone = file_info.path.clone();
-                                            let is_modified = Signal::derive(move || {
-                                                file_content_signal.get().is_some()
-                                             });
-                                            let on_click_update = move|ev:MouseEvent|{
+                                                let server_project_action = get_action_server_project_action();
+                                            let (content_signal, set_content_signal) = signal(file_info.content.clone());
+                                             let node_ref:NodeRef<Textarea>=  NodeRef::new();
+                                            let path_clone = file_info.path.clone(); // Clone path for the closure
+                                            // let handle_on_input = move |ev: web_sys::Event| {
+                                            //     let target = ev.target().unwrap();
+                                            //     let value = event_target_value(&target);
+                                            //     // Update the signal with the new value
+                                            //     set_content_signal(value);
+                                            // };
+                                        
+                                            let on_click_update = move |ev: MouseEvent| {
                                                 ev.prevent_default();
-                                                server_project_action.dispatch((slug(),
-                                                    FileAction::Update {
-                                                        path: path_clone.clone() ,
-                                                        content: file_content_signal.get().unwrap_or_default()}.into())
-                                                );
+                                                //ev.prevent_default();
+                                                // Use the editing_content signal for the update payload
+                                                let content_to_save = node_ref.get().map(|t|t.value()).unwrap_or_default();
+                                                    //set_content_signal(content_to_save.clone()); 
+                                                server_project_action.dispatch((
+                                                        slug.get(), // Use get() for signals
+                                                        FileAction::Update {
+                                                            path: path_clone.clone()
+                                                        }.into(),
+                                                        Some(content_to_save)
+                                                    ));
                                             };
-                                            
-                                            Either::Left(
-                                                view! {
-                                                    <div class="flex flex-col h-full"> // Ensure parent flex col takes height
+                                        
+                                            Either::Left(view! {
+                                                <div class="flex flex-col h-full"> // Ensure parent flex col takes height
                                                     // --- Enhanced Header ---
                                                     <div class="flex flex-wrap justify-between items-center gap-x-4 gap-y-2 mb-4 pb-4 border-b border-white/10 flex-shrink-0">
                                                         // File Name (prominent)
                                                         <h3 class="text-lg font-semibold text-white truncate mr-auto" title=file_info.path.clone()> // Add full path on hover
-                                                            {file_info.name.clone()}
+                                                            {file_info.name}
                                                         </h3>
 
                                                         // Metadata Group
@@ -92,17 +116,17 @@ pub fn FileContentView(
                                                             <span>|</span>
                                                             <span>
                                                                 "Modified: "
-                                                                <span class="font-medium text-gray-300">{file_info.last_modified.clone()}</span>
+                                                                <span class="font-medium text-gray-300">{file_info.last_modified}</span>
                                                             </span>
                                                         </div>
 
-                                                        // Update Button (Show only if modified)
-                                                        <button
+                                                         <button
+                                                                type="button"
                                                                 on:click=on_click_update
                                                                 class="btn-primary px-3 py-1 text-sm" // Adjusted padding/text size
-                                                                disabled=server_project_action.pending().get() || !is_modified() // Disable while action is pending
+                                                                disabled = move || server_project_action.pending().get()
                                                             >
-                                                                 {move || if server_project_action.pending().get() { "Saving..." } else { "Save Changes" }}
+                                                                 Save Changes
                                                             </button>
                                                     </div>
 
@@ -110,22 +134,25 @@ pub fn FileContentView(
                                                     <div class="flex-grow min-h-0"> // Allow textarea container to grow and handle overflow
                                                         <textarea
                                                             wrap="off" // Keep horizontal scroll for code-like content
-                                                            class="w-full h-full resize-none bg-gray-800 text-gray-200 border border-gray-700 rounded-md p-3 font-mono text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                                                             rows="40"
-                                                            prop:value=move || file_content_signal.get()
-                                                            on:input=move |ev| file_content_signal.set(Some(event_target_value(&ev)))
+                                                            node_ref=node_ref
+                                                            name="file_content"
+                                                            class="w-full h-full resize-none bg-gray-800 text-gray-200 border border-gray-700 rounded-md p-3 font-mono text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                                                   
+                                            // Use the derived display_content signal
+                                                            // Update the specific editing_content signal on input
                                                         >
-                                                            {file_content_signal_untrack.get_untracked()}
+                                                        {content_signal.get_untracked()}
                                                         </textarea>
                                                      </div>
                                                 </div>
                                             })
                                         }
-                                        Err(_) => {
+                                        Err(e) => {
+                                            // Log the error for debugging
                                             Either::Right(
-
                                                 view! {
-                                                    <p class="text-gray-400">"Waiting for file data..."</p>
+                                                    // <p class="text-red-400">"Error loading file data. Please try again."</p>
                                                 },
                                             )
                                         }

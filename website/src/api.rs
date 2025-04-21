@@ -1,67 +1,76 @@
+use gloo_net::Error;
 use leptos::logging::log;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use secrecy::ExposeSecret;
 use leptos::prelude::{Action, ServerFnError};
 use leptos::server;
-use common::ProjectSlugStr;
+
+use common::{ProjectSlugStr, StringContent};
 use common::server_action::ServerActionResponse;
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
 use crate::security::permission::{request_server_project_action_front, token_url};
 
 #[cfg(not(feature = "ssr"))]
-pub fn fetch_api<T>(
-    path: &str,
-) -> impl std::future::Future<Output = Option<T>> + Send + '_
-where
-    T: Serialize + DeserializeOwned,
+pub fn fetch_api(
+    path: String,
+    content: StringContent,
+) -> impl std::future::Future<Output = Option<ServerProjectActionResponse>> + Send + 'static
 {
     use leptos::prelude::on_cleanup;
     use send_wrapper::SendWrapper;
     use leptos::logging::log;
+    use wasm_bindgen::JsValue;
 
     SendWrapper::new(async move {
         let abort_controller =
             SendWrapper::new(web_sys::AbortController::new().ok());
         let abort_signal = abort_controller.as_ref().map(|a| a.signal());
 
-        // abort in-flight requests if, e.g., we've navigated away from this page
+        //abort in-flight requests if, e.g., we've navigated away from this page
         on_cleanup(move || {
             if let Some(abort_controller) = abort_controller.take() {
                 abort_controller.abort()
             }
         });
+            gloo_net::http::Request::post(&path)
+                .header("Access-Control-Allow-Origin", "http://127.0.0.1:3002")
+                .header("Content-Type", "application/json")
+                //.abort_signal(abort_signal.as_ref())
+                .json(&content)
+                .map_err(|e| log!("api front json error: {e}"))
+                .ok()?
+                .send()
+                .await
+                .map_err(|e| log!("api front request error: {e}"))
+                .ok()?
+                .json::<ServerProjectActionResponse>()
+                .await
+                .map_err(|e| log!("api front response error: {e}"))
+                .ok()
 
-        gloo_net::http::Request::post(path)
-            .header("Access-Control-Allow-Origin", "http://127.0.0.1:3002")
-            .abort_signal(abort_signal.as_ref())
-            .send()
-            .await
-            .map_err(|e| log!("{e}"))
-            .ok()?
-            .json()
-            .await
-            .map_err(|e| log!("{e}"))
-            .ok()
     })
 }
 
 #[cfg(feature = "ssr")]
-pub async fn fetch_api<T>(path: &str) -> Option<T>
-where
-    T: Serialize + DeserializeOwned,
+pub async fn fetch_api(path: String, content:StringContent) -> Option<ServerProjectActionResponse>
 {
+    use reqwest::Body;
+    
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert("Access-Control-Allow-Origin", "http://127.0.0.1:3002".parse().unwrap());
+    headers.insert("Content-Type", "application/json".parse().unwrap());
+    headers.insert("Accept", "application/json".parse().unwrap());
     let client = reqwest::Client::builder().default_headers(headers).build().unwrap();
     client.post(path)
+        .json(&content)
         .send()
         .await
-        .map_err(|e| log!("{e}"))
+        .map_err(|e| log!("api back json error: {e}"))
         .ok()?
-        .json()
+        .json::<ServerProjectActionResponse>()
         .await
-        .map_err(|e| log!("{e}"))
+        .map_err(|e| log!("api back response error: {e}"))
         .ok()
 }
 
@@ -74,6 +83,7 @@ pub mod ssr{
     use common::ProjectSlug;
     use common::server_action::{ServerAction, ServerActionResponse};
     use common::server_project_action::{ServerProjectAction, ServerProjectActionRequest, ServerProjectActionResponse};
+    
 
 
     pub async fn request_server_project_action_token(
@@ -88,14 +98,23 @@ pub mod ssr{
             action,
             project_slug,
         };
-        let _ = client
+        let response = client
             .post("http://127.0.0.1:3002/server_project_action")
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
             .send()
-            .await?
-            .json::<ServerProjectActionResponse>()
-            .await?;
+            .await
+            .map_err(|e| {
+                log!("Error sending request_server_project_action_token: {}", e);
+                ServerFnError::new(e.to_string())
+            })?
+            .text()
+            .await
+            .map_err(|e| {;
+                log!("Error parsing request_server_project_action_token: {}", e);
+                ServerFnError::new(e.to_string())
+            })?;
+        log!("request_server_project_action_token response: {}", response);
         Ok(ServerProjectActionResponse::Token(token))
     }
     
@@ -117,9 +136,17 @@ pub mod ssr{
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
             .send()
-            .await?
+            .await
+            .map_err(|e| {
+                log!("Error sending request_server_project_action: {}", e);
+                ServerFnError::new(e.to_string())
+            })?
             .text()
-            .await?;
+            .await
+            .map_err(|e| {;
+                log!("Error parsing request_server_project_action: {}", e);
+                ServerFnError::new(e.to_string())
+            })?;
         let response = serde_json::from_str::<ServerProjectActionResponse>(&response)
             .map_err(|e| {
                 ServerFnError::new(e.to_string())
@@ -147,14 +174,14 @@ pub mod ssr{
 }
 
 
-pub type ServerProjectActionFront = Action<(ProjectSlugStr, ServerProjectAction), Result<ServerProjectActionResponse, ServerFnError>>;
+pub type ServerProjectActionFront = Action<(ProjectSlugStr, ServerProjectAction,Option<String>), Result<ServerProjectActionResponse, ServerFnError>>;
 
 pub fn get_action_server_project_action(
 ) -> ServerProjectActionFront{
-    Action::new(|input: &(ProjectSlugStr, ServerProjectAction)| {
-        let (project_slug, action) = input.clone();
+    Action::new(|input: &(ProjectSlugStr, ServerProjectAction, Option<String>)| {
+        let (project_slug, action, string_content) = input.clone();
         async move {
-            get_action_server_project_action_inner(project_slug, action).await
+            get_action_server_project_action_inner(project_slug, action, string_content).await
         }
     })
 }
@@ -163,11 +190,14 @@ pub fn get_action_server_project_action(
 
 pub async fn get_action_server_project_action_inner(
     project_slug:ProjectSlugStr,
-    action:ServerProjectAction
+    action:ServerProjectAction,
+    content:Option<String>,
 )->Result<ServerProjectActionResponse, ServerFnError>{
     if let Ok(r) = request_server_project_action_front(project_slug, action).await{
         return if let ServerProjectActionResponse::Token(token) = r.clone(){
-            match fetch_api::<ServerProjectActionResponse>(token_url(token).as_str()).await{
+            match fetch_api(token_url(token), StringContent{
+                inner:content
+            }).await{
                 None => {
                     return Err(ServerFnError::new("Error fetching token response"));
                 }

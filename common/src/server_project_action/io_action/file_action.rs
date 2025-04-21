@@ -8,8 +8,6 @@ use crate::server_project_action::io_action::IoAction;
 pub enum FileAction {
     Create {
         path: String,
-        name: String,
-        content: Option<String>,
     },
     Rename {
         path: String,
@@ -31,7 +29,6 @@ pub enum FileAction {
     },
     Update {
         path: String,
-        content: String,
     },
 }
 

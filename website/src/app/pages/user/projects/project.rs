@@ -8,15 +8,13 @@ pub mod project_team;
 use std::fmt::format;
 use leptos::{component, server, view, IntoView, Params};
 use leptos::context::provide_context;
-use leptos::either::{Either, EitherOf4};
-use leptos::leptos_dom::log;
-use leptos::prelude::{signal, Action, ClassAttribute, CollectView, Effect, Get, IntoAny, Memo, OnAttribute, ReadSignal, Resource, ServerFnError, Set, Suspend, Suspense, With, WriteSignal};
-use leptos_router::hooks::{use_location, use_navigate, use_params};
-use common::{ProjectSlug, ProjectSlugStr};
-use common::server_project_action::io_action::dir_action::DirAction;
-use common::server_project_action::io_action::file_action::FileAction;
-use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
-use crate::security::permission::{token_url};
+use leptos::either::{EitherOf4};
+
+use leptos::prelude::{signal, ClassAttribute, CollectView, Effect, Get, IntoAny, Memo, OnAttribute, ReadSignal, Resource, ServerFnError, Set, Suspend, Suspense, With, WriteSignal};
+use leptos_router::hooks::{use_location, use_params};
+use common::{ProjectSlugStr};
+
+use common::server_project_action::{ServerProjectActionResponse};
 use leptos_router::params::{Params, ParamsError};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoMaybeErased;
@@ -24,7 +22,7 @@ use leptos::prelude::IntoAnyAttribute;
 use leptos_router::components::{Outlet, A};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use crate::app::pages::user::UserPage;
+
 use crate::models::Project;
 
 #[derive(Params, Clone, Debug, PartialEq)]

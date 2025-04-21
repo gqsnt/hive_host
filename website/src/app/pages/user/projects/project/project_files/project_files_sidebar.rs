@@ -39,7 +39,7 @@ pub fn ProjectFilesSidebar(
         }
         server_project_action.dispatch((slug(), DirAction::Create {
             path:format!("{}/{}", current_path.get(), folder_name),
-        }.into()));
+        }.into(), None));
     };
     
     let on_file_create_submit = move |ev:SubmitEvent|{
@@ -49,10 +49,8 @@ pub fn ProjectFilesSidebar(
             return;
         }
         server_project_action.dispatch((slug(), FileAction::Create {
-            path:current_path.get(),
-            name:file_name,
-            content:None,
-        }.into()));
+            path:format!("{}/{}", current_path.get(), file_name),
+        }.into(),None));
     };
     
     
@@ -282,7 +280,7 @@ pub fn ProjectFilesSidebarItem(
                 path,
             }.into()
         };
-        server_project_action.dispatch((slug(),action));
+        server_project_action.dispatch((slug(),action,None));
 
     };
     
@@ -297,16 +295,16 @@ pub fn ProjectFilesSidebarItem(
         }
         let action = if item.is_dir{
             DirAction::Rename {
-                path: current_path(),
+                path: format!("{}/{}", current_path.get(), old_name),
                 new_name,
             }.into()
         }else{
             FileAction::Rename {
-                path: current_path(),
+                path: format!("{}/{}", current_path.get(), old_name),
                 new_name,
             }.into()
         };
-        server_project_action.dispatch((slug(),action));
+        server_project_action.dispatch((slug(),action,None));
         set_is_renaming_item(false)
     };
     
