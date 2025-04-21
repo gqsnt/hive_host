@@ -1,15 +1,11 @@
-use leptos::prelude::{AddAnyAttr, ServerAction};
-use leptos::{component, view, IntoView};
-use leptos::either::Either;
-use leptos::prelude::{expect_context, ClassAttribute, Read};
+use leptos::prelude::AddAnyAttr;
+use leptos::prelude::ClassAttribute;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
+use leptos::{component, view, IntoView};
 
-use leptos_router::components::A;
-use crate::app::ReadUserSignal;
-use crate::security::logout;
 use leptos::prelude::IntoMaybeErased;
-
+use leptos_router::components::A;
 
 #[component]
 pub fn HomePage() -> impl IntoView {
@@ -30,4 +26,3 @@ pub fn HomePage() -> impl IntoView {
         <h1>"Welcome to Hive Host!"</h1>
     }
 }
-

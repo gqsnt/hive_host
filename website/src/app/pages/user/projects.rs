@@ -1,42 +1,39 @@
 use crate::app::components::select::FormSelect;
-use leptos::prelude::{AddAnyAttr, Callback, Effect, For, ServerFnError, Signal};
-use leptos::prelude::{signal, OnTargetAttribute};
-use leptos::prelude::{BindAttribute, PropAttribute};
-use leptos::prelude::{CustomAttribute, Get, RwSignal};
-use leptos::attr::selected;
 
-use leptos::{component, server, view, IntoView};
-use leptos::either::Either;
-use leptos::ev::Targeted;
-use leptos::logging::log;
-use leptos::prelude::{ClassAttribute, CollectView, ErrorBoundary, Resource, Suspend, Suspense};
-use leptos_router::components::{Outlet, A};
-use crate::error_template::ErrorTemplate;
-use leptos::prelude::ElementChild;
-use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::IntoAnyAttribute;
-use leptos::server::ServerAction;
-use leptos_router::hooks::{use_location, use_navigate};
-use leptos_router::location::Location;
-use web_sys::{Event, HtmlSelectElement};
+use leptos::prelude::{signal};
+use leptos::prelude::{AddAnyAttr, Callback, Effect, For, ServerFnError};
+use leptos::prelude::{Get};
+
 use crate::app::pages::user::projects::new_project::CreateProject;
-use crate::app::pages::user::projects::project::get_project;
 use crate::models::Project;
+use leptos::either::Either;
+use leptos::prelude::ElementChild;
+use leptos::prelude::IntoAnyAttribute;
+use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::{ClassAttribute, Resource, Suspend, Suspense};
+use leptos::server::ServerAction;
+use leptos::{component, server, view, IntoView};
+use leptos_router::components::{Outlet, A};
+use leptos_router::hooks::{use_location};
 
-pub mod project;
 pub mod new_project;
-
-
+pub mod project;
 
 #[component]
 pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl IntoView {
-    let projects = Resource::new(move || (create_project_action.version().get()), move |_| get_projects());
+    let projects = Resource::new(
+        move || create_project_action.version().get(),
+        move |_| get_projects(),
+    );
 
-    let projects = move ||
-        projects.get().map(|p|p.unwrap_or_default())
-            .unwrap_or_default();
-    
-    let get_project_slug = ||{
+    let projects = move || {
+        projects
+            .get()
+            .map(|p| p.unwrap_or_default())
+            .unwrap_or_default()
+    };
+
+    let get_project_slug = || {
         let location = use_location().pathname.get().clone();
         let split = location.split("/").collect::<Vec<_>>();
         // find projets string and return next or "0"
@@ -52,23 +49,25 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
         "0".to_string()
     };
     let (project_id, set_project_id) = signal(get_project_slug());
-    
-    let handle_select_project = move |value:String| {
+
+    let handle_select_project = move |value: String| {
         let navigate = leptos_router::hooks::use_navigate();
         set_project_id(value.clone());
         match value.as_str() {
             "0" => navigate("/user/projects", Default::default()),
-            _ => navigate(format!("/user/projects/{value}").as_str(), Default::default())
+            _ => navigate(
+                format!("/user/projects/{value}").as_str(),
+                Default::default(),
+            ),
         };
     };
-    Effect::new(move ||{
-       let project_id =  get_project_slug();
+    Effect::new(move || {
+        let project_id = get_project_slug();
         set_project_id(project_id.clone());
     });
-    let select_project_callback = Callback::new(move |e|{
+    let select_project_callback = Callback::new(move |e| {
         handle_select_project(e);
     });
-
 
     view! {
         <div>
@@ -81,12 +80,12 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                     }>
                         {move || Suspend::new(async move {
                             let projects = projects();
-                            if projects.is_empty() {
-                                return Either::Right(
+                             if projects.is_empty() {
+                                Either::Right(
                                     view! { <option value="0">"No Projects Found"</option> },
-                                );
+                                )
                             } else {
-                                return Either::Left(
+                                Either::Left(
                                     view! {
                                         <For
                                             each=move || projects.clone()
@@ -104,7 +103,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                                             }
                                         />
                                     },
-                                );
+                                )
                             }
                         })}
 
@@ -115,7 +114,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                 <A
                     attr:class=" rounded-md bg-indigo-500 p-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
                     href="/user/projects"
-                    on:click=move |e| {
+                    on:click=move |_| {
                         set_project_id("0".to_string());
                     }
                 >
@@ -130,7 +129,6 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
 #[server]
 pub async fn get_projects() -> Result<Vec<Project>, ServerFnError> {
     use crate::security::utils::ssr::get_auth_session_user_id;
-
 
     let pool = crate::ssr::pool()?;
     let auth = crate::ssr::auth(false)?;

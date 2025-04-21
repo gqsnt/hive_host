@@ -1,8 +1,8 @@
 use axum::routing::post;
-use axum::{Router};
+use axum::Router;
 use moka::future::Cache;
 use secrecy::SecretString;
-use server::project_action::{server_project_action_token, server_project_action};
+use server::project_action::{server_project_action, server_project_action_token};
 use server::server_action::server_action;
 use server::AppState;
 use std::net::SocketAddr;

@@ -1,65 +1,57 @@
-pub mod project_files_sidebar;
 pub mod file_content_view;
+pub mod project_files_sidebar;
 
-use leptos::prelude::{request_animation_frame, Callable, Callback, FromFormData, IntoAnyAttribute, MaybeSignal, NodeRef, NodeRefAttribute, ReadSignal, Signal, Transition};
-use leptos::prelude::AddAnyAttr;
-use leptos::prelude::{event_target_value, ActionForm, CustomAttribute, GlobalAttributes, PropAttribute, Show};
-use std::str::FromStr;
-use crate::app::ServerFnError;
-use common::server_project_action::io_action::dir_action::{DirAction, LsElement};
-use leptos::prelude::{expect_context, signal, ClassAttribute, CollectView, Effect, For, Get, IntoMaybeErased, OnAttribute, RwSignal, ServerAction, Set, Suspend, Suspense};
-use leptos::prelude::ElementChild;
-use leptos::{component, server, view};
-use leptos::either::{Either, EitherOf3, EitherOf4};
-use leptos::form::FromFormDataError;
-use leptos::html::Input;
-use leptos::logging::log;
-use leptos::server::Resource;
-use leptos::svg::set;
-use web_sys::SubmitEvent;
-use common::{ProjectId, ProjectSlug, ProjectSlugStr};
-use common::permission::Permission;
-use common::server_project_action::io_action::file_action::{FileAction, FileInfo};
-use common::server_project_action::permission::PermissionAction;
-use common::server_project_action::ServerProjectActionResponse;
-use crate::api::{get_action_server_project_action};
-use crate::app::IntoView;
-use crate::app::pages::user::projects::project::MemoProjectParams;
+use crate::api::get_action_server_project_action;
 use crate::app::pages::user::projects::project::project_files::file_content_view::FileContentView;
 use crate::app::pages::user::projects::project::project_files::project_files_sidebar::ProjectFilesSidebar;
-use crate::BoolInput;
-use crate::security::permission::PermissionResult;
+use crate::app::pages::user::projects::project::MemoProjectParams;
+use crate::app::IntoView;
+use crate::app::ServerFnError;
+
+use common::server_project_action::io_action::dir_action::{DirAction};
+use common::server_project_action::ServerProjectActionResponse;
+use leptos::either::Either;
+
+use leptos::prelude::ElementChild;
+
+use leptos::prelude::{
+    expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased, OnAttribute,
+};
+use leptos::prelude::{Callback, Signal};
+use leptos::server::Resource;
+use leptos::{component, view};
 
 #[component]
 pub fn ProjectFiles() -> impl IntoView {
     let params: MemoProjectParams = expect_context();
-    let slug  = Signal::derive(move || params.get().unwrap().project_slug.clone());
+    let slug = Signal::derive(move || params.get().unwrap().project_slug.clone());
 
     let (current_path, set_current_path) = signal(".".to_string());
-    let (selected_file, set_selected_file) = signal::<Option<String>>(None); 
-    
-    
+    let (selected_file, set_selected_file) = signal::<Option<String>>(None);
+
     let server_project_action = get_action_server_project_action();
 
-
     let file_list_resource = Resource::new(
-        move || (
-            current_path.get(),
-            slug(),
-            server_project_action.version().get(),
-        ),
-        |(path, slug, _)|  async  {
-            match crate::api::get_action_server_project_action_inner(slug, DirAction::Ls {
-                path
-            }.into(), Default::default()).await{
+        move || {
+            (
+                current_path.get(),
+                slug(),
+                server_project_action.version().get(),
+            )
+        },
+        |(path, slug, _)| async {
+            match crate::api::get_action_server_project_action_inner(
+                slug,
+                DirAction::Ls { path }.into(),
+                None,None
+            )
+            .await
+            {
                 Ok(ServerProjectActionResponse::Ls(files)) => Ok(files.inner),
                 _ => Err(ServerFnError::new("Invalid response")),
-                
             }
-        }
+        },
     );
-    
-
 
     let go_up_one_level = move |_| {
         let current = current_path.get();
@@ -74,7 +66,6 @@ pub fn ProjectFiles() -> impl IntoView {
         }
     };
 
-   
     let breadcrumbs = move || {
         let path = current_path.get();
         let mut segments = vec![("Root".to_string(), ".".to_string())];
@@ -92,17 +83,14 @@ pub fn ProjectFiles() -> impl IntoView {
         segments
     };
 
-   
     let handle_select_file = Callback::new(move |file_path: String| {
         set_selected_file(Some(file_path));
     });
 
-
     let handle_navigate_dir = Callback::new(move |dir_path: String| {
         set_current_path(dir_path);
-        set_selected_file(None); 
+        set_selected_file(None);
     });
-
 
     view! {
         <div class="flex flex-col h-full">
@@ -159,36 +147,9 @@ pub fn ProjectFiles() -> impl IntoView {
                     />
                 </div>
                 <div class="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
-                    <FileContentView 
-        selected_file=selected_file.into()
-        slug=slug
-        />
+                    <FileContentView selected_file=selected_file.into() slug=slug />
                 </div>
             </div>
         </div>
     }
 }
-
-
-
-#[server]
-pub async fn get_list_file(
-    project_slug: ProjectSlugStr,
-    path: String,
-) -> Result<Vec<LsElement>, ServerFnError> {
-    use crate::api::ssr::request_server_project_action;
-    use crate::security::permission::ssr::handle_project_permission_request;
-    
-    let (_, _, project_slug) = handle_project_permission_request(project_slug, Permission::Read).await?;
-
-    match request_server_project_action(project_slug, DirAction::Ls {
-        path
-    }.into()).await.map_err(|e| ServerFnError::new(e.to_string()))?{
-        ServerProjectActionResponse::Ls(inner) => Ok(inner.inner),
-        _ => {
-            Err(ServerFnError::new("Invalid response"))
-        }
-    }
-    
-}
-

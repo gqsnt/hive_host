@@ -1,25 +1,25 @@
-use std::fmt::Debug;
-use std::path::PathBuf;
-use axum::body::to_bytes;
-use crate::{ensure_authorization, AppState, ServerProjectId};
-use axum::extract::{Path, Request, State};
+use crate::cmd::{project_path};
+use crate::server_action::{add_user_to_project, remove_user_from_project, update_user_in_project};
+use crate::{ensure_authorization, AppState};
+
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
-use axum::response::IntoResponse;
 use chrono::{DateTime, Utc};
+use common::server_project_action::io_action::dir_action::{
+    DirAction, DirActionLsResponse, LsElement,
+};
+use common::server_project_action::io_action::file_action::{FileAction, FileInfo};
+use common::server_project_action::io_action::IoAction;
+use common::server_project_action::permission::PermissionAction;
 use common::server_project_action::{
     IsProjectServerAction, ServerProjectAction, ServerProjectActionRequest,
     ServerProjectActionResponse,
 };
-use common::{ProjectId, ProjectUnixSlugStr, StringContent};
+use common::{ProjectUnixSlugStr, StringContent};
 use secrecy::ExposeSecret;
+use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
-use common::server_project_action::io_action::dir_action::{DirAction, DirActionLsResponse, LsElement};
-use common::server_project_action::io_action::file_action::{FileAction, FileInfo};
-use common::server_project_action::io_action::IoAction;
-use common::server_project_action::permission::PermissionAction;
-use crate::cmd::{project_path, set_acl};
-use crate::server_action::{add_user_to_project, remove_user_from_project, update_user_in_project};
 
 pub async fn server_project_action_token(
     State(state): State<AppState>,
@@ -28,7 +28,7 @@ pub async fn server_project_action_token(
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     if let Some((project_slug, action)) = state.server_project_action_cache.get(&token).await {
         state.server_project_action_cache.invalidate(&token).await;
-        handle_server_project_action(state, project_slug, action,content).await
+        handle_server_project_action(state, project_slug, action, content).await
     } else {
         Err((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()))
     }
@@ -49,52 +49,59 @@ pub async fn server_project_action(
             }
             Ok(Json(ServerProjectActionResponse::Ok))
         } else {
-            handle_server_project_action(state, request.project_slug.to_unix(), request.action, StringContent::default()).await
+            handle_server_project_action(
+                state,
+                request.project_slug.to_unix(),
+                request.action,
+                StringContent::default(),
+            )
+            .await
         }
     })
 }
 
 pub async fn handle_server_project_action(
-    state: AppState,
+    _state: AppState,
     project_slug: ProjectUnixSlugStr,
     action: ServerProjectAction,
     content: StringContent,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
-    match action{
-        ServerProjectAction::Io(io) => handle_server_project_action_io(project_slug, io, content).await,
-        ServerProjectAction::Permission(permission) => handle_server_project_action_permission(project_slug, permission).await,
+    match action {
+        ServerProjectAction::Io(io) => {
+            handle_server_project_action_io(project_slug, io, content).await
+        }
+        ServerProjectAction::Permission(permission) => {
+            handle_server_project_action_permission(project_slug, permission).await
+        }
     }
 }
-
 
 pub async fn handle_server_project_action_permission(
     project_slug: ProjectUnixSlugStr,
     action: PermissionAction,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action {
-        PermissionAction::Grant { user_slug, permission } => {
-            if let Err(e) = add_user_to_project(
-                user_slug.to_unix(),
-                project_slug,
-                permission,
-            ).await{
+        PermissionAction::Grant {
+            user_slug,
+            permission,
+        } => {
+            if let Err(e) = add_user_to_project(user_slug.to_unix(), project_slug, permission).await
+            {
                 tracing::debug!("Error adding user to project: {:?}", e);
             }
         }
         PermissionAction::Revoke { user_slug } => {
-            if let Err(e) = remove_user_from_project(
-                user_slug.to_unix(),
-                project_slug
-            ).await{
+            if let Err(e) = remove_user_from_project(user_slug.to_unix(), project_slug).await {
                 tracing::debug!("Error removing user from project: {:?}", e);
             }
         }
-        PermissionAction::Update { user_slug, permission } => {
-            if let Err(e) = update_user_in_project(
-                user_slug.to_unix(),
-                project_slug,
-                permission,
-            ).await{
+        PermissionAction::Update {
+            user_slug,
+            permission,
+        } => {
+            if let Err(e) =
+                update_user_in_project(user_slug.to_unix(), project_slug, permission).await
+            {
                 tracing::debug!("Error updating user in project: {:?}", e);
             }
         }
@@ -108,7 +115,9 @@ pub async fn handle_server_project_action_io(
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action {
         IoAction::Dir(dir) => handle_server_project_action_dir(project_slug, dir).await,
-        IoAction::File(file) => handle_server_project_action_file(project_slug, file, content).await,
+        IoAction::File(file) => {
+            handle_server_project_action_file(project_slug, file, content).await
+        }
     }
 }
 
@@ -119,57 +128,53 @@ pub async fn handle_server_project_action_dir(
     match action {
         DirAction::Create { path } => {
             let path = ensure_path_in_project_path(project_slug, &path, false, false).await?;
-            tokio::fs::create_dir_all(path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de créer le répertoire : {}", e),
-                    )
-                })?;
+            tokio::fs::create_dir_all(path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de créer le répertoire : {}", e),
+                )
+            })?;
         }
         DirAction::Rename { path, new_name } => {
-            let path = ensure_path_in_project_path(project_slug.clone(), &path, false, true).await?;
-            let new_name = ensure_path_in_project_path(project_slug.clone(), &new_name, false, false).await?;
-            tokio::fs::rename(path, new_name)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de renommer le répertoire : {}", e),
-                    )
-                })?;
+            let path =
+                ensure_path_in_project_path(project_slug.clone(), &path, false, true).await?;
+            let new_name =
+                ensure_path_in_project_path(project_slug.clone(), &new_name, false, false).await?;
+            tokio::fs::rename(path, new_name).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de renommer le répertoire : {}", e),
+                )
+            })?;
         }
         DirAction::Delete { path } => {
             let path = ensure_path_in_project_path(project_slug, &path, false, true).await?;
-            tokio::fs::remove_dir_all(path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de supprimer le répertoire : {}", e),
-                    )
-                })?;
+            tokio::fs::remove_dir_all(path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de supprimer le répertoire : {}", e),
+                )
+            })?;
         }
         DirAction::Ls { path } => {
             let path = ensure_path_in_project_path(project_slug, &path, false, true).await?;
-            let mut entries = tokio::fs::read_dir(path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de lire le répertoire : {}", e),
-                    )
-                })?;
+            let mut entries = tokio::fs::read_dir(path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de lire le répertoire : {}", e),
+                )
+            })?;
             let mut result = Vec::new();
-            while let Ok(Some(entry)) = entries.next_entry().await{
+            while let Ok(Some(entry)) = entries.next_entry().await {
                 let meta = entry.metadata().await.unwrap();
                 result.push(LsElement {
                     name: entry.file_name().to_string_lossy().to_string(),
                     is_dir: meta.is_dir(),
                 })
             }
-            return Ok(Json(ServerProjectActionResponse::Ls(DirActionLsResponse{inner: result})));
+            return Ok(Json(ServerProjectActionResponse::Ls(DirActionLsResponse {
+                inner: result,
+            })));
         }
         DirAction::Download => {
             // make a tar.gz of the project and send it to the client
@@ -190,29 +195,30 @@ pub async fn handle_server_project_action_dir(
             if !output.status.success() {
                 return Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Impossible de créer l'archive : {}", String::from_utf8_lossy(&output.stderr)),
+                    format!(
+                        "Impossible de créer l'archive : {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    ),
                 ));
             }
-            let tar_file = tokio::fs::File::open(tar_path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de lire l'archive : {}", e),
-                    )
-                })?;
+            let tar_file = tokio::fs::File::open(tar_path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de lire l'archive : {}", e),
+                )
+            })?;
             let mut reader = tokio::io::BufReader::new(tar_file);
             // return the file to the client
             let mut buf = Vec::new();
-            tokio::io::copy(&mut reader, &mut buf)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de lire l'archive : {}", e),
-                    )
-                })?;
-            return Ok(Json(ServerProjectActionResponse::Content(String::from_utf8(buf).unwrap())));
+            tokio::io::copy(&mut reader, &mut buf).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de lire l'archive : {}", e),
+                )
+            })?;
+            return Ok(Json(ServerProjectActionResponse::Content(
+                String::from_utf8(buf).unwrap(),
+            )));
         }
     }
     Ok(Json(ServerProjectActionResponse::Ok))
@@ -224,127 +230,116 @@ pub async fn handle_server_project_action_file(
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action {
         FileAction::Create { path } => {
-            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, false).await?;
-            let writer = tokio::fs::File::create(&path)
-                .await
-                .map_err(|e| {
+            let path =
+                ensure_path_in_project_path(project_slug.clone(), &path, true, false).await?;
+            let writer = tokio::fs::File::create(&path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de créer le fichier : {}", e),
+                )
+            })?;
+            let mut writer = tokio::io::BufWriter::new(writer);
+            if let Some(content) = content.inner {
+                writer.write_all(content.as_bytes()).await.map_err(|e| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de créer le fichier : {}", e),
+                        format!("Impossible d'écrire le fichier : {}", e),
                     )
                 })?;
-            let mut writer = tokio::io::BufWriter::new(writer);
-            if let Some(content) = content.inner{
-                writer
-                    .write_all(content.as_bytes())
-                    .await
-                    .map_err(|e| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("Impossible d'écrire le fichier : {}", e),
-                        )
-                    })?;
             }
         }
         FileAction::Rename { path, new_name } => {
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
-            let new_name = ensure_path_in_project_path(project_slug.clone(), &new_name, true, false).await?;
-            tokio::fs::rename(path, new_name)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de renommer le fichier : {}", e),
-                    )
-                })?;
+            let new_name =
+                ensure_path_in_project_path(project_slug.clone(), &new_name, true, false).await?;
+            tokio::fs::rename(path, new_name).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de renommer le fichier : {}", e),
+                )
+            })?;
         }
         FileAction::Delete { path } => {
             let path = ensure_path_in_project_path(project_slug, &path, true, true).await?;
-            tokio::fs::remove_file(path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de supprimer le fichier : {}", e),
-                    )
-                })?;
+            tokio::fs::remove_file(path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de supprimer le fichier : {}", e),
+                )
+            })?;
         }
         FileAction::Move { path, new_path } => {
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
-            let new_path = ensure_path_in_project_path(project_slug.clone(), &new_path, true, false).await?;
-            tokio::fs::rename(path, new_path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de déplacer le fichier : {}", e),
-                    )
-                })?;
+            let new_path =
+                ensure_path_in_project_path(project_slug.clone(), &new_path, true, false).await?;
+            tokio::fs::rename(path, new_path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de déplacer le fichier : {}", e),
+                )
+            })?;
         }
         FileAction::Copy { path, new_path } => {
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
-            let new_path = ensure_path_in_project_path(project_slug.clone(), &new_path, true, false).await?;
-            tokio::fs::copy(path, new_path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de copier le fichier : {}", e),
-                    )
-                })?;
+            let new_path =
+                ensure_path_in_project_path(project_slug.clone(), &new_path, true, false).await?;
+            tokio::fs::copy(path, new_path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de copier le fichier : {}", e),
+                )
+            })?;
         }
         FileAction::View { path } => {
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
             let path_copy = path.clone();
-            let path_copy = path_copy.strip_prefix(project_path(project_slug.clone()))
+            let path_copy = path_copy
+                .strip_prefix(project_path(project_slug.clone()))
                 .map_err(|e| {
                     (
                         StatusCode::BAD_REQUEST,
                         format!("Impossible de lire le chemin : {}", e),
                     )
                 })?;
-            let name = path.file_name()
-                .ok_or((StatusCode::BAD_REQUEST, "Impossible de lire le nom de fichier".to_string()))?
+            let name = path
+                .file_name()
+                .ok_or((
+                    StatusCode::BAD_REQUEST,
+                    "Impossible de lire le nom de fichier".to_string(),
+                ))?
                 .to_string_lossy()
                 .to_string();
-            let file = tokio::fs::File::open(path)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de lire le fichier : {}", e),
-                    )
-                })?;
-            let metadata = file.metadata()
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de lire les méta : {}", e),
-                    )
-                })?;
+            let file = tokio::fs::File::open(path).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de lire le fichier : {}", e),
+                )
+            })?;
+            let metadata = file.metadata().await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de lire les méta : {}", e),
+                )
+            })?;
             let size = metadata.len();
             let modified = metadata.modified().unwrap();
             let modified: DateTime<Utc> = modified.into();
             let last_modified = modified.format("%a, %d %b %Y %T").to_string();
             let mut reader = tokio::io::BufReader::new(file);
             let mut buf = Vec::new();
-            tokio::io::copy(&mut reader, &mut buf)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible de lire le fichier : {}", e),
-                    )
-                })?;
-           
-            return Ok(Json(ServerProjectActionResponse::File(FileInfo{
+            tokio::io::copy(&mut reader, &mut buf).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible de lire le fichier : {}", e),
+                )
+            })?;
+
+            return Ok(Json(ServerProjectActionResponse::File(FileInfo {
                 name,
                 content: String::from_utf8(buf).unwrap(),
                 size,
-                path: format!("./{}", path_copy.to_string_lossy().to_string()),
-                last_modified
-                
+                path: format!("./{}", path_copy.to_string_lossy()),
+                last_modified,
             })));
         }
         FileAction::Update { path } => {
@@ -360,23 +355,16 @@ pub async fn handle_server_project_action_file(
                     )
                 })?;
             let content = content.inner.unwrap_or_default();
-            file.write_all(content.as_bytes())
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Impossible d'écrire le fichier : {}", e),
-                    )
-                })?;
+            file.write_all(content.as_bytes()).await.map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Impossible d'écrire le fichier : {}", e),
+                )
+            })?;
         }
     }
     Ok(Json(ServerProjectActionResponse::Ok))
 }
-
-
-
-
-
 
 pub async fn ensure_path_in_project_path(
     project_slug: ProjectUnixSlugStr,
@@ -386,19 +374,24 @@ pub async fn ensure_path_in_project_path(
 ) -> Result<PathBuf, (StatusCode, String)> {
     // 1) Canonicaliser la racine projet
     let project_root = PathBuf::from(project_path(project_slug));
-    let project_root = tokio::fs::canonicalize(&project_root)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Impossible de résoudre la racine projet : {}", e),
-            )
-        })?;
+    let project_root = tokio::fs::canonicalize(&project_root).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Impossible de résoudre la racine projet : {}", e),
+        )
+    })?;
 
     // 2) Rejeter tout chemin absolu ou contenant `..`
     let rel = PathBuf::from(user_path);
-    if rel.is_absolute() || rel.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-        return Err((StatusCode::BAD_REQUEST, format!("Chemin invalide : {}", user_path)));
+    if rel.is_absolute()
+        || rel
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("Chemin invalide : {}", user_path),
+        ));
     }
 
     // Chemin final (peut ne pas exister)
@@ -429,10 +422,16 @@ pub async fn ensure_path_in_project_path(
             )
         })?;
         if is_file && !meta.is_file() {
-            return Err((StatusCode::BAD_REQUEST, format!("'{}' n’est pas un fichier", user_path)));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("'{}' n’est pas un fichier", user_path),
+            ));
         }
         if !is_file && !meta.is_dir() {
-            return Err((StatusCode::BAD_REQUEST, format!("'{}' n’est pas un dossier", user_path)));
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("'{}' n’est pas un dossier", user_path),
+            ));
         }
 
         Ok(canon)
@@ -447,7 +446,11 @@ pub async fn ensure_path_in_project_path(
         let parent_canon = tokio::fs::canonicalize(parent).await.map_err(|e| {
             (
                 StatusCode::NOT_FOUND,
-                format!("Le dossier parent '{}' n’existe pas : {}", parent.display(), e),
+                format!(
+                    "Le dossier parent '{}' n’existe pas : {}",
+                    parent.display(),
+                    e
+                ),
             )
         })?;
 

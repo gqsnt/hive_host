@@ -1,66 +1,75 @@
-use leptos::prelude::{signal, AddAnyAttr, FromFormData, NodeRef, NodeRefAttribute, ReadSignal, RwSignal};
-use leptos::prelude::IntoAnyAttribute;
-use leptos::prelude::ElementChild;
-use leptos::prelude::CustomAttribute;
-use leptos::prelude::{Callable, Get, IntoMaybeErased, Transition};
-use leptos::{component, view, IntoView};
-use leptos::prelude::{ActionForm, ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Resource, ServerAction, ServerFnError, Signal};
-use common::ProjectSlugStr;
+use crate::api::{ServerProjectActionFront};
 use common::server_project_action::io_action::dir_action::{DirAction, LsElement};
+use common::server_project_action::io_action::file_action::FileAction;
+use common::ProjectSlugStr;
 use leptos::callback::Callback;
 use leptos::either::{Either, EitherOf3};
 use leptos::html::Input;
+use leptos::prelude::{expect_context, CustomAttribute};
+use leptos::prelude::ElementChild;
+use leptos::prelude::{signal, NodeRef, NodeRefAttribute};
+use leptos::prelude::{Callable, Get, IntoMaybeErased, Transition};
+use leptos::prelude::{
+    ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Resource, ServerFnError, Signal,
+};
+use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
-use common::server_project_action::io_action::file_action::FileAction;
-use common::server_project_action::io_action::IoAction::Dir;
-use crate::api::{get_action_server_project_action, ServerProjectActionFront};
+use crate::app::pages::CsrfValue;
 
 #[component]
 pub fn ProjectFilesSidebar(
-    file_list_resource:Resource<Result<Vec<LsElement>,ServerFnError>>,
+    file_list_resource: Resource<Result<Vec<LsElement>, ServerFnError>>,
     current_path: Signal<String>,
     slug: Signal<ProjectSlugStr>,
     on_go_up: Callback<()>,
     on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
-    server_project_action:ServerProjectActionFront,
+    server_project_action: ServerProjectActionFront,
 ) -> impl IntoView {
-    
-    let folder_name_ref:NodeRef<Input>=  NodeRef::new();
-    let file_name_ref:NodeRef<Input>=  NodeRef::new();
-    
-    let ls_server_project_action = get_action_server_project_action();
-    
+    let folder_name_ref: NodeRef<Input> = NodeRef::new();
+    let file_name_ref: NodeRef<Input> = NodeRef::new();
+    let csrf_value = expect_context::<Signal<CsrfValue>>();
+
     let on_folder_create_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         let folder_name = folder_name_ref.get().unwrap().value();
         if folder_name.trim().is_empty() {
             return;
         }
-        server_project_action.dispatch((slug(), DirAction::Create {
-            path:format!("{}/{}", current_path.get(), folder_name),
-        }.into(), None));
+        server_project_action.dispatch((
+            slug(),
+            DirAction::Create {
+                path: format!("{}/{}", current_path.get(), folder_name),
+            }
+            .into(),
+            None,
+            Some(csrf_value().0)
+        ));
     };
-    
-    let on_file_create_submit = move |ev:SubmitEvent|{
+
+    let on_file_create_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         let file_name = file_name_ref.get().unwrap().value();
         if file_name.trim().is_empty() {
             return;
         }
-        server_project_action.dispatch((slug(), FileAction::Create {
-            path:format!("{}/{}", current_path.get(), file_name),
-        }.into(),None));
+        server_project_action.dispatch((
+            slug(),
+            FileAction::Create {
+                path: format!("{}/{}", current_path.get(), file_name),
+            }
+            .into(),
+            None,
+            Some(csrf_value().0)
+        ));
     };
-    
-    
-    
+
     view! {
         <div class="p-4 h-full flex flex-col">
 
             // Create Folder Section
             <div class="mb-2 flex-shrink-0">
-                <form on:submit=on_folder_create_submit  class="flex items-center gap-x-2">
+                <form on:submit=on_folder_create_submit class="flex items-center gap-x-2">
                     <input
                         type="text"
                         name="folder_name"
@@ -142,24 +151,24 @@ pub fn ProjectFilesSidebar(
                 on_navigate_dir=on_navigate_dir
                 on_select_file=on_select_file
                 server_project_action=server_project_action
+                csrf_value=csrf_value
             />
 
         </div>
     }
 }
 
-
 #[component]
 pub fn ProjectFilesSidebarList(
-    slug:Signal<ProjectSlugStr>,
-    current_path:Signal<String>,
-    file_list_resource: Resource<Result<Vec<LsElement>,ServerFnError>>,
+    csrf_value: Signal<CsrfValue>,
+    slug: Signal<ProjectSlugStr>,
+    current_path: Signal<String>,
+    file_list_resource: Resource<Result<Vec<LsElement>, ServerFnError>>,
     on_go_up: Callback<()>,
     on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
-    server_project_action:ServerProjectActionFront,
-    
-)  -> impl IntoView{
+    server_project_action: ServerProjectActionFront,
+) -> impl IntoView {
     view! {
         <div class="flex-grow overflow-y-auto -mr-4 pr-4">
             <ul class="space-y-1">
@@ -204,7 +213,7 @@ pub fn ProjectFilesSidebarList(
                                 Ok(ls_elements) => {
                                     Either::Left({
                                         if ls_elements.is_empty() && current_path.get() == "." {
-                                            EitherOf3::A(view! {})
+                                            EitherOf3::A(())
                                         } else if ls_elements.is_empty() {
                                             EitherOf3::B(
                                                 view! {
@@ -226,6 +235,7 @@ pub fn ProjectFilesSidebarList(
                                                                 server_project_action=server_project_action
                                                                 on_navigate_dir=on_navigate_dir
                                                                 on_select_file=on_select_file
+                                                                csrf_value=csrf_value
                                                             />
                                                         }
                                                     })
@@ -254,60 +264,53 @@ pub fn ProjectFilesSidebarList(
 
 #[component]
 pub fn ProjectFilesSidebarItem(
-    slug:Signal<ProjectSlugStr>,
-    current_path:Signal<String>,
-    item:LsElement,
-    server_project_action:ServerProjectActionFront,
+    csrf_value: Signal<CsrfValue>,
+    slug: Signal<ProjectSlugStr>,
+    current_path: Signal<String>,
+    item: LsElement,
+    server_project_action: ServerProjectActionFront,
     on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
-    
-)  -> impl IntoView{
-    let (is_renaming_item, set_is_renaming_item) = signal(
-        false,
-    );
-    let new_name_ref:NodeRef<Input>= NodeRef::new();
+) -> impl IntoView {
+    let (is_renaming_item, set_is_renaming_item) = signal(false);
+    let new_name_ref: NodeRef<Input> = NodeRef::new();
     let (item_name, _) = signal(item.name.clone());
-    
-    let on_delete_item_submit = move |ev:SubmitEvent|{
+
+    let on_delete_item_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         let path = format!("{}/{}", current_path.get(), item_name());
-        let action = if item.is_dir{
-            DirAction::Delete{
-                path,
-            }.into()
-        }else{
-            FileAction::Delete{
-                path,
-            }.into()
+        let action = if item.is_dir {
+            DirAction::Delete { path }.into()
+        } else {
+            FileAction::Delete { path }.into()
         };
-        server_project_action.dispatch((slug(),action,None));
-
+        server_project_action.dispatch((slug(), action, None,Some(csrf_value().0)));
     };
-    
+
     let on_rename_item_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         let new_name = new_name_ref.get().unwrap().value();
         let old_name = item_name();
-        if new_name.trim().is_empty()
-            || new_name == old_name
-        {
+        if new_name.trim().is_empty() || new_name == old_name {
             return;
         }
-        let action = if item.is_dir{
+        let action = if item.is_dir {
             DirAction::Rename {
                 path: format!("{}/{}", current_path.get(), old_name),
                 new_name,
-            }.into()
-        }else{
+            }
+            .into()
+        } else {
             FileAction::Rename {
                 path: format!("{}/{}", current_path.get(), old_name),
                 new_name,
-            }.into()
+            }
+            .into()
         };
-        server_project_action.dispatch((slug(),action,None));
+        server_project_action.dispatch((slug(), action, None,Some(csrf_value().0)));
         set_is_renaming_item(false)
     };
-    
+
     view! {
         <li class="group flex items-center justify-between gap-x-1 px-2 py-1.5 text-sm rounded-md text-gray-300 hover:bg-gray-700 hover:text-white">
             <form

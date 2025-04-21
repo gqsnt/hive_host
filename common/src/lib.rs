@@ -4,12 +4,12 @@ pub mod permission;
 pub mod server_action;
 pub mod server_project_action;
 
+use serde::de::StdError;
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::str::FromStr;
-use serde::de::StdError;
-use serde::{Deserialize, Serialize};
 
 #[macro_export]
 macro_rules! impl_chain_from {
@@ -30,13 +30,11 @@ macro_rules! impl_chain_from {
     };
 }
 
-
 pub type ProjectId = i64;
 
 pub type ProjectUnixSlugStr = String;
 pub type ProjectSlugStr = String;
 pub type ProjectSlug = Slug<ProjectId, ProjectSlugStr, ProjectUnixSlugStr>;
-
 
 pub type UserId = i64;
 
@@ -44,13 +42,12 @@ pub type UserUnixSlugStr = String;
 pub type UserSlugStr = String;
 pub type UserSlug = Slug<UserId, UserSlugStr, UserUnixSlugStr>;
 
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct StringContent{
+pub struct StringContent {
     pub inner: Option<String>,
 }
 
-impl StringContent{
+impl StringContent {
     pub fn new(content: String) -> Self {
         StringContent {
             inner: Some(content),
@@ -58,10 +55,8 @@ impl StringContent{
     }
 }
 
-
-
-#[derive(Clone, Debug ,PartialEq, Eq, Serialize, Deserialize)]
-pub struct Slug<I, U, S>{
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Slug<I, U, S> {
     pub id: I,
     pub name: String,
     #[serde(skip)]
@@ -102,8 +97,7 @@ where
             return Err(SlugParseError::MissingSeparator);
         };
 
-        let id = id_str.parse::<I>()
-            .map_err(SlugParseError::InvalidId)?;
+        let id = id_str.parse::<I>().map_err(SlugParseError::InvalidId)?;
 
         if name.is_empty() {
             return Err(SlugParseError::EmptyName);
@@ -141,7 +135,3 @@ where
         U::from(format!("{}{}", self.name, self.id))
     }
 }
-
-
-
-

@@ -1,35 +1,18 @@
+use crate::impl_chain_from;
 use crate::permission::Permission;
+use crate::server_project_action::io_action::IoAction;
 use crate::server_project_action::{IsProjectServerAction, ServerProjectAction};
 use serde::{Deserialize, Serialize};
-use crate::impl_chain_from;
-use crate::server_project_action::io_action::IoAction;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum FileAction {
-    Create {
-        path: String,
-    },
-    Rename {
-        path: String,
-        new_name: String,
-    },
-    Delete {
-        path: String,
-    },
-    Move {
-        path: String,
-        new_path: String,
-    },
-    Copy {
-        path: String,
-        new_path: String,
-    },
-    View {
-        path: String,
-    },
-    Update {
-        path: String,
-    },
+    Create { path: String },
+    Rename { path: String, new_name: String },
+    Delete { path: String },
+    Move { path: String, new_path: String },
+    Copy { path: String, new_path: String },
+    View { path: String },
+    Update { path: String },
 }
 
 impl_chain_from!(ServerProjectAction, ServerProjectAction::Io | IoAction::File => FileAction);
@@ -56,13 +39,25 @@ impl IsProjectServerAction for FileAction {
             FileAction::View { .. } => Permission::Read,
         }
     }
+
+    fn require_csrf(&self) -> bool {
+        match self {
+            FileAction::Create { .. }
+            | FileAction::Rename { .. }
+            | FileAction::Delete { .. }
+            | FileAction::Move { .. }
+            | FileAction::Copy { .. }
+            | FileAction::Update { .. } => true,
+            FileAction::View { .. } => false,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct FileInfo{
-    pub name:String,
-    pub content:String,
-    pub path:String,
-    pub size:u64,
-    pub last_modified:String,
+pub struct FileInfo {
+    pub name: String,
+    pub content: String,
+    pub path: String,
+    pub size: u64,
+    pub last_modified: String,
 }

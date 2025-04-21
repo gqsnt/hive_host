@@ -1,16 +1,13 @@
-
-
-
 #[cfg(feature = "ssr")]
-pub mod ssr{
+pub mod ssr {
+    use crate::security::ssr::AppAuthSession;
     use blake2::{Blake2s256, Digest};
+    use common::{UserId, UserSlug};
     use http::header::CONTENT_TYPE;
     use http::HeaderValue;
     use leptos::prelude::{use_context, ServerFnError};
     use secrecy::{ExposeSecret, SecretString};
     use uuid::Uuid;
-    use common::{UserId, UserSlug};
-    use crate::security::ssr::AppAuthSession;
 
     pub fn get_auth_session_user_id(auth_session: &AppAuthSession) -> Option<UserId> {
         auth_session.current_user.as_ref().map(|u| u.id)
@@ -86,15 +83,15 @@ pub mod ssr{
             HeaderValue::from_static(mime::TEXT_HTML_UTF_8.as_ref()),
         );
         response.insert_header(
-            axum::http::header::X_XSS_PROTECTION,
+            http::header::X_XSS_PROTECTION,
             HeaderValue::from_static("1; mode=block"),
         );
         response.insert_header(
-            axum::http::header::X_FRAME_OPTIONS,
+            http::header::X_FRAME_OPTIONS,
             HeaderValue::from_static("DENY"),
         );
         response.insert_header(
-            axum::http::header::CACHE_CONTROL,
+            http::header::CACHE_CONTROL,
             HeaderValue::from_static("no-cache, private"),
         );
 
@@ -143,7 +140,7 @@ pub mod ssr{
         //     );
         // }
         response.insert_header(
-            axum::http::header::STRICT_TRANSPORT_SECURITY,
+            http::header::STRICT_TRANSPORT_SECURITY,
             HeaderValue::from_static("max-age=31536000"),
         )
     }

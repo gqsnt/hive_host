@@ -9,11 +9,11 @@ pub fn FormSelect(
     children: Children,
     #[prop(optional, into)] on_change: Option<Callback<String>>,
 ) -> impl IntoView {
-    let on_target_input = move |ev:Targeted<Event, HtmlSelectElement>|{
-       if let Some(on_change) = on_change .as_ref(){
+    let on_target_input = move |ev: Targeted<Event, HtmlSelectElement>| {
+        if let Some(on_change) = on_change.as_ref() {
             on_change.try_run(ev.target().value());
         }
-    } ;
+    };
     view! {
         <div class="relative">
             <select name=name class="form-select" prop:value=value on:input:target=on_target_input>

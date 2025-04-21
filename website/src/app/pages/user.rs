@@ -4,19 +4,20 @@ use crate::security::{get_user, Logout};
 use leptos::context::provide_context;
 use leptos::either::Either;
 use leptos::form::ActionForm;
-use leptos::prelude::ElementChild;
+use leptos::prelude::{ElementChild};
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, ClassAttribute, Get, GlobalAttributes};
 use leptos::prelude::{
-    AddAnyAttr, Effect, IntoAny, Read, ReadSignal, ServerAction, Suspense, WriteSignal,
+    AddAnyAttr, Effect, ReadSignal, ServerAction, Suspense, WriteSignal,
 };
 use leptos::prelude::{AriaAttributes, OnAttribute};
-use leptos::prelude::{CustomAttribute, ElementExt};
+use leptos::prelude::{CustomAttribute};
 use leptos::server::OnceResource;
 use leptos::{component, view, IntoView};
 use leptos_router::components::{Outlet, A};
 use leptos_router::hooks::use_location;
+use crate::app::pages::{include_csrf};
 
 pub mod dashboard;
 pub mod projects;
@@ -75,6 +76,8 @@ impl From<&str> for UserPage {
 pub fn UserPage() -> impl IntoView {
     let logout = ServerAction::<Logout>::new();
     let user_resource = OnceResource::new(get_user());
+    include_csrf();
+
     let (mobile_sidebar_open, set_mobile_sidebar_open) = signal(false);
     let (user_signal, set_user_signal): (ReadUserSignal, WriteSignal<User>) =
         signal(User::default());
@@ -120,15 +123,15 @@ pub fn UserPage() -> impl IntoView {
                                                     aria-hidden="true"
                                                     on:click=move |_| set_mobile_sidebar_open(false)
                                                 ></div>
-                                
+
                                                 <div class="fixed inset-0 flex">
-                                
+
                                                     <div
                                                         class="relative mr-16 flex w-full max-w-xs flex-1 transform transition ease-in-out duration-300"
                                                         class:translate-x-0=move || mobile_sidebar_open.get()
                                                         class:-translate-x-full=move || !mobile_sidebar_open.get()
                                                     >
-                                
+
                                                         <div
                                                             class="absolute top-0 left-full flex w-16 justify-center pt-5 transform transition ease-in-out duration-300"
                                                            class:opacity-100=move || mobile_sidebar_open.get()
@@ -145,8 +148,8 @@ pub fn UserPage() -> impl IntoView {
                                                                 </svg>
                                                             </button>
                                                         </div>
-                                
-                                
+
+
                                                         <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-950 px-6 pb-4 ring-1 ring-white/10">
                                                             <div class="flex h-16 shrink-0 items-center">
                                                                  <A href="/">
@@ -161,8 +164,8 @@ pub fn UserPage() -> impl IntoView {
                                                                             <NavItem page=UserPage::Projects current_page=current_page/>
                                                                         </ul>
                                                                     </li>
-                                
-                                
+
+
                                                                     <div class="mt-auto -mx-2 space-y-1">
                                                                         <li>
                                                                             <A
@@ -209,8 +212,8 @@ pub fn UserPage() -> impl IntoView {
                                                     </div>
                                                 </div>
                                             </div>
-                                
-                                
+
+
                                             <div class="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
                                                 <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-950 px-6 pb-4">
                                                     <div class="flex h-16 shrink-0 items-center">
@@ -226,8 +229,8 @@ pub fn UserPage() -> impl IntoView {
                                                                      <NavItem page=UserPage::Projects current_page=current_page/>
                                                                 </ul>
                                                             </li>
-                                
-                                
+
+
                                                             <div class="mt-auto -mx-2 space-y-1">
                                                                 <li>
                                                                      <A
@@ -272,7 +275,7 @@ pub fn UserPage() -> impl IntoView {
                                                     </nav>
                                                 </div>
                                             </div>
-                                
+
                                             <div class="lg:pl-72 h-full">
                                                 <div class="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-700 bg-gray-950 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:hidden">
                                                     <button

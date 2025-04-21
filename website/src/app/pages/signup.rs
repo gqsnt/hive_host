@@ -1,14 +1,15 @@
-use leptos::{component, view, IntoView};
-use leptos::prelude::{ActionForm, ClassAttribute, ServerAction};
 use crate::app::components::csrf_field::CSRFField;
-use leptos::prelude::ElementChild;
 use crate::security::signup::Signup;
+use leptos::prelude::{ElementChild};
 use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::IntoAnyAttribute;
-
+use leptos::prelude::{ActionForm, ClassAttribute, ServerAction};
+use leptos::{component, view, IntoView};
+use crate::app::pages::{include_csrf};
 
 #[component]
-pub  fn SignupPage() -> impl IntoView {
+pub fn SignupPage() -> impl IntoView {
+    include_csrf();
+    
     let action = ServerAction::<Signup>::new();
     view! {
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
@@ -124,4 +125,3 @@ pub  fn SignupPage() -> impl IntoView {
         </div>
     }
 }
-

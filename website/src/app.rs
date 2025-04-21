@@ -1,29 +1,28 @@
-pub mod pages;
 pub mod components;
+pub mod pages;
 
-
-use leptos::prelude::*;
-use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
-use leptos_router::components::{ParentRoute, ProtectedParentRoute};
-use leptos_router::{components::{Route, Router, Routes}, path, MatchNestedRoutes, SsrMode};
 use crate::app::pages::home::HomePage;
 use crate::app::pages::login::LoginPage;
 use crate::app::pages::signup::SignupPage;
 use crate::app::pages::user::dashboard::DashboardPage;
-use crate::app::pages::user::projects::project::ProjectPage;
-use crate::app::pages::user::projects::ProjectsPage;
-use crate::app::pages::user::user_settings::UserSettingsPage;
-use crate::app::pages::user::UserPage;
-use crate::models::User;
-use crate::security::login::Login;
-use crate::security::{get_user, Logout};
-use crate::security::signup::Signup;
-use leptos::prelude::IntoMaybeErased;
 use crate::app::pages::user::projects::new_project::{CreateProject, NewProjectPage};
 use crate::app::pages::user::projects::project::project_dashboard::ProjectDashboard;
 use crate::app::pages::user::projects::project::project_files::ProjectFiles;
 use crate::app::pages::user::projects::project::project_settings::ProjectSettings;
 use crate::app::pages::user::projects::project::project_team::ProjectTeam;
+use crate::app::pages::user::projects::project::ProjectPage;
+use crate::app::pages::user::projects::ProjectsPage;
+use crate::app::pages::user::user_settings::UserSettingsPage;
+use crate::app::pages::user::UserPage;
+use crate::models::User;
+use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::*;
+use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
+use leptos_router::components::ParentRoute;
+use leptos_router::{
+    components::{Route, Router, Routes},
+    path, SsrMode,
+};
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -51,7 +50,7 @@ pub fn App() -> impl IntoView {
     crate::security::utils::ssr::set_headers();
 
     // Provides context that manages stylesheets, titles, meta tags, etc.
-    
+
     view! {
         // injects a stylesheet into the document <head>
         // id=leptos means cargo-leptos will hot-reload this stylesheet
@@ -79,12 +78,8 @@ pub fn App() -> impl IntoView {
     }
 }
 
-
-
-
-
 #[component(transparent)]
-fn UserRoutes() -> impl MatchNestedRoutes + Clone{
+fn UserRoutes() -> impl MatchNestedRoutes + Clone {
     view! {
         <ParentRoute path=path!("user") view=move || view! { <UserPage /> }>
             <Route path=path!("") view=DashboardPage />
@@ -92,13 +87,12 @@ fn UserRoutes() -> impl MatchNestedRoutes + Clone{
             <ProjectRoutes />
 
         </ParentRoute>
-    }.into_inner()
+    }
+    .into_inner()
 }
 
-
-
 #[component(transparent)]
-fn ProjectRoutes() -> impl MatchNestedRoutes + Clone{
+fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     let create_project_action = ServerAction::<CreateProject>::new();
     view! {
         <ParentRoute
@@ -114,6 +108,6 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone{
             </ParentRoute>
 
         </ParentRoute>
-    }.into_inner()
+    }
+    .into_inner()
 }
-

@@ -13,8 +13,7 @@ use std::sync::Arc;
 pub struct ServerUserId(pub String);
 
 #[derive(Clone, Debug)]
-pub struct ServerProjectId (pub String);
-
+pub struct ServerProjectId(pub String);
 
 impl From<UserId> for ServerUserId {
     fn from(user_id: UserId) -> Self {
@@ -27,8 +26,6 @@ impl From<ProjectId> for ServerProjectId {
         ServerProjectId(project_id.to_string().replace("-", ""))
     }
 }
-
-
 
 #[derive(Clone, FromRef)]
 pub struct AppState {

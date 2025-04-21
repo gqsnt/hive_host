@@ -1,25 +1,23 @@
-use leptos::prelude::{CollectView, CustomAttribute};
-use leptos::prelude::IntoAnyAttribute;
-use leptos::prelude::AddAnyAttr;
-use std::str::FromStr;
-use leptos::prelude::{expect_context, ActionForm, ClassAttribute, For, Get, IntoMaybeErased, OnceResource, Resource, ServerAction, ServerFnError, Show, Suspend, Suspense, With};
-use leptos::prelude::ElementChild;
-use leptos::{component, server, view};
+use crate::app::components::select::FormSelect;
+use crate::app::pages::user::projects::project::MemoProjectParams;
+use crate::app::IntoView;
+
+use common::permission::Permission;
+
+use common::{ProjectId, ProjectSlugStr, UserId};
 use leptos::either::Either;
-use leptos::logging::log;
+use leptos::prelude::AddAnyAttr;
+use leptos::prelude::ElementChild;
+use leptos::prelude::IntoAnyAttribute;
+use leptos::prelude::{
+    expect_context, ActionForm, ClassAttribute, For, Get, IntoMaybeErased, Resource,
+    ServerAction, ServerFnError, Show, Suspend, Suspense,
+};
+use leptos::prelude::{CollectView};
+use leptos::{component, server, view};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
-use common::{ProjectId, ProjectSlug, ProjectSlugStr, UserId, UserSlug};
-use common::permission::Permission;
-use common::server_action::user_action::UserAction;
-use common::server_project_action::permission::PermissionAction;
-use common::server_project_action::ProjectActionCreate;
-use crate::app::components::select::FormSelect;
-use crate::app::IntoView;
-use crate::app::pages::user::projects::project::MemoProjectParams;
-use crate::models::UserPermission;
-use crate::security::permission::{PermissionResult};
-
+use crate::app::components::csrf_field::CSRFField;
 
 #[component]
 pub fn ProjectTeam() -> impl IntoView {
@@ -31,19 +29,26 @@ pub fn ProjectTeam() -> impl IntoView {
     let delete_action = ServerAction::<DeleteProjectTeamMember>::new();
 
     let team_res = Resource::new(
-        move || (
-            update_action.version().get(),
-            add_action.version().get(),
-            delete_action.version().get(),
-            slug(),
-        ),
-        move |(_,_,_,s)| get_project_team(s),
+        move || {
+            (
+                update_action.version().get(),
+                add_action.version().get(),
+                delete_action.version().get(),
+                slug(),
+            )
+        },
+        move |(_, _, _, s)| get_project_team(s),
     );
-    let team_data = move || team_res.get().map(|r| r.unwrap_or_default()).unwrap_or_default();
+    let team_data = move || {
+        team_res
+            .get()
+            .map(|r| r.unwrap_or_default())
+            .unwrap_or_default()
+    };
 
-    let csrf = OnceResource::new(crate::app::components::csrf_field::generate_csrf());
-    let get_csrf = move || csrf.get().map(|csrf|csrf.unwrap_or_default()).unwrap_or_default();
+  
     
+
     view! {
         <div class="section-border">
             <h2 class="section-title">"Team"</h2>
@@ -81,7 +86,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                                         <ActionForm action=update_action>
                                                                             <input type="hidden" name="project_slug" value=slug() />
                                                                             <input type="hidden" name="user_id" value=perm.user_id />
-                                                                            <input type="hidden" name="csrf" value=get_csrf() />
+                                                                            <CSRFField/>
                                                                             <div class="flex flex-col gap-y-2 lg:flex-row lg:items-center lg:gap-x-4">
                                                                                 <FormSelect name="permission"
                                                                                     .to_string()>
@@ -120,7 +125,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                             <ActionForm action=delete_action on:submit=move |_| {}>
                                                                 <input type="hidden" name="project_slug" value=slug() />
                                                                 <input type="hidden" name="user_id" value=perm.user_id />
-                                                                <input type="hidden" name="csrf" value=get_csrf() />
+                                                                <CSRFField/>
                                                                 <button type="submit" class="btn-danger">
                                                                     "Remove"
                                                                 </button>
@@ -139,7 +144,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                     <h3 class="section-title">"Add Member"</h3>
                                     <ActionForm action=add_action>
                                         <input type="hidden" name="project_slug" value=slug() />
-                                        <input type="hidden" name="csrf" value=get_csrf() />
+                                        <CSRFField/>
                                         <div class="mt-4 flex flex-col gap-y-4">
                                             <div class="flex flex-col gap-y-2 lg:flex-row lg:gap-x-6">
                                                 <div class="flex-1">
@@ -192,175 +197,167 @@ pub fn ProjectTeam() -> impl IntoView {
 
 #[server]
 pub async fn delete_project_team_member(
-    csrf:String,
-    project_slug:ProjectSlugStr,
-    user_id: common::UserId,
-) -> Result<(), leptos::prelude::ServerFnError> {
+    csrf: String,
+    project_slug: ProjectSlugStr,
+    user_id: UserId,
+) -> Result<(), ServerFnError> {
     use crate::api::ssr::request_server_project_action;
+    use common::server_project_action::permission::PermissionAction;
+    use common::{ProjectSlug, UserSlug};
 
-    use crate::security::utils::ssr::verify_easy_hash;
-    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
-        leptos_axum::redirect("/user/projects");
-        ServerFnError::new(e.to_string())
-    })?.id;
-    let auth = crate::ssr::auth(false)?;
-    let server_vars = crate::ssr::server_vars()?;
-    verify_easy_hash(
-        auth.session.get_session_id().to_string(),
-        server_vars.csrf_server.to_secret(),
-        csrf,
-    )?;
-    let pool = crate::ssr::pool()?;
-    match crate::security::permission::ssr::ensure_permission(&auth, project_id, Permission::Owner).await? {
-        PermissionResult::Allow => {
-            let other_user = sqlx::query!(
-                r#"SELECT id,username FROM users WHERE id = $1"#,
-                user_id
-            ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+    crate::security::permission::ssr::handle_project_permission_request(
+        project_slug,
+        Permission::Owner,
+        Some(csrf),
+        |_, pool, project_slug| async move {
+            let other_user =
+                sqlx::query!(r#"SELECT id,username FROM users WHERE id = $1"#, user_id)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| ServerFnError::new(e.to_string()))?;
             sqlx::query!(
                 r#"DELETE FROM permissions WHERE user_id = $1 AND project_id = $2"#,
                 user_id,
-                project_id
-            ).execute(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
-            let project = sqlx::query!(
-                r#"SELECT id, name FROM projects WHERE id = $1"#,
-                project_id
-            ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+                project_slug.id
+            )
+                .execute(&pool)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
+            let project =
+                sqlx::query!(r#"SELECT id, name FROM projects WHERE id = $1"#, project_slug.id)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| ServerFnError::new(e.to_string()))?;
             let user_slug = UserSlug::new(user_id, other_user.username);
             let project_slug = ProjectSlug::new(project.id, project.name);
-            request_server_project_action(project_slug, PermissionAction::Revoke {
-                user_slug
-            }.into()).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+            request_server_project_action(
+                project_slug,
+                PermissionAction::Revoke { user_slug }.into(),
+            )
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
             Ok(())
         }
-        PermissionResult::Redirect(path) => {
-            leptos_axum::redirect(path.as_str());
-            Err(ServerFnError::new("Permission denied"))
-        }
-    }
+    )
+        .await
 }
-
 
 #[server]
 pub async fn update_project_team_permission(
-    csrf:String,
-    project_slug:ProjectSlugStr,
+    csrf: String,
+    project_slug: ProjectSlugStr,
     user_id: UserId,
-    permission:Permission
-) -> Result<(), ServerFnError>{
+    permission: Permission,
+) -> Result<(), ServerFnError> {
     use crate::api::ssr::request_server_project_action;
-    use crate::security::utils::ssr::verify_easy_hash;
-
-    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
-        leptos_axum::redirect("/user/projects");
-        ServerFnError::new(e.to_string())
-    })?.id;
-    
-    let auth = crate::ssr::auth(false)?;
-    let server_vars = crate::ssr::server_vars()?;
-    verify_easy_hash(
-        auth.session.get_session_id().to_string(),
-        server_vars.csrf_server.to_secret(),
-        csrf,
-    )?;
-    let pool = crate::ssr::pool()?;
-    match crate::security::permission::ssr::ensure_permission(&auth, project_id, Permission::Owner).await? {
-        PermissionResult::Allow => {
-            let other_user = sqlx::query!(
-                r#"SELECT id,username FROM users WHERE id = $1"#,
-                user_id
-            ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+    use common::server_project_action::permission::PermissionAction;
+    use common::{ProjectSlug, UserSlug};
+    crate::security::permission::ssr::handle_project_permission_request(
+        project_slug,
+        Permission::Owner,
+        Some(csrf),
+        |_, pool, project_slug| async move {
+            let other_user =
+                sqlx::query!(r#"SELECT id,username FROM users WHERE id = $1"#, user_id)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| ServerFnError::new(e.to_string()))?;
             sqlx::query!(
                 r#"UPDATE permissions SET permission = $1 WHERE user_id = $2 AND project_id = $3"#,
                 permission as Permission,
                 user_id,
-                project_id
-            ).execute(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
-            let project = sqlx::query!(
-                r#"SELECT id, name FROM projects WHERE id = $1"#,
-                project_id
-            ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+                project_slug.id
+            )
+                .execute(&pool)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
+            let project =
+                sqlx::query!(r#"SELECT id, name FROM projects WHERE id = $1"#, project_slug.id)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| ServerFnError::new(e.to_string()))?;
             let user_slug = UserSlug::new(user_id, other_user.username);
             let project_slug = ProjectSlug::new(project.id, project.name);
-            request_server_project_action(project_slug, PermissionAction::Update {
-                user_slug,
-                permission
-            }.into()).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+            request_server_project_action(
+                project_slug,
+                PermissionAction::Update {
+                    user_slug,
+                    permission,
+                }
+                    .into(),
+            )
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
             Ok(())
-        }
-        PermissionResult::Redirect(path) => {
-            leptos_axum::redirect(path.as_str());
-            Err(ServerFnError::new("Permission denied"))
-        }
+            
     }
+    )
+        .await
+    
 }
 #[server]
 pub async fn add_project_team_permission(
-    csrf:String,
-    project_slug:ProjectSlugStr,
+    csrf: String,
+    project_slug: ProjectSlugStr,
     email: String,
-    permission:Permission
-) -> Result<(), ServerFnError>{
-    use crate::security::utils::ssr::verify_easy_hash;
-    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
-        leptos_axum::redirect("/user/projects");
-        ServerFnError::new(e.to_string())
-    })?.id;
-    
-    let auth = crate::ssr::auth(false)?;
-    let server_vars = crate::ssr::server_vars()?;
+    permission: Permission,
+) -> Result<(), ServerFnError> {
+    use common::server_project_action::permission::PermissionAction;
+    use common::{ProjectSlug, UserSlug};
 
-    verify_easy_hash(
-        auth.session.get_session_id().to_string(),
-        server_vars.csrf_server.to_secret(),
-        csrf,
-    )?;
-    let pool = crate::ssr::pool()?;
-    match crate::security::permission::ssr::ensure_permission(&auth, project_id, Permission::Owner).await? {
-        PermissionResult::Allow => {
-            let other_user= sqlx::query!(
-                r#"SELECT id,username FROM users WHERE email = $1"#,
-                email
-            ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+    crate::security::permission::ssr::handle_project_permission_request(
+        project_slug,
+        Permission::Owner,
+        Some(csrf),
+        |_, pool, project_slug| async move {
+            let other_user =
+                sqlx::query!(r#"SELECT id,username FROM users WHERE email = $1"#, email)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| ServerFnError::new(e.to_string()))?;
             sqlx::query!(
                 r#"INSERT INTO permissions (user_id, project_id, permission) VALUES ($1, $2, $3)"#,
                 other_user.id,
-                project_id,
+                project_slug.id,
                 permission as Permission
-            ).execute(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
-            let project = sqlx::query!(
-                r#"SELECT id, name FROM projects WHERE id = $1"#,
-                project_id
-            ).fetch_one(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+            )
+                .execute(&pool)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
+            let project =
+                sqlx::query!(r#"SELECT id, name FROM projects WHERE id = $1"#, project_slug.id)
+                    .fetch_one(&pool)
+                    .await
+                    .map_err(|e| ServerFnError::new(e.to_string()))?;
             let user_slug = UserSlug::new(other_user.id, other_user.username);
             let project_slug = ProjectSlug::new(project.id, project.name);
-            crate::security::permission::request_server_project_action_front(project_slug.to_str(), PermissionAction::Grant {
-                user_slug,
-                permission
-            }.into()).await.map_err(|e| ServerFnError::new(e.to_string()))?;
+            crate::security::permission::request_server_project_action_front(
+                project_slug.to_str(),
+                PermissionAction::Grant {
+                    user_slug,
+                    permission,
+                }
+                    .into(),
+                None
+            )
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
             Ok(())
         }
-        PermissionResult::Redirect(path) => {
-            leptos_axum::redirect(path.as_str());
-            Err(ServerFnError::new("Permission denied"))
-        }
-    }
+    )
+        .await
 }
 
 #[server]
 pub async fn get_project_team(
-    project_slug:ProjectSlugStr
+    project_slug: ProjectSlugStr,
 ) -> Result<ProjectTeamResponse, ServerFnError> {
     use crate::security::utils::ssr::get_auth_session_user_id;
-
-    let project_id = ProjectSlug::from_str(project_slug.as_str()).map_err(|e| {
-        leptos_axum::redirect("/user/projects");
-        ServerFnError::new(e.to_string())
-    })?.id;
-    let pool = crate::ssr::pool()?;
-    let auth = crate::ssr::auth(false)?;
-    match crate::security::permission::ssr::ensure_permission(&auth, project_id, Permission::Read).await? {
-        PermissionResult::Allow => {
+    crate::security::permission::ssr::handle_project_permission_request(
+        project_slug,
+        Permission::Read,
+        None,
+        |auth, pool, project_slug| async move {
             let user_permissions = sqlx::query_as!(
                 UserPermissionPage,
                 r#"
@@ -368,40 +365,35 @@ pub async fn get_project_team(
                     FROM permissions 
                     INNER JOIN public.users u on u.id = permissions.user_id
                     WHERE project_id = $1"#,
-                project_id
+                project_slug.id
             ).fetch_all(&pool).await.map_err(|e| ServerFnError::new(e.to_string()))?;
             let user_id = get_auth_session_user_id(&auth).unwrap();
-            let is_owner = user_permissions.iter().any(|p| p.user_id == user_id && p.permission == Permission::Owner);
-            
+            let is_owner = user_permissions
+                .iter()
+                .any(|p| p.user_id == user_id && p.permission == Permission::Owner);
+
             Ok(ProjectTeamResponse {
-                project_id,
+                project_id:project_slug.id,
                 is_owner,
-                user_permissions
+                user_permissions,
             })
-        }
-        PermissionResult::Redirect(path) => {
-            leptos_axum::redirect(path.as_str());
-            Err(ServerFnError::new("Permission denied"))
-        }
     }
-    
-    
+    )
+    .await
 }
 
-
-#[derive(Clone, Deserialize,Debug, Serialize , Default)]
-pub struct ProjectTeamResponse{
-    pub is_owner:bool,
-    pub project_id:ProjectId,
-    pub user_permissions:Vec<UserPermissionPage>
+#[derive(Clone, Deserialize, Debug, Serialize, Default)]
+pub struct ProjectTeamResponse {
+    pub is_owner: bool,
+    pub project_id: ProjectId,
+    pub user_permissions: Vec<UserPermissionPage>,
 }
 
-
-#[derive(Clone, Deserialize,Debug, Serialize )]
+#[derive(Clone, Deserialize, Debug, Serialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct UserPermissionPage {
-    pub user_id:UserId,
-    pub project_id:ProjectId,
-    pub username:String,
-    pub permission:Permission,
+    pub user_id: UserId,
+    pub project_id: ProjectId,
+    pub username: String,
+    pub permission: Permission,
 }

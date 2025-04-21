@@ -1,8 +1,5 @@
-use leptos::{component, view, IntoView};
 use leptos::prelude::ElementChild;
-use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::IntoAnyAttribute;
-
+use leptos::{component, view, IntoView};
 
 #[component]
 pub fn DashboardPage() -> impl IntoView {

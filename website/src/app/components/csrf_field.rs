@@ -1,44 +1,16 @@
+use leptos::prelude::{expect_context, Signal};
+use leptos::prelude::{Get, ServerFnError};
 use leptos::{component, server, view, IntoView};
-use leptos::either::Either;
-use leptos::prelude::{Get, Resource, ServerFnError, Transition};
-use leptos::prelude::ElementChild;
-use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::IntoAnyAttribute;
-
+use crate::app::pages::CsrfValue;
 
 #[component]
 pub fn CSRFField() -> impl IntoView {
-    let csrf_resource = Resource::new(|| (), |_| generate_csrf());
+    let csrf_value = expect_context::<Signal<CsrfValue>>();
 
     view! {
-        <Transition fallback=|| {
-            view! { <p>"Loading..."</p> }
-        }>
-            {move || {
-                csrf_resource
-                    .get()
-                    .map(|n| match n {
-                        Err(e) => {
-                            Either::Left(
-                                view! {
-                                    {format!(
-                                        "Page Load Failed: {e}. Please reload the page or try again later.",
-                                    )}
-                                },
-                            )
-                        }
-                        Ok(csrf_hash) => {
-                            Either::Right(
-                                view! { <input type="hidden" name="csrf" value=csrf_hash /> },
-                            )
-                        }
-                    })
-            }}
-        </Transition>
+        <input type="hidden" name="csrf" value=move || csrf_value.get().0 />
     }
 }
-
-
 
 #[server]
 pub async fn generate_csrf() -> Result<String, ServerFnError> {

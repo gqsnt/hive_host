@@ -1,30 +1,21 @@
-use gloo_net::Error;
 use leptos::logging::log;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use secrecy::ExposeSecret;
 use leptos::prelude::{Action, ServerFnError};
-use leptos::server;
 
-use common::{ProjectSlugStr, StringContent};
-use common::server_action::ServerActionResponse;
-use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
 use crate::security::permission::{request_server_project_action_front, token_url};
+use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
+use common::{ProjectSlugStr, StringContent};
 
 #[cfg(not(feature = "ssr"))]
 pub fn fetch_api(
     path: String,
     content: StringContent,
-) -> impl std::future::Future<Output = Option<ServerProjectActionResponse>> + Send + 'static
-{
+) -> impl std::future::Future<Output = Option<ServerProjectActionResponse>> + Send + 'static {
+    use leptos::logging::log;
     use leptos::prelude::on_cleanup;
     use send_wrapper::SendWrapper;
-    use leptos::logging::log;
-    use wasm_bindgen::JsValue;
 
     SendWrapper::new(async move {
-        let abort_controller =
-            SendWrapper::new(web_sys::AbortController::new().ok());
+        let abort_controller = SendWrapper::new(web_sys::AbortController::new().ok());
         let abort_signal = abort_controller.as_ref().map(|a| a.signal());
 
         //abort in-flight requests if, e.g., we've navigated away from this page
@@ -33,36 +24,42 @@ pub fn fetch_api(
                 abort_controller.abort()
             }
         });
-            gloo_net::http::Request::post(&path)
-                .header("Access-Control-Allow-Origin", "http://127.0.0.1:3002")
-                .header("Content-Type", "application/json")
-                //.abort_signal(abort_signal.as_ref())
-                .json(&content)
-                .map_err(|e| log!("api front json error: {e}"))
-                .ok()?
-                .send()
-                .await
-                .map_err(|e| log!("api front request error: {e}"))
-                .ok()?
-                .json::<ServerProjectActionResponse>()
-                .await
-                .map_err(|e| log!("api front response error: {e}"))
-                .ok()
-
+        gloo_net::http::Request::post(&path)
+            .header("Access-Control-Allow-Origin", "http://127.0.0.1:3002")
+            .header("Content-Type", "application/json")
+            .abort_signal(abort_signal.as_ref())
+            .json(&content)
+            .map_err(|e| log!("api front json error: {e}"))
+            .ok()?
+            .send()
+            .await
+            .map_err(|e| log!("api front request error: {e}"))
+            .ok()?
+            .json::<ServerProjectActionResponse>()
+            .await
+            .map_err(|e| log!("api front response error: {e}"))
+            .ok()
     })
 }
 
 #[cfg(feature = "ssr")]
-pub async fn fetch_api(path: String, content:StringContent) -> Option<ServerProjectActionResponse>
-{
-    use reqwest::Body;
-    
+pub async fn fetch_api(
+    path: String,
+    content: StringContent,
+) -> Option<ServerProjectActionResponse> {
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("Access-Control-Allow-Origin", "http://127.0.0.1:3002".parse().unwrap());
+    headers.insert(
+        "Access-Control-Allow-Origin",
+        "http://127.0.0.1:3002".parse().unwrap(),
+    );
     headers.insert("Content-Type", "application/json".parse().unwrap());
     headers.insert("Accept", "application/json".parse().unwrap());
-    let client = reqwest::Client::builder().default_headers(headers).build().unwrap();
-    client.post(path)
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .unwrap();
+    client
+        .post(path)
         .json(&content)
         .send()
         .await
@@ -74,21 +71,20 @@ pub async fn fetch_api(path: String, content:StringContent) -> Option<ServerProj
         .ok()
 }
 
-
 #[cfg(feature = "ssr")]
-pub mod ssr{
+pub mod ssr {
+    use common::server_action::{ServerAction, ServerActionResponse};
+    use common::server_project_action::{
+        ServerProjectAction, ServerProjectActionRequest, ServerProjectActionResponse,
+    };
+    use common::ProjectSlug;
     use leptos::logging::log;
     use leptos::prelude::ServerFnError;
     use secrecy::ExposeSecret;
-    use common::ProjectSlug;
-    use common::server_action::{ServerAction, ServerActionResponse};
-    use common::server_project_action::{ServerProjectAction, ServerProjectActionRequest, ServerProjectActionResponse};
-    
-
 
     pub async fn request_server_project_action_token(
         project_slug: ProjectSlug,
-        action:ServerProjectAction,
+        action: ServerProjectAction,
     ) -> Result<ServerProjectActionResponse, ServerFnError> {
         let client = reqwest::Client::new();
         let server_vars = crate::ssr::server_vars()?;
@@ -98,7 +94,7 @@ pub mod ssr{
             action,
             project_slug,
         };
-        let response = client
+        let _ = client
             .post("http://127.0.0.1:3002/server_project_action")
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
@@ -110,19 +106,17 @@ pub mod ssr{
             })?
             .text()
             .await
-            .map_err(|e| {;
+            .map_err(|e| {
                 log!("Error parsing request_server_project_action_token: {}", e);
                 ServerFnError::new(e.to_string())
             })?;
-        log!("request_server_project_action_token response: {}", response);
+        //log!("request_server_project_action_token response: {}", response);
         Ok(ServerProjectActionResponse::Token(token))
     }
-    
-    
-    
+
     pub async fn request_server_project_action(
         project_slug: ProjectSlug,
-        action:ServerProjectAction,
+        action: ServerProjectAction,
     ) -> Result<ServerProjectActionResponse, ServerFnError> {
         let client = reqwest::Client::new();
         let server_vars = crate::ssr::server_vars()?;
@@ -131,7 +125,7 @@ pub mod ssr{
             action,
             project_slug,
         };
-        let response = client
+          client
             .post("http://127.0.0.1:3002/server_project_action")
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
@@ -141,73 +135,63 @@ pub mod ssr{
                 log!("Error sending request_server_project_action: {}", e);
                 ServerFnError::new(e.to_string())
             })?
-            .text()
+            .json::<ServerProjectActionResponse>()
             .await
-            .map_err(|e| {;
+            .map_err(|e| {
                 log!("Error parsing request_server_project_action: {}", e);
                 ServerFnError::new(e.to_string())
-            })?;
-        let response = serde_json::from_str::<ServerProjectActionResponse>(&response)
-            .map_err(|e| {
-                ServerFnError::new(e.to_string())
-            })?;
-        
-        Ok(response)
+            })
     }
-    
-    
 
     pub async fn request_server_action(
-        action:ServerAction,
+        action: ServerAction,
     ) -> Result<ServerActionResponse, ServerFnError> {
         let client = reqwest::Client::new();
         let server_vars = crate::ssr::server_vars()?;
-        Ok(client.post(
-            "http://127.0.0.1:3002/server_action"
-        )
+        Ok(client
+            .post("http://127.0.0.1:3002/server_action")
             .json(&action)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
             .send()
             .await?
-            .json::<ServerActionResponse>().await?)
+            .json::<ServerActionResponse>()
+            .await?)
     }
 }
 
+pub type ServerProjectActionFront = Action<
+    (ProjectSlugStr, ServerProjectAction, Option<String>, Option<String>),
+    Result<ServerProjectActionResponse, ServerFnError>,
+>;
 
-pub type ServerProjectActionFront = Action<(ProjectSlugStr, ServerProjectAction,Option<String>), Result<ServerProjectActionResponse, ServerFnError>>;
-
-pub fn get_action_server_project_action(
-) -> ServerProjectActionFront{
-    Action::new(|input: &(ProjectSlugStr, ServerProjectAction, Option<String>)| {
-        let (project_slug, action, string_content) = input.clone();
-        async move {
-            get_action_server_project_action_inner(project_slug, action, string_content).await
-        }
-    })
+pub fn get_action_server_project_action() -> ServerProjectActionFront {
+    Action::new(
+        |input: &(ProjectSlugStr, ServerProjectAction, Option<String>, Option<String>)| {
+            let (project_slug, action, string_content, csrf) = input.clone();
+            async move {
+                get_action_server_project_action_inner(project_slug, action, string_content,csrf).await
+            }
+        },
+    )
 }
 
-
-
 pub async fn get_action_server_project_action_inner(
-    project_slug:ProjectSlugStr,
-    action:ServerProjectAction,
-    content:Option<String>,
-)->Result<ServerProjectActionResponse, ServerFnError>{
-    if let Ok(r) = request_server_project_action_front(project_slug, action).await{
-        return if let ServerProjectActionResponse::Token(token) = r.clone(){
-            match fetch_api(token_url(token), StringContent{
-                inner:content
-            }).await{
+    project_slug: ProjectSlugStr,
+    action: ServerProjectAction,
+    content: Option<String>,
+    csrf:Option<String>,
+) -> Result<ServerProjectActionResponse, ServerFnError> {
+    if let Ok(r) = request_server_project_action_front(project_slug, action,csrf).await {
+        return if let ServerProjectActionResponse::Token(token) = r.clone() {
+            match fetch_api(token_url(token), StringContent { inner: content }).await {
                 None => {
                     return Err(ServerFnError::new("Error fetching token response"));
                 }
-                Some(r) => {
-                    Ok(r)
-                }
+                Some(r) => Ok(r),
             }
-        }else{
+        } else {
             Ok(r)
-        }
+        };
     }
     Err(ServerFnError::new("Error"))
 }

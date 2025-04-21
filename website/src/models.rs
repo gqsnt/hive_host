@@ -1,10 +1,13 @@
+use common::permission::Permission;
 use common::{ProjectId, ProjectSlug, Slug, UserId, UserSlug};
 use serde::{Deserialize, Serialize};
-use common::permission::Permission;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default)]
-#[cfg_attr(feature="ssr", derive(sqlx::Type))]
-#[cfg_attr(feature="ssr",sqlx(type_name = "role_type", rename_all = "lowercase"))]
+#[cfg_attr(feature = "ssr", derive(sqlx::Type))]
+#[cfg_attr(
+    feature = "ssr",
+    sqlx(type_name = "role_type", rename_all = "lowercase")
+)]
 pub enum RoleType {
     #[default]
     User,
@@ -16,10 +19,10 @@ pub struct User {
     pub id: UserId,
     pub email: String,
     pub role_type: RoleType,
-    pub username:String,
+    pub username: String,
 }
 
-impl User{
+impl User {
     pub fn get_slug(&self) -> UserSlug {
         Slug::new(self.id, self.username.clone())
     }
@@ -57,15 +60,13 @@ impl Project {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
-pub struct SshKeyInfo{
+pub struct SshKeyInfo {
     pub id: i64,
     pub name: String,
-    pub user_id:UserId,
+    pub user_id: UserId,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]

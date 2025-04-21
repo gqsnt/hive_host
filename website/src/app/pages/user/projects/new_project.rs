@@ -1,17 +1,13 @@
-use leptos::prelude::{ClassAttribute, IntoMaybeErased, ServerFnError};
-use leptos::prelude::ElementChild;
-use leptos::{component, server, view, IntoView};
-use leptos::form::ActionForm;
-use leptos::leptos_dom::log;
-use leptos::server::ServerAction;
 use crate::app::components::csrf_field::CSRFField;
-use crate::models::Project;
-use leptos::prelude::IntoAnyAttribute;
+use leptos::form::ActionForm;
 
+use leptos::prelude::ElementChild;
+use leptos::prelude::{ClassAttribute, IntoMaybeErased, ServerFnError};
+use leptos::server::ServerAction;
+use leptos::{component, server, view, IntoView};
 
 #[component]
 pub fn NewProjectPage(create_project_action: ServerAction<CreateProject>) -> impl IntoView {
-
     view! {
         // Separator before New Project section
         <div class="section-border">
@@ -42,15 +38,12 @@ pub fn NewProjectPage(create_project_action: ServerAction<CreateProject>) -> imp
     }
 }
 
-
-
 #[server]
-pub async fn create_project(
-    csrf: String,
-    name:String,
-) -> Result<(), ServerFnError> {
+pub async fn create_project(csrf: String, name: String) -> Result<(), ServerFnError> {
     use crate::security::utils::ssr::verify_easy_hash;
-    if name.is_empty(){
+    use leptos::leptos_dom::log;
+    
+    if name.is_empty() {
         return Err(ServerFnError::ServerError(
             "Project name cannot be empty".to_string(),
         ));
@@ -63,32 +56,34 @@ pub async fn create_project(
         csrf,
     )?;
     let user_slug = crate::security::utils::ssr::get_auth_session_user_slug(&auth).unwrap();
-    match ssr::create_project(user_slug, name).await{
+    match ssr::create_project(user_slug, name).await {
         Ok(project) => {
             log!("Project created: {:?}", project);
-            leptos_axum::redirect(format!("/user/projects/{}", project.get_slug().to_str()).as_str());
+            leptos_axum::redirect(
+                format!("/user/projects/{}", project.get_slug().to_str()).as_str(),
+            );
         }
         Err(e) => {
             log!("Error creating default project: {:?}", e);
         }
     }
-    
+
     Ok(())
 }
 
 #[cfg(feature = "ssr")]
-pub mod ssr{
-    use leptos::prelude::ServerFnError;
+pub mod ssr {
+    use crate::models::Project;
+    use common::permission::Permission;
     use common::server_action::user_action::UserAction;
     use common::{Slug, UserSlug};
-    use common::permission::Permission;
-    use crate::models::Project;
+    use leptos::prelude::ServerFnError;
 
-    pub async fn create_project(user_slug: UserSlug, name: String) -> Result<Project, ServerFnError> {
-
+    pub async fn create_project(
+        user_slug: UserSlug,
+        name: String,
+    ) -> Result<Project, ServerFnError> {
         use crate::api::ssr::request_server_action;
-
-
         let pool = crate::ssr::pool()?;
         let project = sqlx::query!("INSERT INTO projects (name) VALUES ($1) returning id", name)
             .fetch_one(&pool)
@@ -100,18 +95,18 @@ pub mod ssr{
             project.id,
             Permission::Owner as Permission
         )
-            .execute(&pool)
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .execute(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
         request_server_action(
             UserAction::AddProject {
                 user_slug,
-                project_slug:Slug::new(project.id, name.clone()),
+                project_slug: Slug::new(project.id, name.clone()),
             }
-                .into(),
+            .into(),
         )
-            .await?;
-        Ok(Project{
+        .await?;
+        Ok(Project {
             id: project.id,
             name,
         })

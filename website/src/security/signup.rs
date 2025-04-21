@@ -1,8 +1,8 @@
 use leptos::prelude::ServerFnError;
 use leptos::server;
 
-use crate::BoolInput;
 use crate::models::User;
+use crate::BoolInput;
 #[server(Signup, "/api")]
 pub async fn signup(
     csrf: String,
@@ -12,13 +12,13 @@ pub async fn signup(
     password_confirmation: String,
     remember: Option<BoolInput>,
 ) -> Result<User, ServerFnError> {
+    use crate::app::pages::user::projects::new_project::ssr::create_project;
     use crate::models::RoleType;
-    use secrecy::ExposeSecret;
+    use crate::security::utils::ssr::verify_easy_hash;
     use common::server_action::user_action::UserAction;
     use leptos::logging::log;
-    use crate::security::utils::ssr::verify_easy_hash;
-    use crate::app::pages::user::projects::new_project::ssr::create_project;
-    
+    use secrecy::ExposeSecret;
+
     let auth = crate::ssr::auth(true)?;
     let server_vars = crate::ssr::server_vars()?;
     verify_easy_hash(
@@ -56,19 +56,24 @@ pub async fn signup(
     auth.login_user(user.id);
     auth.remember_user(remember);
     leptos_axum::redirect("/user");
-    let user= User {
+    let user = User {
         id: user.id,
         email,
         role_type: RoleType::default(),
         username,
     };
     let user_slug = user.get_slug();
-    if let Err(e) = crate::api::ssr::request_server_action(UserAction::Create {
-        user_slug:user_slug.clone(),
-    }.into()).await{
+    if let Err(e) = crate::api::ssr::request_server_action(
+        UserAction::Create {
+            user_slug: user_slug.clone(),
+        }
+        .into(),
+    )
+    .await
+    {
         log!("Error creating user: {:?}", e);
     };
-    if let Err(e) = create_project(user_slug, "Default".to_string()).await{
+    if let Err(e) = create_project(user_slug, "Default".to_string()).await {
         log!("Error creating default project: {:?}", e);
     };
     Ok(user)

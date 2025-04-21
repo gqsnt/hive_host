@@ -1,12 +1,15 @@
-
-
-
+use std::fmt::Display;
 use serde::{Deserialize, Serialize};
 use strum_macros::EnumIter;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default,EnumIter)]
-#[cfg_attr(feature="ssr", derive(sqlx::Type))]
-#[cfg_attr(feature="ssr",sqlx(type_name = "permission_type", rename_all = "lowercase"))]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default, EnumIter,
+)]
+#[cfg_attr(feature = "ssr", derive(sqlx::Type))]
+#[cfg_attr(
+    feature = "ssr",
+    sqlx(type_name = "permission_type", rename_all = "lowercase")
+)]
 pub enum Permission {
     #[default]
     Read,
@@ -14,7 +17,7 @@ pub enum Permission {
     Owner,
 }
 
-impl Permission{
+impl Permission {
     pub fn label(&self) -> &'static str {
         match self {
             Permission::Read => "Read",
@@ -22,7 +25,7 @@ impl Permission{
             Permission::Owner => "Owner",
         }
     }
-    
+
     pub fn acl(&self) -> &'static str {
         match self {
             Permission::Read => "r",
@@ -32,13 +35,14 @@ impl Permission{
     }
 }
 
-impl ToString for Permission {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for Permission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
             Permission::Read => "Read".to_string(),
             Permission::Write => "Write".to_string(),
             Permission::Owner => "Owner".to_string(),
-        }
+        };
+        write!(f, "{}", str)
     }
 }
 

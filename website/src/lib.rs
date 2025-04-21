@@ -2,13 +2,13 @@ use http::StatusCode;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
+pub mod api;
 pub mod app;
 pub mod error_template;
-pub mod rate_limiter;
-pub mod tasks;
-pub mod api;
-pub mod security;
 pub mod models;
+pub mod rate_limiter;
+pub mod security;
+pub mod tasks;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -71,29 +71,28 @@ impl<'de> Deserialize<'de> for BoolInput {
 #[cfg(feature = "ssr")]
 pub mod ssr {
     use crate::app::shell;
-    use common::permission::Permission;
     use crate::rate_limiter::ssr::RateLimiter;
+    use crate::security::ssr::AppAuthSession;
+    use crate::security::utils::ssr::stringify_u128_base64;
     use axum::{
         body::Body as AxumBody,
         extract::{FromRef, Path, State},
         http::Request,
-        response::{IntoResponse, Response}
+        response::{IntoResponse, Response},
     };
+    use common::permission::Permission;
+    use common::{ProjectId, UserId};
+    use leptos::config::LeptosOptions;
     use leptos::context::{provide_context, use_context};
-    use leptos::logging::log;
+    use leptos::prelude::ServerFnError;
     use leptos_axum::{handle_server_fns_with_context, AxumRouteListing};
     use moka::future::Cache;
     use portable_atomic::AtomicU128;
+    use secrecy::SecretString;
     use sqlx::types::Uuid;
     use sqlx::PgPool;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
-    use leptos::config::LeptosOptions;
-    use leptos::prelude::ServerFnError;
-    use secrecy::SecretString;
-    use common::{ProjectId, UserId};
-    use crate::security::ssr::AppAuthSession;
-    use crate::security::utils::ssr::stringify_u128_base64;
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
 
@@ -110,23 +109,22 @@ pub mod ssr {
     #[derive(Debug, Clone)]
     pub struct ServerVars {
         pub csrf_server: Arc<CsrfServer>,
-        pub token_action_auth:SecretString,
+        pub token_action_auth: SecretString,
     }
 
-    impl ServerVars{
-        pub fn new(token_action_auth:SecretString) -> ServerVars {
-            Self{
+    impl ServerVars {
+        pub fn new(token_action_auth: SecretString) -> ServerVars {
+            Self {
                 csrf_server: Arc::new(CsrfServer::default()),
                 token_action_auth,
             }
         }
     }
 
-
     #[derive(Debug)]
     pub struct CsrfServer(AtomicU128);
 
-    impl Default for CsrfServer{
+    impl Default for CsrfServer {
         fn default() -> Self {
             Self(Uuid::new_v4().as_u128().into())
         }
@@ -159,7 +157,10 @@ pub mod ssr {
     pub fn auth(guest_allowed: bool) -> Result<AppAuthSession, ServerFnError> {
         let auth = use_context::<AppAuthSession>()
             .ok_or_else(|| ServerFnError::ServerError("Auth session missing.".into()));
-        let is_guest = auth.as_ref().map(|auth| auth.is_anonymous()).unwrap_or_default();
+        let is_guest = auth
+            .as_ref()
+            .map(|auth| auth.is_anonymous())
+            .unwrap_or_default();
         if !guest_allowed && is_guest {
             leptos_axum::redirect("/login");
             Err(ServerFnError::ServerError("Guest user not allowed.".into()))
@@ -176,7 +177,7 @@ pub mod ssr {
     pub async fn server_fn_handler(
         State(app_state): State<AppState>,
         auth_session: AppAuthSession,
-        path: Path<String>,
+        _path: Path<String>,
         request: Request<AxumBody>,
     ) -> impl IntoResponse {
         handle_server_fns_with_context(

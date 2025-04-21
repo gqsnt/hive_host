@@ -2,19 +2,16 @@
 pub mod refresh_server_csrf;
 #[cfg(feature = "ssr")]
 pub mod ssr {
+    use async_trait::async_trait;
     use chrono::Timelike;
     use sqlx::types::chrono::Local;
     use std::cmp::Reverse;
     use std::collections::BinaryHeap;
-    use async_trait::async_trait;
     use tokio::time::Duration;
     use tokio::time::Instant;
 
-
-
-
     #[async_trait]
-    pub trait Task:  Send {
+    pub trait Task: Send {
         /// Executes the task asynchronously.
         async fn execute(&self);
 

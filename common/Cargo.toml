@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-serde={workspace = true, features = ["derive"]}
-sqlx={ workspace = true, features = ["runtime-async-std", "postgres", "uuid", "chrono"], optional = true }
-strum = {workspace = true, features = ["derive"]}
-strum_macros = {workspace = true}
+serde = { workspace = true, features = ["derive"] }
+sqlx = { workspace = true, features = ["runtime-async-std", "postgres", "uuid", "chrono"], optional = true }
+strum = { workspace = true, features = ["derive"] }
+strum_macros = { workspace = true }
 
 
 [features]
-ssr=["dep:sqlx"]
+ssr = ["dep:sqlx"]

@@ -1,8 +1,8 @@
 use crate::ssr::CsrfServer;
 use crate::tasks::ssr::{calculate_next_run_to_fixed_start_hour, Task};
+use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use async_trait::async_trait;
 use tokio::time::Instant;
 
 pub struct RefreshServerCsrf {
@@ -15,7 +15,7 @@ pub struct RefreshServerCsrf {
 impl RefreshServerCsrf {
     pub fn new(csrf: Arc<CsrfServer>, start_hour: u32, on_startup: bool) -> Self {
         let next_run = if on_startup {
-            tokio::time::Instant::now()
+            Instant::now()
         } else {
             calculate_next_run_to_fixed_start_hour(start_hour)
         };
@@ -28,13 +28,11 @@ impl RefreshServerCsrf {
     }
 }
 
-
 #[async_trait]
 impl Task for RefreshServerCsrf {
-    async fn execute(&self){
+    async fn execute(&self) {
         self.csrf.refresh();
     }
-
 
     fn next_execution(&self) -> Instant {
         self.next_run

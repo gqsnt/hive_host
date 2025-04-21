@@ -1,7 +1,6 @@
-use leptos::prelude::IntoMaybeErased;
+use crate::app::IntoView;
 use leptos::prelude::ElementChild;
 use leptos::{component, view};
-use crate::app::IntoView;
 
 #[component]
 pub fn ProjectSettings() -> impl IntoView {

@@ -1,39 +1,36 @@
-
-
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
-    use website::app::*;
-    use website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
     use axum::{routing::get, Router};
+    use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
     use axum_session_sqlx::SessionPgPool;
+    use common::UserId;
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
+    use moka::future::Cache;
+    use secrecy::SecretString;
     use sqlx::PgPool;
+    use std::net::SocketAddr;
     use std::sync::Arc;
+    use std::time::Duration;
+    use tower_http::compression::predicate::{NotForContentType, SizeAbove};
+    use tower_http::compression::{CompressionLayer, Predicate};
+    use tower_http::CompressionLevel;
+    use website::app::*;
+    use website::models::User;
     use website::rate_limiter::ssr::{rate_limit_middleware, RateLimiter};
     use website::ssr::ServerVars;
+    use website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
     use website::tasks::refresh_server_csrf::RefreshServerCsrf;
     use website::tasks::ssr::TaskDirector;
-    use axum_session::{SessionConfig, SessionLayer, SessionStore};
-    use moka::future::Cache;
-    use std::time::Duration;
-    use std::net::SocketAddr;
-    use secrecy::SecretString;
-    use tower_http::compression::{CompressionLayer, Predicate};
-    use tower_http::compression::predicate::{NotForContentType, SizeAbove};
-    use tower_http::CompressionLevel;
-    use common::UserId;
-    use website::models::User;
 
     dotenvy::dotenv().ok();
 
     let database_url = dotenvy::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let token_action_auth = SecretString::from(
-        dotenvy::var("TOKEN_AUTH").expect("TOKEN_AUTH must be set")
-    );
+    let token_action_auth =
+        SecretString::from(dotenvy::var("TOKEN_AUTH").expect("TOKEN_AUTH must be set"));
     let pool = PgPool::connect(database_url.as_str())
         .await
         .expect("Could not connect to database");
@@ -44,8 +41,7 @@ async fn main() {
             .await
             .unwrap();
 
-    let auth_config = AuthConfig::<UserId>::default()
-        .with_anonymous_user_id(Some(-1));
+    let auth_config = AuthConfig::<UserId>::default().with_anonymous_user_id(Some(-1));
 
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;
@@ -127,9 +123,12 @@ async fn main() {
     // `axum::Server` is a re-export of `hyper::Server`
     log!("listening on http://{}", &addr);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .unwrap();
 }
 
 #[cfg(not(feature = "ssr"))]
