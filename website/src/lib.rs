@@ -109,14 +109,22 @@ pub mod ssr {
     #[derive(Debug, Clone)]
     pub struct ServerVars {
         pub csrf_server: Arc<CsrfServer>,
+        pub server_url: Arc<String>,
+        pub hosting_url: Arc<String>,
         pub token_action_auth: SecretString,
     }
 
     impl ServerVars {
-        pub fn new(token_action_auth: SecretString) -> ServerVars {
+        pub fn new(
+            token_action_auth: SecretString,
+            server_url: String,
+            hosting_url: String,
+        ) -> ServerVars {
             Self {
                 csrf_server: Arc::new(CsrfServer::default()),
                 token_action_auth,
+                server_url: Arc::new(server_url),
+                hosting_url: Arc::new(hosting_url),
             }
         }
     }

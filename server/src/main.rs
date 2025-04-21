@@ -6,6 +6,7 @@ use server::project_action::{server_project_action, server_project_action_token}
 use server::server_action::server_action;
 use server::AppState;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
@@ -25,6 +26,9 @@ async fn main() {
     let token_action_auth =
         SecretString::from(dotenvy::var("TOKEN_AUTH").expect("TOKEN_AUTH must be set"));
     // build our application with a route
+    let server_url = dotenvy::var("SERVER_URL").expect("SERVER_URL must be set");
+    let addr = SocketAddr::from_str(&server_url).expect("Failed to parse server url");
+
     let app_state = AppState {
         server_project_action_cache: Arc::new(
             Cache::builder()
@@ -40,7 +44,6 @@ async fn main() {
         .layer(CorsLayer::permissive())
         .with_state(app_state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3002));
     tracing::debug!("listening on {addr}");
     // run our app with hyper, listening globally on port 3000
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();

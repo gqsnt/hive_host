@@ -111,3 +111,19 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     }
     .into_inner()
 }
+
+
+
+#[server]
+pub async fn get_server_url() -> Result<String, ServerFnError>{
+    use crate::ssr::server_vars;
+    let server_vars = server_vars()?;
+    Ok(server_vars.server_url.to_string())
+}
+
+#[server]
+pub async fn get_hosting_url() -> Result<String, ServerFnError> {
+    use crate::ssr::server_vars;
+    let server_vars = server_vars()?;
+    Ok(server_vars.hosting_url.to_string())
+}

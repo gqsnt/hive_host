@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
@@ -31,6 +33,10 @@ async fn main() {
     let database_url = dotenvy::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let token_action_auth =
         SecretString::from(dotenvy::var("TOKEN_AUTH").expect("TOKEN_AUTH must be set"));
+    let website_url =
+        dotenvy::var("WEBSITE_URL").expect("WEBSITE_URL must be set");
+    let server_url = dotenvy::var("SERVER_URL").expect("SERVER_URL must be set");
+    let hosting_url = dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set");
     let pool = PgPool::connect(database_url.as_str())
         .await
         .expect("Could not connect to database");
@@ -43,12 +49,19 @@ async fn main() {
 
     let auth_config = AuthConfig::<UserId>::default().with_anonymous_user_id(Some(-1));
 
-    let conf = get_configuration(None).unwrap();
-    let addr = conf.leptos_options.site_addr;
+    let mut conf = get_configuration(None).unwrap();
+    let addr = SocketAddr::from_str(
+        &website_url
+    ).expect("Could not parse website URL");
+    conf.leptos_options.site_addr = addr.clone();
     let leptos_options = conf.leptos_options;
     // Generate the list of routes in your Leptos App
     let routes = generate_route_list(App);
-    let server_vars = ServerVars::new(token_action_auth);
+    let server_vars = ServerVars::new(
+        token_action_auth,
+        server_url,
+        hosting_url,
+    );
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
@@ -61,9 +74,9 @@ async fn main() {
         server_vars,
         permissions: Arc::new(
             Cache::builder()
-                .time_to_live(Duration::from_secs(900))
+                .time_to_live(Duration::from_secs(900))// 15 minutes
                 .build(),
-        ), // cache for 15 minutes
+        ),
     };
 
     let mut task_director = TaskDirector::default();
@@ -93,21 +106,21 @@ async fn main() {
         )
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
-        .layer(
-            CompressionLayer::new()
-                .br(true)
-                .zstd(true)
-                .quality(CompressionLevel::Default)
-                .compress_when(
-                    SizeAbove::new(256)
-                        .and(NotForContentType::GRPC)
-                        .and(NotForContentType::IMAGES)
-                        .and(NotForContentType::SSE)
-                        .and(NotForContentType::const_new("text/javascript"))
-                        .and(NotForContentType::const_new("application/wasm"))
-                        .and(NotForContentType::const_new("text/css")),
-                ),
-        )
+        // .layer(
+        //     CompressionLayer::new()
+        //         .br(true)
+        //         .zstd(true)
+        //         .quality(CompressionLevel::Default)
+        //         .compress_when(
+        //             SizeAbove::new(256)
+        //                 .and(NotForContentType::GRPC)
+        //                 .and(NotForContentType::IMAGES)
+        //                 .and(NotForContentType::SSE)
+        //                 .and(NotForContentType::const_new("text/javascript"))
+        //                 .and(NotForContentType::const_new("application/wasm"))
+        //                 .and(NotForContentType::const_new("text/css")),
+        //         ),
+        // )
         .layer(
             AuthSessionLayer::<User, UserId, SessionPgPool, PgPool>::new(Some(pool.clone()))
                 .with_config(auth_config),

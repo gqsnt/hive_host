@@ -14,6 +14,9 @@ pub fn fetch_api(
     use leptos::prelude::on_cleanup;
     use send_wrapper::SendWrapper;
 
+    
+    
+
     SendWrapper::new(async move {
         let abort_controller = SendWrapper::new(web_sys::AbortController::new().ok());
         let abort_signal = abort_controller.as_ref().map(|a| a.signal());
@@ -24,8 +27,19 @@ pub fn fetch_api(
                 abort_controller.abort()
             }
         });
+
+
+        let path_split = path.split("://").collect::<Vec<_>>();
+        let dns_path = if path_split.len() > 1 {
+            let path_split = path_split[1].split('/').collect::<Vec<_>>();
+            let path = path_split[0].to_string();
+            format!("{}://{}", path_split[0], path)
+        } else {
+            path.clone()
+        };
+        
         gloo_net::http::Request::post(&path)
-            .header("Access-Control-Allow-Origin", "http://127.0.0.1:3002")
+            .header("Access-Control-Allow-Origin", &dns_path)
             .header("Content-Type", "application/json")
             .abort_signal(abort_signal.as_ref())
             .json(&content)
@@ -48,9 +62,10 @@ pub async fn fetch_api(
     content: StringContent,
 ) -> Option<ServerProjectActionResponse> {
     let mut headers = reqwest::header::HeaderMap::new();
+    let server_vars = crate::ssr::server_vars().expect("SSR server vars missing");
     headers.insert(
         "Access-Control-Allow-Origin",
-        "http://127.0.0.1:3002".parse().unwrap(),
+        format!("http://{}", server_vars.server_url.to_string()).parse().unwrap(),
     );
     headers.insert("Content-Type", "application/json".parse().unwrap());
     headers.insert("Accept", "application/json".parse().unwrap());
@@ -95,7 +110,7 @@ pub mod ssr {
             project_slug,
         };
         let _ = client
-            .post("http://127.0.0.1:3002/server_project_action")
+            .post(format!("http://{}/server_project_action", server_vars.server_url.to_string()))
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
             .send()
@@ -126,7 +141,7 @@ pub mod ssr {
             project_slug,
         };
           client
-            .post("http://127.0.0.1:3002/server_project_action")
+            .post(format!("http://{}/server_project_action", server_vars.server_url.to_string()))
             .json(&req)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
             .send()
@@ -149,7 +164,7 @@ pub mod ssr {
         let client = reqwest::Client::new();
         let server_vars = crate::ssr::server_vars()?;
         Ok(client
-            .post("http://127.0.0.1:3002/server_action")
+            .post(format!("http://{}/server_action", server_vars.server_url.to_string()))
             .json(&action)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
             .send()
