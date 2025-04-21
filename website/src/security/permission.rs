@@ -20,7 +20,7 @@ pub async fn request_server_project_action_front(
     ssr::handle_project_permission_request(
         project_slug,
         action.permission(),
-        action.require_csrf().then_some(csrf).flatten(),
+        action.require_csrf().then_some(csrf.unwrap_or_default()),
         |_, _, project_slug| async move {
             if action.with_token() {
                 request_server_project_action_token(project_slug, action).await
@@ -150,11 +150,6 @@ pub mod ssr {
                 .map(|v| permission_type <= v)
                 .unwrap_or_default();
             if has_permission {
-                log!(
-                    "Permission already granted. for user_id: {}, project_id: {}",
-                    user_id,
-                    project_id
-                );
                 permission_allow()
             } else if let Some(permission) =
                 request_project_permission(permissions, user_id, project_id).await?

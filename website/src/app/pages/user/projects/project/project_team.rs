@@ -46,11 +46,11 @@ pub fn ProjectTeam() -> impl IntoView {
             .unwrap_or_default()
     };
 
-  
-    
+
+
 
     view! {
-        <div class="section-border">
+        <div >
             <h2 class="section-title">"Team"</h2>
             <p class="section-description">"Manage project team members and permissions."</p>
 
@@ -289,11 +289,11 @@ pub async fn update_project_team_permission(
                 .await
                 .map_err(|e| ServerFnError::new(e.to_string()))?;
             Ok(())
-            
+
     }
     )
         .await
-    
+
 }
 #[server]
 pub async fn add_project_team_permission(
@@ -361,8 +361,8 @@ pub async fn get_project_team(
             let user_permissions = sqlx::query_as!(
                 UserPermissionPage,
                 r#"
-                    SELECT user_id,project_id, permission as "permission: Permission", u.username as username 
-                    FROM permissions 
+                    SELECT user_id,project_id, permission as "permission: Permission", u.username as username
+                    FROM permissions
                     INNER JOIN public.users u on u.id = permissions.user_id
                     WHERE project_id = $1"#,
                 project_slug.id
