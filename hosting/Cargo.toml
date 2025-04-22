@@ -1,6 +1,25 @@
 [package]
-name = "site_hosting"
+name = "hosting"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dotenvy = {workspace = true}
+http = "1.3.1"
+walkdir = "2.5.0"
+once_cell = "1.21.3"
+dashmap = "6.1.0"
+quick_cache = "0.6.13"
+may = { version = "0.3" }
+may_minihttp = { version = "0.1", default-features = false }
+mimalloc = {version = "0.1.46",default-features = false}
+zstd = "0.13"
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+panic = 'abort'
+lto = 'thin'
+debug = false
+incremental = false
+overflow-checks = false

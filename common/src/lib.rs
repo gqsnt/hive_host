@@ -132,6 +132,6 @@ where
     }
 
     pub fn to_unix(&self) -> U {
-        U::from(format!("{}{}", self.name, self.id))
+        U::from(format!("{}{}", self.name, self.id).to_lowercase())
     }
 }

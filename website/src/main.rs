@@ -1,8 +1,13 @@
-use std::str::FromStr;
+use memory_serve::{load_assets, CacheControl, MemoryServe};
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
+    use std::str::FromStr;
+    use tower_http::compression::{CompressionLayer, Predicate};
+    use tower_http::compression::predicate::{NotForContentType, SizeAbove};
+    use tower_http::CompressionLevel;
+
     use axum::{routing::get, Router};
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
@@ -17,9 +22,6 @@ async fn main() {
     use std::net::SocketAddr;
     use std::sync::Arc;
     use std::time::Duration;
-    use tower_http::compression::predicate::{NotForContentType, SizeAbove};
-    use tower_http::compression::{CompressionLayer, Predicate};
-    use tower_http::CompressionLevel;
     use website::app::*;
     use website::models::User;
     use website::rate_limiter::ssr::{rate_limit_middleware, RateLimiter};
@@ -33,8 +35,8 @@ async fn main() {
     let database_url = dotenvy::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let token_action_auth =
         SecretString::from(dotenvy::var("TOKEN_AUTH").expect("TOKEN_AUTH must be set"));
-    let website_url =
-        dotenvy::var("WEBSITE_URL").expect("WEBSITE_URL must be set");
+    let website_addr =
+        dotenvy::var("WEBSITE_ADDR").expect("WEBSITE_URL must be set");
     let server_url = dotenvy::var("SERVER_URL").expect("SERVER_URL must be set");
     let hosting_url = dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set");
     let pool = PgPool::connect(database_url.as_str())
@@ -51,7 +53,7 @@ async fn main() {
 
     let mut conf = get_configuration(None).unwrap();
     let addr = SocketAddr::from_str(
-        &website_url
+        &website_addr
     ).expect("Could not parse website URL");
     conf.leptos_options.site_addr = addr.clone();
     let leptos_options = conf.leptos_options;
@@ -86,50 +88,50 @@ async fn main() {
     });
 
     let app = Router::new()
-        // .nest(
-        //     "/assets",
-        //     MemoryServe::new(load_assets!("./target/site/assets"))
-        //         .enable_brotli(!cfg!(debug_assertions))
-        //         .cache_control(CacheControl::Custom("public, max-age=31536000"))
-        //         .into_router::<AppState>()
-        // )
-        // .nest(
-        //     "/pkg",
-        //     MemoryServe::new(load_assets!("./target/site/pkg"))
-        //         .enable_brotli(!cfg!(debug_assertions))
-        //         .cache_control(CacheControl::Custom("public, max-age=31536000"))
-        //         .into_router::<AppState>()
-        // )
+        .nest(
+            "/assets",
+            MemoryServe::new(load_assets!("../target/site/assets"))
+                .enable_brotli(!cfg!(debug_assertions))
+                .cache_control(CacheControl::Custom("public, max-age=31536000"))
+                .into_router::<AppState>()
+        )
+        .nest(
+            "/pkg",
+            MemoryServe::new(load_assets!("../target/site/pkg"))
+                .enable_brotli(!cfg!(debug_assertions))
+                .cache_control(CacheControl::Custom("public, max-age=31536000"))
+                .into_router::<AppState>()
+        )
         .route(
             "/api/{*wildcard}",
             get(server_fn_handler).post(server_fn_handler),
         )
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
-        // .layer(
-        //     CompressionLayer::new()
-        //         .br(true)
-        //         .zstd(true)
-        //         .quality(CompressionLevel::Default)
-        //         .compress_when(
-        //             SizeAbove::new(256)
-        //                 .and(NotForContentType::GRPC)
-        //                 .and(NotForContentType::IMAGES)
-        //                 .and(NotForContentType::SSE)
-        //                 .and(NotForContentType::const_new("text/javascript"))
-        //                 .and(NotForContentType::const_new("application/wasm"))
-        //                 .and(NotForContentType::const_new("text/css")),
-        //         ),
-        // )
+        .layer(
+            CompressionLayer::new()
+                .br(true)
+                .zstd(true)
+                .quality(CompressionLevel::Default)
+                .compress_when(
+                    SizeAbove::new(256)
+                        .and(NotForContentType::GRPC)
+                        .and(NotForContentType::IMAGES)
+                        .and(NotForContentType::SSE)
+                        .and(NotForContentType::const_new("text/javascript"))
+                        .and(NotForContentType::const_new("application/wasm"))
+                        .and(NotForContentType::const_new("text/css")),
+                ),
+        )
         .layer(
             AuthSessionLayer::<User, UserId, SessionPgPool, PgPool>::new(Some(pool.clone()))
                 .with_config(auth_config),
         )
         .layer(SessionLayer::new(session_store))
-        .route_layer(axum::middleware::from_fn_with_state(
-            rate_limiter.clone(),
-            rate_limit_middleware,
-        ))
+        // .route_layer(axum::middleware::from_fn_with_state(
+        //     rate_limiter.clone(),
+        //     rate_limit_middleware,
+        // ))
         .with_state(app_state);
 
     // run our app with hyper
