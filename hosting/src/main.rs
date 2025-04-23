@@ -30,7 +30,7 @@ use tokio::{runtime, task};
 use tracing::{error, info};
 use walkdir::WalkDir;
 use common::hosting_action::{HostingAction, HostingActionRequest, HostingActionResponse};
-use common::ProjectUnixSlugStr;
+use common::{ProjectSlug, ProjectUnixSlugStr};
 
 const PROJECT_ROOT_PATH: &str = "/projects";
 const PROJECT_ROOT_PATH_PREFIX: &str = "/projects/";
@@ -178,19 +178,24 @@ async fn serve(handle: &runtime::Handle) -> Result<()> {
     let socket = create_socket(addr)?;
 
 
-    
+
     let db = DB.get().await.expect("DB must exist");
-    let query = "SELECT name, is_active FROM projects where is_active = true";
+    let query = "SELECT id,name, is_active FROM projects where is_active = true";
     let statement = db.prepare_cached(query).await.expect("Could not prepare statement");
     let row = db.query(&statement, &[]).await.expect("Could not query project");
+    println!("Found {} projects", row.len());
     for row in row {
-        let project_slug = row.get::<_, String>("name");
-        cache_project_path(project_slug).await;
+        let name = row.get::<_, String>("name");
+        let id = row.get::<_, i64>("id");
+        let project_slug = ProjectSlug::new(id, name);
+        let unix_slug = project_slug.to_unix();
+        println!("Project: {}", unix_slug);
+        cache_project_path(unix_slug).await;
     }
-    
+
     drop(db);
-    
-    
+
+
     let listener = TcpListener::from_std(socket.into())?;
     let addr = listener.local_addr()?;
     info!("Listening on: {}", addr);
