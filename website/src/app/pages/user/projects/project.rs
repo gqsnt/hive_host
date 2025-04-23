@@ -1,4 +1,4 @@
-use leptos::prelude::AddAnyAttr;
+use leptos::prelude::{AddAnyAttr, Resource, Suspend, Suspense};
 use leptos::prelude::Signal;
 use std::fmt::Display;
 pub mod project_dashboard;
@@ -94,6 +94,8 @@ pub fn ProjectPage() -> impl IntoView {
             .map(|pp| pp.project_slug)
             .expect("Project slug not found")
     });
+    
+    
 
     let get_project_section = move || {
         let location = use_location().pathname.get().clone();
@@ -121,6 +123,7 @@ pub fn ProjectPage() -> impl IntoView {
         let sec = get_project_section();
         set_current.set(sec);
     });
+    
 
     view! {
         <nav class="nav-main">

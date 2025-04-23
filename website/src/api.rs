@@ -96,6 +96,7 @@ pub mod ssr {
     use leptos::logging::log;
     use leptos::prelude::ServerFnError;
     use secrecy::ExposeSecret;
+    use common::hosting_action::{HostingAction, HostingActionRequest, HostingActionResponse};
 
     pub async fn request_server_project_action_token(
         project_slug: ProjectSlug,
@@ -128,6 +129,35 @@ pub mod ssr {
         //log!("request_server_project_action_token response: {}", response);
         Ok(ServerProjectActionResponse::Token(token))
     }
+    
+    pub async fn request_hosting_action(
+        project_slug: ProjectSlug,
+        action:HostingAction,
+    ) ->  Result<HostingActionResponse, ServerFnError>{
+        let client = reqwest::Client::new();
+        let server_vars = crate::ssr::server_vars()?;
+        let req = HostingActionRequest {
+            action,
+            project_slug:project_slug.to_unix(),
+        };
+        client
+            .post(format!("http://{}", server_vars.hosting_url.to_string()))
+            .json(&req)
+            .bearer_auth(server_vars.token_action_auth.expose_secret())
+            .send()
+            .await
+            .map_err(|e| {
+                log!("Error sending request_server_project_action: {}", e);
+                ServerFnError::new(e.to_string())
+            })?
+            .json::<HostingActionResponse>()
+            .await
+            .map_err(|e| {
+                log!("Error parsing request_server_project_action: {}", e);
+                ServerFnError::new(e.to_string())
+            })
+    }
+    
 
     pub async fn request_server_project_action(
         project_slug: ProjectSlug,

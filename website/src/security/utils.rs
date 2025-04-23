@@ -72,7 +72,7 @@ pub mod ssr {
     pub fn set_headers() {
         let response = match use_context::<leptos_axum::ResponseOptions>() {
             Some(ro) => ro,
-            None => return, // building routes in main.rs
+            None => return, // building routes in main_mini_http
         };
 
         //let _nonce = use_nonce().expect("a nonce to be made");

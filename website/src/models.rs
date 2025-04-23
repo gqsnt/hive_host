@@ -52,6 +52,7 @@ impl Default for User {
 pub struct Project {
     pub id: ProjectId,
     pub name: String,
+    pub is_active: bool,
 }
 
 impl Project {

@@ -142,6 +142,15 @@ pub async fn create_project(
     set_acl(&proj_path, user_slug.clone(), "rwX").await?;
 
     bind_project_to_user_chroot(user_slug, project_slug).await?;
+    //add file index.html to project
+    let index_file_path = format!("{}/index.html", proj_path);
+    let mut index_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&index_file_path)
+        .await?;
+    index_file.write_all(b"<html><body><h1>Hello World</h1></body></html>").await?;
+    index_file.flush().await?;
     Ok(())
 }
 

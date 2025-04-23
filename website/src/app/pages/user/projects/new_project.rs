@@ -109,6 +109,7 @@ pub mod ssr {
         Ok(Project {
             id: project.id,
             name,
+            ..Default::default()
         })
     }
 }

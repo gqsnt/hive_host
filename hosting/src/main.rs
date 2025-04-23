@@ -1,109 +1,120 @@
-use std::fs::File;
-use std::io;
-use std::io::Read;
-use std::sync::Arc;
-
-// Use Arc for cheap cloning
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
+use async_compression::tokio::bufread::BrotliEncoder;
 use dashmap::DashMap;
-use http::header::HOST;
-use may_minihttp::{HttpService, HttpServiceFactory, Request, Response};
-use quick_cache::sync::Cache;
+use http::header::SERVER;
+use http::HeaderValue;
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, Empty, Full};
+use hyper::body::{Bytes, Incoming};
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{header, Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
+use quick_cache::sync::{Cache, DefaultLifecycle};
+use quick_cache::{DefaultHashBuilder, Weighter};
+use socket2::{Domain, SockAddr, Socket};
+use std::convert::Infallible;
+use std::io;
+use std::net::{AddrParseError, SocketAddr};
+use std::str::FromStr;
+use std::sync::{Arc, LazyLock};
+use std::thread::available_parallelism;
+use hyper::body::Body;
+use dashmap::mapref::one::Ref;
+use deadpool_postgres::{GenericClient, Pool};
+use deadpool_postgres::tokio_postgres::NoTls;
+use thiserror::Error;
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt as _, BufReader, ReadBuf, };
+use tokio::net::TcpListener;
+use tokio::{runtime, task};
+use tracing::{error, info};
 use walkdir::WalkDir;
+use common::hosting_action::{HostingAction, HostingActionRequest, HostingActionResponse};
+use common::ProjectUnixSlugStr;
 
 const PROJECT_ROOT_PATH: &str = "/projects";
 const PROJECT_ROOT_PATH_PREFIX: &str = "/projects/";
 const PROJECT_ROOT_PREFIX: &str = "projects.";
 
 
-struct HostService{
-    path_cache: Arc<DashMap<(String, String), String>>,
-    file_cache :Arc<Cache<(String,String), Vec<u8>>>,
-    suffix_hosting_url:String,
+static CACHE: LazyLock<DashMap<ProjectUnixSlugStr, ProjectCache>> = LazyLock::new(|| {
+    DashMap::new()
+});
+
+static TOKEN : LazyLock<String> = LazyLock::new(||{
+    dotenvy::var("TOKEN_AUTH").expect("HOSTING_URL must be set")
+});
+
+static DB : LazyLock<Pool> = LazyLock::new(||{
+    let mut cfg = deadpool_postgres::Config::new();
+    cfg.dbname = Some(dotenvy::var("DATABASE_NAME").expect("DATABASE_NAME must be set"));
+    cfg.user = Some(dotenvy::var("DATABASE_USER").expect("DATABASE_USER must be set"));
+    cfg.password = Some(dotenvy::var("DATABASE_PASSWORD").expect("DATABASE_PASSWORD must be set"));
+    cfg.host = Some(dotenvy::var("DATABASE_HOST").expect("DATABASE_HOST must be set"));
+    cfg.port = Some(dotenvy::var("DATABASE_PORT").expect("DATABASE_PORT must be set").parse().unwrap());
+    cfg.create_pool(None, NoTls).expect("Failed to create pool")
+});
+
+static CONTENT_ENCODING_BR: HeaderValue = HeaderValue::from_static("br");
+
+static CACHE_HEADER: HeaderValue = HeaderValue::from_static("public, max-age=31536000");
+static SERVER_HEADER: HeaderValue = HeaderValue::from_static("localhost");
+
+#[derive(Clone)]
+pub struct BodyWeighter;
+
+impl Weighter<KeyType, BodyType> for BodyWeighter {
+    fn weight(&self, _key: &KeyType, val: &BodyType) -> u64 {
+        // Be cautions out about zero weights!
+        val.len().max(1) as u64
+    }
 }
 
-impl HttpService for HostService {
-    fn call(&mut self, req: Request, rsp: &mut Response) -> std::io::Result<()> {
-        let path = req.path().to_string();
-        let host = req.headers().iter()
-            .find(|h| h.name == HOST)
-            .map(|h| String::from_utf8_lossy(h.value).to_string())
-            .unwrap_or_default();
-        let project = host.strip_suffix(self.suffix_hosting_url.as_str()).unwrap_or_default().to_string();
-        let ref_ = (project, path);
-        match  self.path_cache.get(&ref_){
-            None => {
-                rsp.status_code(404, "Not Found");
-            }
-            Some(path_ref) => {
-                let path = path_ref.value().to_string();
-                let cache_key = ref_.clone(); // Clone key for cache lookup/insert
-                drop(path_ref);
+pub type BodyType = Bytes;
+pub type KeyType = String;
 
-                let body = if let Some(cached_file_arc_bytes) = self.file_cache.get(&cache_key) {
-                    // Cache hit: Clone the Arc<Bytes> cheaply
-                    cached_file_arc_bytes
-                } else {
-                    // Cache miss: Read asynchronously
-                    let mut file = File::open(path)?; // Async open
-                    let mut encoder = zstd::stream::Encoder::new(Vec::new(), 4).unwrap();
-                    let _ = io::copy(&mut file, &mut encoder).unwrap();
-                    let buffer = encoder.finish().unwrap();
-                    self.file_cache.insert(cache_key,buffer.clone());
-                
-                    // Return the Arc<Bytes> for the response
-                    buffer
-                };
-                //self.file_cache.insert(cache_key,body.clone());
+pub type FileCacheType =
+    Cache<KeyType, BodyType, BodyWeighter, DefaultHashBuilder, DefaultLifecycle<KeyType, BodyType>>;
 
-                // Send the body. body_ref takes AsRef<[u8]>, which Arc<Bytes> should implement via Deref
-                // If body_ref doesn't exist or doesn't work, you might need body_vec(body_bytes.to_vec())
-                // or access the underlying slice: rsp.body(&body_bytes);
-                rsp.body_vec(body);
-                rsp.header("Content-Type: text/html;charset=utf8");
-                rsp.header("Content-Encoding: zstd");
-            }
+
+
+#[derive(Clone,Debug)]
+pub struct ProjectCache{
+    pub paths:Arc<DashMap<String, FileInfo>>,
+    pub file_cache: Arc<FileCacheType>,
+}
+
+impl Default for ProjectCache {
+    fn default() -> Self {
+        Self{
+            paths:Arc::new(DashMap::new()),
+            file_cache:Arc::new(Cache::with_weighter(500, 20_000_000, BodyWeighter))
         }
-        Ok(())
     }
 }
 
-
-struct HttpServer {
-    path_cache: Arc<DashMap<(String, String), String>>,
-    file_cache :Arc<Cache<(String,String), Vec<u8>>>,
-    suffix_hosting_url:String,
+#[derive(Clone, Debug)]
+pub struct FileInfo{
+    pub mime_type : String,
+    pub full_path:String,
 }
 
 
-impl HttpServiceFactory for HttpServer {
-    type Service = HostService;
 
-    fn new_service(&self, id: usize) -> Self::Service {
-        let path_cache=  self.path_cache.clone();
-        let file_cache=  self.file_cache.clone();
-        let suffix_hosting_url = self.suffix_hosting_url.clone();
-        HostService { path_cache, suffix_hosting_url, file_cache }
-    }
-}
 
-fn main() {
-    dotenvy::dotenv().expect("Failed to load .env file");
-    let hosting_url = dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set");
-    let hosting_addr = dotenvy::var("HOSTING_ADDR").expect("HOSTING_URL must be set");
 
-    may::config().set_pool_capacity(1000).set_stack_size(0x1000);
-    println!("Starting http server: {}", hosting_url);
-    let path_cache = DashMap::new();
-    let project_prefix = format!("{}/", PROJECT_ROOT_PREFIX);
-    WalkDir::new(PROJECT_ROOT_PATH)
+
+pub async fn cache_project_path(project_slug:ProjectUnixSlugStr){
+    let path =   format!("{}{}", PROJECT_ROOT_PATH_PREFIX, project_slug);
+    CACHE.remove(&project_slug);
+    let entry = CACHE.entry(project_slug).or_insert(ProjectCache::default());
+    WalkDir::new(path)
         .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.metadata().unwrap().is_file())
-        .for_each(|entry| {
-            let full_path = entry.path().to_string_lossy().to_string();
+        .filter_map(|dir_entry| dir_entry.ok())
+        .filter(|dir_entry| dir_entry.metadata().unwrap().is_file())
+        .for_each(|dir_entry| {
+            let mime_type = mime_guess::from_path(dir_entry.path()).first_or_text_plain().to_string();
+            let full_path = dir_entry.path().to_string_lossy().to_string();
             let path = full_path.strip_prefix(PROJECT_ROOT_PATH_PREFIX).unwrap();
 
             let path_split = path.split('/').collect::<Vec<_>>();
@@ -111,14 +122,246 @@ fn main() {
             let project_path = path_split[0].to_string();
 
             let path = format!("/{}", path_split[1..].join("/"));
-            path_cache.insert((project_path, path), entry.path().to_string_lossy().to_string());
+            entry.paths.entry(path).or_insert(FileInfo{
+                mime_type ,
+                full_path
+            });
         });
-    let file_cache = Cache::new(5000);
-    let server = HttpServer {
-        path_cache: Arc::new(path_cache),
-        file_cache: Arc::new(file_cache),
-        suffix_hosting_url:format!(".{}", hosting_url),
-    };
-    server.start(hosting_addr).unwrap().join().unwrap();
+
+
 }
 
+// static FILE_CACHE : LazyLock<Cache<String, Response<Body>>> = LazyLock::new(|| {
+//     Cache::new(5000)
+// });
+
+static HOSTING_PREFIX: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        ".{}",
+        dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set")
+    )
+});
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
+    #[error("Hyper error: {0}")]
+    Hyper(#[from] hyper::Error),
+    #[error("Http error: {0}")]
+    Http(#[from] http::Error),
+    #[error("Addr parse error: {0}")]
+    AddrParseError(#[from] AddrParseError),
+    #[error("Serde json error: {0}")]
+    SerdeJson(#[from] serde_json::Error),
+}
+
+pub fn main() -> Result<()> {
+    dotenvy::dotenv().expect(".env must be set");
+    LazyLock::force(&CACHE);
+    LazyLock::force(&TOKEN);
+    LazyLock::force(&DB);
+    let cpus = available_parallelism()?.get();
+    let runtime = runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(cpus)
+        .build()?;
+    runtime.block_on(serve(runtime.handle()))
+}
+
+async fn serve(handle: &runtime::Handle) -> Result<()> {
+    let hosting_url = dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set");
+    let hosting_addr = dotenvy::var("HOSTING_ADDR").expect("HOSTING_URL must be set");
+    let addr = SocketAddr::from_str(&hosting_addr)?;
+    let socket = create_socket(addr)?;
+
+
+    
+    let db = DB.get().await.expect("DB must exist");
+    let query = "SELECT name, is_active FROM projects where is_active = true";
+    let statement = db.prepare_cached(query).await.expect("Could not prepare statement");
+    let row = db.query(&statement, &[]).await.expect("Could not query project");
+    for row in row {
+        let project_slug = row.get::<_, String>("name");
+        cache_project_path(project_slug).await;
+    }
+    
+    drop(db);
+    
+    
+    let listener = TcpListener::from_std(socket.into())?;
+    let addr = listener.local_addr()?;
+    info!("Listening on: {}", addr);
+
+    // spawn accept loop into a task so it is scheduled on the runtime with all the other tasks.
+    let accept_loop = accept_loop(handle.clone(), listener);
+    handle.spawn(accept_loop).await.unwrap()
+}
+
+async fn accept_loop(handle: runtime::Handle, listener: TcpListener) -> Result<()> {
+    let mut http = http1::Builder::new();
+    http.pipeline_flush(true);
+
+    let service = service_fn(handle_request);
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let http = http.clone();
+        handle.spawn(async move {
+            let io = TokioIo::new(stream);
+            if let Err(_e) = http.serve_connection(io, service).await {
+                // ignore errors until https://github.com/hyperium/hyper/pull/3863/ is merged
+                // This PR will allow us to filter out shutdown errors which are expected.
+                // warn!("Connection error (this may be normal during shutdown): {e}");
+            }
+        });
+    }
+}
+
+async fn handle_request(
+    request: Request<Incoming>,
+) -> Result<Response<BoxBody<Bytes, Infallible>>> {
+
+    let project_slug = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.strip_suffix(HOSTING_PREFIX.as_str()))
+        .unwrap_or_default();
+    if project_slug.is_empty() {
+        let auth = match request.headers().get("Authorization"){
+            Some(auth) => auth.to_str().unwrap_or_default().strip_prefix("Bearer ").unwrap_or_default(),
+            None => return not_found_response(),
+        };
+        if !auth.eq(TOKEN.as_str())  {
+            return not_found_response();
+        }
+        let  body:Vec<u8>  = request.into_body().collect().await?.to_bytes().to_vec();
+        let request:HostingActionRequest = serde_json::from_slice(&body)?;
+        let project_slug = request.project_slug.clone();
+        match request.action{
+            HostingAction::ServeReloadProject => {
+                cache_project_path(project_slug).await;
+            }
+            HostingAction::StopServingProject => {
+                CACHE.remove(&project_slug);
+            }
+            HostingAction::ClearCache => {
+                if let Some(project_cache) = CACHE.get(&project_slug){
+                    project_cache.file_cache.clear();
+                }
+            }
+        }
+        return ok_api_response();
+    }
+    let base_path = request.uri().path();
+    let path = if base_path.is_empty() || base_path == "/" {
+        "/index.html"
+    } else {
+        base_path
+    };
+    let cache_entry = CACHE.get(project_slug)
+        .and_then(|project_cache|{
+            project_cache.paths.get(path).map(|file_info| (file_info.clone(), project_cache.file_cache.clone()))
+        });
+    let (file_info, project_cache) = match cache_entry {
+        Some(found) => found,
+        None => return not_found_response(),
+    };
+    let (is_br, body) = match project_cache.get(path){
+        Some(cached_body) => (true, cached_body),
+        None => {
+            let buffer = match tokio::fs::read(&file_info.full_path).await {
+                Ok(buf) => Bytes::from(buf),
+                Err(e) => {
+                    error!("Failed to read file {}: {}", file_info.full_path, e);
+                    // Return Internal Server Error
+                    return internal_error_response();
+                }
+            };
+
+            let full_path = file_info.full_path.clone();
+            let path_clone = path.to_string();
+            task::spawn(async move {
+                match File::open(&full_path).await {
+                    Ok(file) => {
+                        let reader = BufReader::new(file);
+                        let mut encoder = BrotliEncoder::new(reader);
+                        let mut compressed_buffer = Vec::new();
+                        // Use AsyncReadExt::read_to_end
+                        if let Err(e) = encoder.read_to_end(&mut compressed_buffer).await {
+                            error!("Failed to compress file {} with Brotli: {}", full_path, e);
+                            return; // Don't insert partial data
+                        }
+                        // Shutdown is important for BrotliEncoder
+                        if let Err(e) = encoder.shutdown().await {
+                            error!("Failed to shutdown Brotli encoder for {}: {}", full_path, e);
+                            return; // Don't insert potentially corrupt data
+                        }
+                        project_cache.insert(path_clone, Bytes::from(compressed_buffer));
+                    }
+                    Err(e) => {
+                        error!("Failed to open file {} for compression task: {}", full_path, e);
+                    }
+                }
+            });
+            (false, buffer) // Return uncompressed body for this request
+        }
+    };
+    let mut response = Response::builder()
+        .status(StatusCode::OK)
+        .header(SERVER, SERVER_HEADER.clone())
+        .header(
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(file_info.mime_type.as_str()).unwrap(),
+        )
+        .header(header::CACHE_CONTROL, CACHE_HEADER.clone());
+    if is_br {
+        response = response.header(header::CONTENT_ENCODING, CONTENT_ENCODING_BR.clone());
+    }
+    response.body(Full::new(body).boxed()).map_err(Error::from)
+}
+
+
+fn not_found_response() -> Result<Response<BoxBody<Bytes, Infallible>>>{
+    Response::builder()
+        .status(StatusCode::NOT_FOUND)
+        .body(Empty::new().boxed())
+        .map_err(Error::from)
+}
+
+
+fn ok_api_response() -> Result<Response<BoxBody<Bytes, Infallible>>>{
+    let response = serde_json::to_vec(&HostingActionResponse::Ok)?;
+    let response_bytes = Bytes::from(response);
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Full::new(response_bytes).boxed())
+        .map_err(Error::from)
+}
+fn internal_error_response() -> Result<Response<BoxBody<Bytes, Infallible>>>{
+    Response::builder()
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .body(Empty::new().boxed())
+        .map_err(Error::from)
+}
+
+fn create_socket(addr: SocketAddr) -> Result<Socket> {
+    let domain = match addr {
+        SocketAddr::V4(_) => Domain::IPV4,
+        SocketAddr::V6(_) => Domain::IPV6,
+    };
+    let addr = SockAddr::from(addr);
+    let socket = Socket::new(domain, socket2::Type::STREAM, None)?;
+    let backlog = 4096; // maximum number of pending connections
+    #[cfg(unix)]
+    socket.set_reuse_port(true)?;
+    socket.set_reuse_address(true)?;
+    socket.set_nodelay(true)?;
+    socket.set_nonblocking(true)?; // required for tokio
+    socket.bind(&addr)?;
+    socket.listen(backlog)?;
+
+    Ok(socket)
+}

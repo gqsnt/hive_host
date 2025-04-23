@@ -3,6 +3,7 @@
 pub mod permission;
 pub mod server_action;
 pub mod server_project_action;
+pub mod hosting_action;
 
 use serde::de::StdError;
 use serde::{Deserialize, Serialize};

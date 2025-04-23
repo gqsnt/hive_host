@@ -26,8 +26,8 @@ async fn main() {
     let token_action_auth =
         SecretString::from(dotenvy::var("TOKEN_AUTH").expect("TOKEN_AUTH must be set"));
     // build our application with a route
-    let server_url = dotenvy::var("SERVER_URL").expect("SERVER_URL must be set");
-    let addr = SocketAddr::from_str(&server_url).expect("Failed to parse server url");
+    let server_addr = dotenvy::var("SERVER_ADDR").expect("SERVER_URL must be set");
+    let addr = SocketAddr::from_str(&server_addr).expect("Failed to parse server url");
 
     let app_state = AppState {
         server_project_action_cache: Arc::new(

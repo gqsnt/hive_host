@@ -88,41 +88,41 @@ async fn main() {
     });
 
     let app = Router::new()
-        .nest(
-            "/assets",
-            MemoryServe::new(load_assets!("../target/site/assets"))
-                .enable_brotli(!cfg!(debug_assertions))
-                .cache_control(CacheControl::Custom("public, max-age=31536000"))
-                .into_router::<AppState>()
-        )
-        .nest(
-            "/pkg",
-            MemoryServe::new(load_assets!("../target/site/pkg"))
-                .enable_brotli(!cfg!(debug_assertions))
-                .cache_control(CacheControl::Custom("public, max-age=31536000"))
-                .into_router::<AppState>()
-        )
+        // .nest(
+        //     "/assets",
+        //     MemoryServe::new(load_assets!("../target/site/assets"))
+        //         .enable_brotli(!cfg!(debug_assertions))
+        //         .cache_control(CacheControl::Custom("public, max-age=31536000"))
+        //         .into_router::<AppState>()
+        // )
+        // .nest(
+        //     "/pkg",
+        //     MemoryServe::new(load_assets!("../target/site/pkg"))
+        //         .enable_brotli(!cfg!(debug_assertions))
+        //         .cache_control(CacheControl::Custom("public, max-age=31536000"))
+        //         .into_router::<AppState>()
+        // )
         .route(
             "/api/{*wildcard}",
             get(server_fn_handler).post(server_fn_handler),
         )
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
-        .layer(
-            CompressionLayer::new()
-                .br(true)
-                .zstd(true)
-                .quality(CompressionLevel::Default)
-                .compress_when(
-                    SizeAbove::new(256)
-                        .and(NotForContentType::GRPC)
-                        .and(NotForContentType::IMAGES)
-                        .and(NotForContentType::SSE)
-                        .and(NotForContentType::const_new("text/javascript"))
-                        .and(NotForContentType::const_new("application/wasm"))
-                        .and(NotForContentType::const_new("text/css")),
-                ),
-        )
+        // .layer(
+        //     CompressionLayer::new()
+        //         .br(true)
+        //         .zstd(true)
+        //         .quality(CompressionLevel::Default)
+        //         .compress_when(
+        //             SizeAbove::new(256)
+        //                 .and(NotForContentType::GRPC)
+        //                 .and(NotForContentType::IMAGES)
+        //                 .and(NotForContentType::SSE)
+        //                 .and(NotForContentType::const_new("text/javascript"))
+        //                 .and(NotForContentType::const_new("application/wasm"))
+        //                 .and(NotForContentType::const_new("text/css")),
+        //         ),
+        // )
         .layer(
             AuthSessionLayer::<User, UserId, SessionPgPool, PgPool>::new(Some(pool.clone()))
                 .with_config(auth_config),
