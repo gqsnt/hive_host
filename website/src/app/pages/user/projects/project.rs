@@ -26,6 +26,7 @@ use strum_macros::EnumIter;
 
 use crate::models::Project;
 
+
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectParams {
     pub project_slug: String,
@@ -87,6 +88,17 @@ impl Display for ProjectSection {
 #[component]
 pub fn ProjectPage() -> impl IntoView {
     let params: MemoProjectParams = use_params::<ProjectParams>();
+    let project_resource = Resource::new(
+        move || params.get().unwrap().project_slug,
+        move |project_slug| get_project(project_slug),
+    );
+
+    let project_data = move || {
+        project_resource
+            .get()
+            .map(|p| p.unwrap_or_default())
+            .unwrap_or_default()
+    };
     provide_context(params);
     let get_project_slug = Signal::derive(move || {
         params
@@ -126,6 +138,14 @@ pub fn ProjectPage() -> impl IntoView {
     
 
     view! {
+        
+         <Suspense fallback=move || view!{Loading...}>
+            {move || {
+                Suspend::new(async move {
+                    
+})
+            }}
+        </Suspense>
         <nav class="nav-main">
             <div class="nav-container">
                 <div class="nav-inner">
@@ -175,8 +195,10 @@ fn SectionNav(
 }
 
 #[server]
-pub async fn get_project(project_slug: ProjectSlugStr) -> Result<Project, ServerFnError> {
+pub async fn get_project(project_slug: ProjectSlugStr) -> Result<(String, Project), ServerFnError> {
     use common::permission::Permission;
+    use crate::ssr::server_vars;
+    
     crate::security::permission::ssr::handle_project_permission_request(
         project_slug,
         Permission::Read,
@@ -190,7 +212,9 @@ pub async fn get_project(project_slug: ProjectSlugStr) -> Result<Project, Server
             .fetch_one(&pool)
             .await
             .map_err(|e| ServerFnError::new(e.to_string()))?;
-            Ok(project)
+            let server_vars =  server_vars()?;
+            
+            Ok((server_vars.hosting_url.as_str().to_string(),project))
         }
     )
     .await

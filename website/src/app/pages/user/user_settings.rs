@@ -136,7 +136,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                         <button
                             type="submit"
                             disabled=move || update_password_action.pending().get()
-                            class="btn-primary"
+                            class="btn btn-primary"
                         >
                             "Change Password"
                         </button>
@@ -237,7 +237,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                                             <input type="hidden" name="ssh_key_id" value=key.id />
                                                                                                             <button
                                                                                                                 type="submit"
-                                                                                                                class="btn-danger"
+                                                                                                                class="btn btn-danger"
                                                                                                                 disabled=move || delete_ssh_action.pending().get()
                                                                                                             >
                                                                                                                 "Delete"
@@ -384,7 +384,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                 <button
                                     type="submit"
                                     disabled=move || add_ssh_action.pending().get()
-                                    class="btn-primary"
+                                    class="btn btn-primary"
                                 >
                                     "Add SSH Key"
                                 </button>

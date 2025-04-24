@@ -12,8 +12,9 @@ use crate::app::pages::{include_csrf};
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
-    let action = ServerAction::<Login>::new();
     include_csrf();
+    let action = ServerAction::<Login>::new();
+    
     view! {
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">
@@ -29,7 +30,7 @@ pub fn LoginPage() -> impl IntoView {
 
             <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
                 <ActionForm action=action>
-                    <CSRFField />
+                   {move || {view!{<CSRFField />}}}
                     <div>
                         <label class="form-label">
                             Email address <div class="mt-2">
@@ -101,7 +102,7 @@ pub fn LoginPage() -> impl IntoView {
                         </label>
                     </div>
                     <div class="mt-2">
-                        <button type="submit" class="btn-primary">
+                        <button type="submit" class="btn btn-primary">
                             Sign in
                         </button>
                     </div>

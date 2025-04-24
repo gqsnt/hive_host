@@ -1,8 +1,9 @@
-use crate::app::components::csrf_field::CSRFField;
+
 use crate::security::signup::Signup;
+use crate::app::components::csrf_field::CSRFField;
 use leptos::prelude::{ElementChild};
 use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::{ActionForm, ClassAttribute, ServerAction};
+use leptos::prelude::{ClassAttribute, ServerAction, ActionForm};
 use leptos::{component, view, IntoView};
 use crate::app::pages::{include_csrf};
 
@@ -116,7 +117,7 @@ pub fn SignupPage() -> impl IntoView {
                         </label>
                     </div>
                     <div>
-                        <button type="submit" class="btn-primary">
+                        <button type="submit" class="btn btn-primary">
                             Sign up
                         </button>
                     </div>

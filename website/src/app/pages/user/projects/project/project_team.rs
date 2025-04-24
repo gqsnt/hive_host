@@ -100,7 +100,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                                                         })
                                                                                         .collect_view()}
                                                                                 </FormSelect>
-                                                                                <button type="submit" class="btn-primary">
+                                                                                <button type="submit" class="btn btn-primary">
                                                                                     "Update"
                                                                                 </button>
                                                                             </div>
@@ -126,7 +126,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                                 <input type="hidden" name="project_slug" value=slug() />
                                                                 <input type="hidden" name="user_id" value=perm.user_id />
                                                                 <CSRFField/>
-                                                                <button type="submit" class="btn-danger">
+                                                                <button type="submit" class="btn btn-danger">
                                                                     "Remove"
                                                                 </button>
                                                             </ActionForm>
@@ -180,7 +180,7 @@ pub fn ProjectTeam() -> impl IntoView {
 
                                                 </div>
                                             </div>
-                                            <button type="submit" class="btn-primary">
+                                            <button type="submit" class="btn btn-primary">
                                                 "Add"
                                             </button>
                                         </div>

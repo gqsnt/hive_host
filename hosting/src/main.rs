@@ -106,6 +106,7 @@ pub struct FileInfo{
 
 pub async fn cache_project_path(project_slug:ProjectUnixSlugStr){
     let path =   format!("{}{}", PROJECT_ROOT_PATH_PREFIX, project_slug);
+    info!("cache path: {}", path);
     CACHE.remove(&project_slug);
     let entry = CACHE.entry(project_slug).or_insert(ProjectCache::default());
     WalkDir::new(path)
@@ -122,6 +123,7 @@ pub async fn cache_project_path(project_slug:ProjectUnixSlugStr){
             let project_path = path_split[0].to_string();
 
             let path = format!("/{}", path_split[1..].join("/"));
+            info!("Caching file: {} -> {}", path, full_path);
             entry.paths.entry(path).or_insert(FileInfo{
                 mime_type ,
                 full_path
@@ -247,15 +249,11 @@ async fn handle_request(
         let project_slug = request.project_slug.clone();
         match request.action{
             HostingAction::ServeReloadProject => {
+                info!("Reloading project {}", project_slug);
                 cache_project_path(project_slug).await;
             }
             HostingAction::StopServingProject => {
                 CACHE.remove(&project_slug);
-            }
-            HostingAction::ClearCache => {
-                if let Some(project_cache) = CACHE.get(&project_slug){
-                    project_cache.file_cache.clear();
-                }
             }
         }
         return ok_api_response();

@@ -12,7 +12,10 @@ pub mod user;
 pub struct CsrfValue(pub String);
 
 pub fn include_csrf() {
-    let csrf = OnceResource::new(crate::app::components::csrf_field::generate_csrf());
+    let csrf = OnceResource::new_blocking(
+        async {
+        crate::app::components::csrf_field::generate_csrf().await
+});
     let csrf_signal = Signal::derive(move || {
         CsrfValue(csrf.get()
             .map(|csrf| csrf.unwrap_or_default())

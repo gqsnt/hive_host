@@ -77,7 +77,7 @@ pub fn ProjectFilesSidebar(
                         class="form-input flex-grow px-2 py-1 text-sm"
                         placeholder="New folder name..."
                     />
-                    <button type="submit" class="btn-primary text-sm px-2 py-1 flex-shrink-0">
+                    <button type="submit" class="btn btn-primary text-sm px-2 py-1 flex-shrink-0">
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
                             fill="none"
@@ -121,7 +121,7 @@ pub fn ProjectFilesSidebar(
                             class="form-input flex-grow px-2 py-1 text-sm"
                             placeholder="New file name..."
                         />
-                        <button type="submit" class="btn-primary text-sm px-2 py-1 flex-shrink-0">
+                        <button type="submit" class="btn btn-primary text-sm px-2 py-1 flex-shrink-0">
                             <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 fill="none"
@@ -171,12 +171,33 @@ pub fn ProjectFilesSidebarList(
 ) -> impl IntoView {
     view! {
         <div class="flex-grow overflow-y-auto -mr-4 pr-4">
-            <ul class="space-y-1">
-                {move || {
+                <Transition fallback=move || {
+                    view! { <div>Loading...</div> }
+                }>
+                    {move || {
+                        file_list_resource
+                            .get()
+                            .map(|result| match result {
+                                Ok(ls_elements) => {
+                                    Either::Left({
+                                        if ls_elements.is_empty() && current_path.get() == "." {
+                                            EitherOf3::A(())
+                                        } else if ls_elements.is_empty() {
+                                            EitherOf3::B(
+                                                view! {
+                                                    <div class="px-2 py-1.5 text-sm text-gray-500 italic">
+                                                        "Folder is empty"
+                                                    </div>
+                                                },
+                                            )
+                                        } else {
+                                            EitherOf3::C(
+                                            view!{
+                                                {
                     (current_path.get() != ".")
                         .then(|| {
                             view! {
-                                <li>
+                                <div>
                                     <button
                                         class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
                                         on:click=move |_| {
@@ -199,32 +220,12 @@ pub fn ProjectFilesSidebarList(
                                         </svg>
                                         <span>".."</span>
                                     </button>
-                                </li>
+                                </div>
                             }
                         })
-                }}
-                <Transition fallback=move || {
-                    view! { <li>Loading...</li> }
-                }>
-                    {move || {
-                        file_list_resource
-                            .get()
-                            .map(|result| match result {
-                                Ok(ls_elements) => {
-                                    Either::Left({
-                                        if ls_elements.is_empty() && current_path.get() == "." {
-                                            EitherOf3::A(())
-                                        } else if ls_elements.is_empty() {
-                                            EitherOf3::B(
-                                                view! {
-                                                    <li class="px-2 py-1.5 text-sm text-gray-500 italic">
-                                                        "Folder is empty"
-                                                    </li>
-                                                },
-                                            )
-                                        } else {
-                                            EitherOf3::C(
-                                                ls_elements
+                }
+                                                 <ul class="space-y-1">
+                                                    {  ls_elements
                                                     .into_iter()
                                                     .map(|item| {
                                                         view! {
@@ -239,7 +240,9 @@ pub fn ProjectFilesSidebarList(
                                                             />
                                                         }
                                                     })
-                                                    .collect_view(),
+                                                    .collect_view()}
+                                                </ul>
+                                            }
                                             )
                                         }
                                     })
@@ -248,16 +251,15 @@ pub fn ProjectFilesSidebarList(
                                     Either::Right(
                                         // Collect into a view
                                         view! {
-                                            <li class="px-2 py-1.5 text-sm text-red-400">
+                                            <div class="px-2 py-1.5 text-sm text-red-400">
                                                 "Error: " {e.to_string()}
-                                            </li>
+                                            </div>
                                         },
                                     )
                                 }
                             })
                     }}
                 </Transition>
-            </ul>
         </div>
     }
 }

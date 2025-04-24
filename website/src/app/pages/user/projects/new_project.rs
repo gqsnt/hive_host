@@ -29,7 +29,7 @@ pub fn NewProjectPage(create_project_action: ServerAction<CreateProject>) -> imp
                 </div>
 
                 <div class="mt-6 flex items-center justify-end gap-x-6">
-                    <button type="submit" class="btn-primary">
+                    <button type="submit" class="btn btn-primary">
                         "Create Project"
                     </button>
                 </div>

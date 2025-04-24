@@ -88,6 +88,30 @@ pub async fn handle_server_action(
                     }
                 }
             }
+            UserAction::RemoveProject { user_slugs, project_slug } => {
+                for user_slug in user_slugs{
+                    match remove_user_from_project(user_slug.to_unix(), project_slug.to_unix()).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::debug!("Error removing user from project: {:?}", e);
+                            return Err((
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Error removing user from project".to_string(),
+                            ));
+                        }
+                    }
+                }
+                match remove_project(project_slug.to_unix()).await {
+                    Ok(_) => Ok(Json(ServerActionResponse::Ok)),
+                    Err(e) => {
+                        tracing::debug!("Error removing project: {:?}", e);
+                        Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Error removing project".to_string(),
+                        ))
+                    }
+                }
+            }
         },
     }
 }
@@ -191,7 +215,9 @@ pub async fn remove_user_from_project(
     project_slug: ProjectUnixSlugStr,
 ) -> Result<(), tokio::io::Error> {
     let proj_path = project_path(project_slug.clone());
-
+    let user_mount_point = user_project_path(user_slug.clone(), project_slug.clone());
+    run_sudo_cmd(&["umount", &user_mount_point]).await?;
+    tokio::fs::remove_dir(user_mount_point).await?;
     run_sudo_cmd(&["setfacl", "-x", &format!("u:{}", &user_slug), &proj_path]).await?;
     run_sudo_cmd(&[
         "setfacl",
@@ -201,9 +227,6 @@ pub async fn remove_user_from_project(
         &proj_path,
     ])
     .await?;
-
-    run_sudo_cmd(&["umount", &user_project_path(user_slug, project_slug)]).await?;
-
     Ok(())
 }
 
@@ -234,7 +257,6 @@ pub async fn remove_ssh_key(
 
 pub async fn remove_project(project_slug: ProjectUnixSlugStr) -> Result<(), std::io::Error> {
     let proj_path = project_path(project_slug);
-    run_sudo_cmd(&["umount", &proj_path]).await.ok(); // ignore errors
     tokio::fs::remove_dir_all(&proj_path).await?;
     Ok(())
 }

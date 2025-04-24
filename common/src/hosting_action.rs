@@ -5,7 +5,6 @@ use crate::ProjectUnixSlugStr;
 pub enum HostingAction{
     ServeReloadProject,
     StopServingProject,
-    ClearCache,
 }
 
 

@@ -138,7 +138,7 @@ pub fn FileContentView(
                                                                 type="button"
                                                                 on:click=on_click_update
                                                                 // Adjusted padding/text size
-                                                                class="btn-primary px-3 py-1 text-sm"
+                                                                class="btn btn-primary px-3 py-1 text-sm"
                                                                 disabled=move || server_project_action.pending().get()
                                                             >
                                                                 Save Changes
