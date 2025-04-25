@@ -11,7 +11,7 @@ leptos = { version = "0.8.0-rc2", features = ["nightly", "delegation"] }
 leptos_router = { version = "0.8.0-rc2", features = ["nightly"] }
 leptos_axum = { version = "0.8.0-rc2", optional = true }
 leptos_meta = { version = "0.8.0-rc2" }
-http = "1"
+http = { workspace = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 axum = { workspace = true, features = ["macros"], optional = true }
 axum_session_auth = { version = "0.16", optional = true }
@@ -46,7 +46,10 @@ send_wrapper = { version = "0.6.0", features = ["futures"] }
 uuid = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 strum_macros = { workspace = true }
-serde_json = "1.0.140"
+serde_json = { workspace = true }
+validator = { version = "0.20.0", features = ["derive"] }
+regex = "1.11.1"
+cfg-if = "1.0.0"
 
 [features]
 hydrate = [

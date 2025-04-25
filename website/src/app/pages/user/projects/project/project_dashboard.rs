@@ -10,3 +10,8 @@ pub fn ProjectDashboard() -> impl IntoView {
         </div>
     }
 }
+
+pub mod server_fns {
+    cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+    }}
+}

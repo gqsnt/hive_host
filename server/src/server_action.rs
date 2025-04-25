@@ -3,7 +3,8 @@ use crate::cmd::{
     remove_block, run_sudo_cmd, set_acl, ssh_key_path, ssh_path, user_path, user_project_path,
     user_projects_path,
 };
-use crate::{ensure_authorization, AppState};
+use crate::ServerError;
+use crate::{ensure_authorization, AppState, ServerResult};
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
@@ -14,7 +15,8 @@ use common::{ProjectUnixSlugStr, UserUnixSlugStr};
 use secrecy::ExposeSecret;
 use std::path::Path;
 use tokio::fs::OpenOptions;
-use tokio::io::{AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
+use tracing::info;
 
 pub async fn server_action(
     headers: HeaderMap,
@@ -29,97 +31,49 @@ pub async fn handle_server_action(
     _state: AppState,
     action: ServerAction,
 ) -> Result<Json<ServerActionResponse>, (StatusCode, String)> {
+    info!("Server action: {:?}", action);
     match action {
         ServerAction::UserAction(user_action) => match user_action {
-            UserAction::Create { user_slug } => match create_user(user_slug.to_unix()).await {
-                Ok(_) => Ok(Json(ServerActionResponse::Ok)),
-                Err(e) => {
-                    tracing::debug!("Error creating user: {:?}", e);
-                    Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Error creating user".to_string(),
-                    ))
-                }
-            },
-            UserAction::AddSshKey { user_slug, ssh_key } => {
-                match add_ssh_key(user_slug.to_unix(), ssh_key).await {
-                    Ok(_) => Ok(Json(ServerActionResponse::Ok)),
-                    Err(e) => {
-                        tracing::debug!("Error adding ssh key: {:?}", e);
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Error adding ssh key".to_string(),
-                        ))
-                    }
-                }
+            UserAction::Create { user_slug } => {
+                create_user(user_slug.to_unix()).await?;
+                Ok(Json(ServerActionResponse::Ok))
             }
-            UserAction::Delete { user_slug } => match remove_user(user_slug.to_unix()).await {
-                Ok(_) => Ok(Json(ServerActionResponse::Ok)),
-                Err(e) => {
-                    tracing::debug!("Error removing user: {:?}", e);
-                    Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Error removing user".to_string(),
-                    ))
-                }
-            },
+            UserAction::AddSshKey { user_slug, ssh_key } => {
+                add_ssh_key(user_slug.to_unix(), ssh_key).await?;
+                Ok(Json(ServerActionResponse::Ok))
+            }
+            UserAction::Delete { user_slug } => {
+                remove_user(user_slug.to_unix()).await?;
+                Ok(Json(ServerActionResponse::Ok))
+            }
             UserAction::AddProject {
                 user_slug,
                 project_slug,
-            } => match create_project(user_slug.to_unix(), project_slug.to_unix()).await {
-                Ok(_) => Ok(Json(ServerActionResponse::Ok)),
-                Err(e) => {
-                    tracing::debug!("Error creating project: {:?}", e);
-                    Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Error creating project".to_string(),
-                    ))
-                }
-            },
-            UserAction::RemoveSshKey { user_slug, ssh_key } => {
-                match remove_ssh_key(user_slug.to_unix(), ssh_key).await {
-                    Ok(_) => Ok(Json(ServerActionResponse::Ok)),
-                    Err(e) => {
-                        tracing::debug!("Error adding ssh key: {:?}", e);
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Error adding ssh key".to_string(),
-                        ))
-                    }
-                }
+            } => {
+                create_project(user_slug.to_unix(), project_slug.to_unix()).await?;
+                Ok(Json(ServerActionResponse::Ok))
             }
-            UserAction::RemoveProject { user_slugs, project_slug } => {
-                for user_slug in user_slugs{
-                    match remove_user_from_project(user_slug.to_unix(), project_slug.to_unix()).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            tracing::debug!("Error removing user from project: {:?}", e);
-                            return Err((
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "Error removing user from project".to_string(),
-                            ));
-                        }
-                    }
+            UserAction::RemoveSshKey { user_slug, ssh_key } => {
+                remove_ssh_key(user_slug.to_unix(), ssh_key).await?;
+                Ok(Json(ServerActionResponse::Ok))
+            }
+            UserAction::RemoveProject {
+                user_slugs,
+                project_slug,
+            } => {
+                for user_slug in user_slugs {
+                    remove_user_from_project(user_slug.to_unix(), project_slug.to_unix()).await?;
                 }
-                match remove_project(project_slug.to_unix()).await {
-                    Ok(_) => Ok(Json(ServerActionResponse::Ok)),
-                    Err(e) => {
-                        tracing::debug!("Error removing project: {:?}", e);
-                        Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "Error removing project".to_string(),
-                        ))
-                    }
-                }
+                remove_project(project_slug.to_unix()).await?;
+                Ok(Json(ServerActionResponse::Ok))
             }
         },
     }
 }
 
-pub async fn create_user(user_slug: UserUnixSlugStr) -> Result<(), tokio::io::Error> {
+pub async fn create_user(user_slug: UserUnixSlugStr) -> ServerResult<()> {
     let user_path_str = user_path(user_slug.clone());
     let user_projects_path_str = user_projects_path(user_slug.clone());
-    tracing::debug!("Creating user {}", &user_slug);
     tokio::fs::create_dir_all(&user_projects_path_str).await?;
     run_sudo_cmd(&[
         "useradd",
@@ -156,8 +110,7 @@ pub async fn create_user(user_slug: UserUnixSlugStr) -> Result<(), tokio::io::Er
 pub async fn create_project(
     user_slug: UserUnixSlugStr,
     project_slug: ProjectUnixSlugStr,
-) -> Result<(), tokio::io::Error> {
-    tracing::debug!("Creating project: {:?}", &project_slug);
+) -> ServerResult<()> {
     let proj_path = project_path(project_slug.clone());
 
     tokio::fs::create_dir_all(&proj_path).await?;
@@ -173,7 +126,9 @@ pub async fn create_project(
         .write(true)
         .open(&index_file_path)
         .await?;
-    index_file.write_all(b"<html><body><h1>Hello World</h1></body></html>").await?;
+    index_file
+        .write_all(b"<html><body><h1>Hello World</h1></body></html>")
+        .await?;
     index_file.flush().await?;
     Ok(())
 }
@@ -182,7 +137,7 @@ pub async fn add_user_to_project(
     user_slug: UserUnixSlugStr,
     project_slug: ProjectUnixSlugStr,
     permission: Permission,
-) -> Result<(), tokio::io::Error> {
+) -> ServerResult<()> {
     let acl = if permission >= Permission::Write {
         "rwX"
     } else {
@@ -199,7 +154,7 @@ pub async fn update_user_in_project(
     user_slug: UserUnixSlugStr,
     project_slug: ProjectUnixSlugStr,
     permission: Permission,
-) -> Result<(), tokio::io::Error> {
+) -> ServerResult<()> {
     let acl = if permission >= Permission::Write {
         "rwX"
     } else {
@@ -213,7 +168,7 @@ pub async fn update_user_in_project(
 pub async fn remove_user_from_project(
     user_slug: UserUnixSlugStr,
     project_slug: ProjectUnixSlugStr,
-) -> Result<(), tokio::io::Error> {
+) -> ServerResult<()> {
     let proj_path = project_path(project_slug.clone());
     let user_mount_point = user_project_path(user_slug.clone(), project_slug.clone());
     run_sudo_cmd(&["umount", &user_mount_point]).await?;
@@ -230,10 +185,7 @@ pub async fn remove_user_from_project(
     Ok(())
 }
 
-pub async fn add_ssh_key(
-    user_slug: UserUnixSlugStr,
-    ssh_key: String,
-) -> Result<(), tokio::io::Error> {
+pub async fn add_ssh_key(user_slug: UserUnixSlugStr, ssh_key: String) -> ServerResult<()> {
     let ssh_key_file_path = ssh_key_path(user_slug.clone());
     let ssh_key_file = OpenOptions::new()
         .create(true)
@@ -247,21 +199,18 @@ pub async fn add_ssh_key(
     Ok(())
 }
 
-pub async fn remove_ssh_key(
-    user_slug: UserUnixSlugStr,
-    ssh_key: String,
-) -> Result<(), tokio::io::Error> {
+pub async fn remove_ssh_key(user_slug: UserUnixSlugStr, ssh_key: String) -> ServerResult<()> {
     remove_block(&ssh_key_path(user_slug), &ssh_key).await?;
     Ok(())
 }
 
-pub async fn remove_project(project_slug: ProjectUnixSlugStr) -> Result<(), std::io::Error> {
+pub async fn remove_project(project_slug: ProjectUnixSlugStr) -> ServerResult<()> {
     let proj_path = project_path(project_slug);
     tokio::fs::remove_dir_all(&proj_path).await?;
     Ok(())
 }
 
-pub async fn remove_user(user_slug: UserUnixSlugStr) -> Result<(), tokio::io::Error> {
+pub async fn remove_user(user_slug: UserUnixSlugStr) -> ServerResult<()> {
     let user_projects_path_str = user_projects_path(user_slug.clone());
     let path = Path::new(&user_projects_path_str);
 

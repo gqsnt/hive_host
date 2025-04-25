@@ -1,8 +1,12 @@
+
+use crate::models::User;
+use crate::{ BoolInput};
 use leptos::prelude::ServerFnError;
 use leptos::server;
 
-use crate::models::User;
-use crate::BoolInput;
+
+
+
 #[server(Signup, "/api")]
 pub async fn signup(
     csrf: String,
@@ -12,37 +16,71 @@ pub async fn signup(
     password_confirmation: String,
     remember: Option<BoolInput>,
 ) -> Result<User, ServerFnError> {
-    use crate::app::pages::user::projects::new_project::ssr::create_project;
     use crate::models::RoleType;
     use crate::security::utils::ssr::verify_easy_hash;
     use common::server_action::user_action::UserAction;
-    use leptos::logging::log;
+    use crate::app::pages::user::projects::new_project::server_fns::ssr::create_project;
     use secrecy::ExposeSecret;
+    use crate::security::utils::ssr::AsyncValidationContext;
+    use crate::security::utils::{PasswordForm, SANITIZED_REGEX};
+    use tokio::runtime::Handle;
+    use validator::{Validate, ValidateArgs, ValidationError};
+    use crate::AppError;
+
+
+
+    pub fn unique_email(email: &str, context:&AsyncValidationContext) -> Result<(), ValidationError>{
+        tokio::task::block_in_place(|| {
+            let AsyncValidationContext { pg_pool, handle } = context;
+            let result = handle.block_on(User::get_from_email_with_password(email, &pg_pool));
+            if result.is_ok() {
+                return Err(ValidationError::new("Email already taken"));
+            }
+            Ok(())
+        })
+    }
+
+
+
+    #[derive(Debug, Clone, Validate)]
+    #[validate(context =AsyncValidationContext)]
+    pub struct SignupForm {
+        #[validate(email, custom(function="unique_email", use_context))]
+        pub email: String,
+        #[validate(length(min = 3, max = 20),regex(path=*SANITIZED_REGEX, message="Username must contain only letters (a-z, A-Z), number (0-9) and underscores (_)"))]
+        pub username: String,
+        #[validate(nested)]
+        pub password_form: PasswordForm,
+    }
+
 
     let auth = crate::ssr::auth(true)?;
     let server_vars = crate::ssr::server_vars()?;
+    let pool = crate::ssr::pool()?;
     verify_easy_hash(
         auth.session.get_session_id().to_string(),
         server_vars.csrf_server.to_secret(),
         csrf,
     )?;
 
+    let form = SignupForm {
+        email: email.clone(),
+        username: username.clone(),
+        password_form: PasswordForm {
+            password: password.clone(),
+            password_confirmation: password_confirmation.clone(),
+        },
+    };
+    let context = AsyncValidationContext {
+        pg_pool: pool.clone(),
+        handle: Handle::current(),
+    };
+    form.validate_with_args(
+        &context
+    ).map_err(AppError::from)?;
+
     let remember = remember.unwrap_or_default().into();
     let password = secrecy::SecretString::from(password.as_str());
-    let password_confirm = secrecy::SecretString::from(password_confirmation.as_str());
-    let pool = crate::ssr::pool()?;
-
-    if password.expose_secret() != password_confirm.expose_secret() {
-        return Err(ServerFnError::ServerError(
-            "Passwords do not match".to_string(),
-        ));
-    }
-    let user = User::get_from_email_with_password(&email, &pool).await;
-    if user.is_some() {
-        return Err(ServerFnError::ServerError(
-            "User already exists".to_string(),
-        ));
-    }
     let user = sqlx::query!(
         r#"INSERT INTO users (email, password, role, username) VALUES ($1, $2, $3, $4) returning id"#,
         email,
@@ -51,8 +89,7 @@ pub async fn signup(
         username,
     )
         .fetch_one(&pool)
-        .await
-        .map_err(|_| ServerFnError::new("Failed to create user"))?;
+        .await.map_err(AppError::from)?;
     auth.login_user(user.id);
     auth.remember_user(remember);
     leptos_axum::redirect("/user");
@@ -63,18 +100,13 @@ pub async fn signup(
         username,
     };
     let user_slug = user.get_slug();
-    if let Err(e) = crate::api::ssr::request_server_action(
+    crate::api::ssr::request_server_action(
         UserAction::Create {
             user_slug: user_slug.clone(),
         }
         .into(),
     )
-    .await
-    {
-        log!("Error creating user: {:?}", e);
-    };
-    if let Err(e) = create_project(user_slug, "Default".to_string()).await {
-        log!("Error creating default project: {:?}", e);
-    };
+    .await?;
+    create_project(user_slug, "Default".to_string()).await?;
     Ok(user)
 }

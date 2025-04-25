@@ -1,23 +1,21 @@
+use crate::app::pages::include_csrf;
 use crate::app::ReadUserSignal;
 use crate::models::User;
 use crate::security::{get_user, Logout};
 use leptos::context::provide_context;
 use leptos::either::Either;
 use leptos::form::ActionForm;
-use leptos::prelude::{ElementChild};
+use leptos::prelude::CustomAttribute;
+use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, ClassAttribute, Get, GlobalAttributes};
-use leptos::prelude::{
-    AddAnyAttr, Effect, ReadSignal, ServerAction, Suspense, WriteSignal,
-};
+use leptos::prelude::{AddAnyAttr, Effect, ReadSignal, ServerAction, Suspense, WriteSignal};
 use leptos::prelude::{AriaAttributes, OnAttribute};
-use leptos::prelude::{CustomAttribute};
 use leptos::server::OnceResource;
 use leptos::{component, view, IntoView};
 use leptos_router::components::{Outlet, A};
 use leptos_router::hooks::use_location;
-use crate::app::pages::{include_csrf};
 
 pub mod dashboard;
 pub mod projects;

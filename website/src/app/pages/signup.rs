@@ -1,17 +1,31 @@
-
-use crate::security::signup::Signup;
 use crate::app::components::csrf_field::CSRFField;
-use leptos::prelude::{ElementChild};
+use crate::app::pages::include_csrf;
+use crate::security::signup::Signup;
+use leptos::prelude::AddAnyAttr;
+use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::{ClassAttribute, ServerAction, ActionForm};
+use leptos::prelude::{signal, Effect, ElementChild, Get, ServerFnError, Set};
+use leptos::prelude::{ActionForm, ClassAttribute, ServerAction};
 use leptos::{component, view, IntoView};
-use crate::app::pages::{include_csrf};
+use leptos_router::components::A;
 
 #[component]
 pub fn SignupPage() -> impl IntoView {
     include_csrf();
-    
+
     let action = ServerAction::<Signup>::new();
+    let (signup_result, set_signup_result) = signal(" ".to_string());
+    Effect::new(move |_| {
+        action.version().get();
+        match action.value().get() {
+            Some(Ok(_)) => set_signup_result.set(String::from("Signup Successful")),
+            Some(Err(ServerFnError::ServerError(e))) => {
+                set_signup_result.set(e)
+            },
+            _ => (),
+        };
+    });
+
     view! {
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">
@@ -79,7 +93,6 @@ pub fn SignupPage() -> impl IntoView {
                                 />
                             </div>
                         </label>
-
                     </div>
 
                     <div>
@@ -121,7 +134,17 @@ pub fn SignupPage() -> impl IntoView {
                             Sign up
                         </button>
                     </div>
+                    <div>{signup_result}</div>
                 </ActionForm>
+                <p class="mt-10 text-center text-sm/6 text-gray-500">
+                    Already a member?
+                    <A
+                        href="/login"
+                        attr:class="font-semibold text-indigo-600 hover:text-indigo-500"
+                    >
+                        Login
+                    </A>
+                </p>
             </div>
         </div>
     }

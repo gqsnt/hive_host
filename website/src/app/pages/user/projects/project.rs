@@ -1,5 +1,5 @@
-use leptos::prelude::{AddAnyAttr, Resource, Suspend, Suspense};
 use leptos::prelude::Signal;
+use leptos::prelude::{AddAnyAttr, Resource, Suspend, Suspense};
 use std::fmt::Display;
 pub mod project_dashboard;
 pub mod project_files;
@@ -7,13 +7,10 @@ pub mod project_settings;
 pub mod project_team;
 
 use leptos::context::provide_context;
-use leptos::{component, server, view, IntoView, Params};
-
-use common::ProjectSlugStr;
 use leptos::prelude::{
-    signal, ClassAttribute, CollectView, Effect, Get, Memo, ReadSignal, ServerFnError, Set,
-    WriteSignal,
+    signal, ClassAttribute, CollectView, Effect, Get, Memo, ReadSignal, Set, WriteSignal,
 };
+use leptos::{component, view, IntoView, Params};
 use leptos_router::hooks::{use_location, use_params};
 
 use leptos::prelude::ElementChild;
@@ -23,9 +20,6 @@ use leptos_router::components::{Outlet, A};
 use leptos_router::params::{Params, ParamsError};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-
-use crate::models::Project;
-
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectParams {
@@ -90,10 +84,10 @@ pub fn ProjectPage() -> impl IntoView {
     let params: MemoProjectParams = use_params::<ProjectParams>();
     let project_resource = Resource::new(
         move || params.get().unwrap().project_slug,
-        move |project_slug| get_project(project_slug),
+        server_fns::get_project,
     );
 
-    let project_data = move || {
+    let _project_data = move || {
         project_resource
             .get()
             .map(|p| p.unwrap_or_default())
@@ -106,8 +100,6 @@ pub fn ProjectPage() -> impl IntoView {
             .map(|pp| pp.project_slug)
             .expect("Project slug not found")
     });
-    
-    
 
     let get_project_section = move || {
         let location = use_location().pathname.get().clone();
@@ -135,17 +127,11 @@ pub fn ProjectPage() -> impl IntoView {
         let sec = get_project_section();
         set_current.set(sec);
     });
-    
 
     view! {
-        
-         <Suspense fallback=move || view!{Loading...}>
-            {move || {
-                Suspend::new(async move {
-                    
-})
-            }}
-        </Suspense>
+        <Suspense fallback=move || {
+            view! { Loading... }
+        }>{move || { Suspend::new(async move {}) }}</Suspense>
         <nav class="nav-main">
             <div class="nav-container">
                 <div class="nav-inner">
@@ -194,28 +180,42 @@ fn SectionNav(
     }
 }
 
-#[server]
-pub async fn get_project(project_slug: ProjectSlugStr) -> Result<(String, Project), ServerFnError> {
-    use common::permission::Permission;
-    use crate::ssr::server_vars;
-    
-    crate::security::permission::ssr::handle_project_permission_request(
-        project_slug,
-        Permission::Read,
-        None,
-        |_, pool, project_slug| async move {
-            let project = sqlx::query_as!(
-                Project,
-                "SELECT * FROM projects WHERE id = $1",
-                project_slug.id
+pub mod server_fns {
+    use crate::models::Project;
+    use common::ProjectSlugStr;
+    use leptos::prelude::ServerFnError;
+    use leptos::server;
+
+
+
+    cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+        use crate::ssr::server_vars;
+        use common::permission::Permission;
+    }}
+
+    #[server]
+    pub async fn get_project(
+        project_slug: ProjectSlugStr,
+    ) -> Result<(String, Project), ServerFnError> {
+        Ok(
+            crate::security::permission::ssr::handle_project_permission_request(
+                project_slug,
+                Permission::Read,
+                None,
+                |_, pool, project_slug| async move {
+                    let project = sqlx::query_as!(
+                        Project,
+                        "SELECT * FROM projects WHERE id = $1",
+                        project_slug.id
+                    )
+                    .fetch_one(&pool)
+                    .await?;
+                    let server_vars = server_vars()?;
+
+                    Ok((server_vars.hosting_url.as_str().to_string(), project))
+                },
             )
-            .fetch_one(&pool)
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
-            let server_vars =  server_vars()?;
-            
-            Ok((server_vars.hosting_url.as_str().to_string(),project))
-        }
-    )
-    .await
+            .await?,
+        )
+    }
 }

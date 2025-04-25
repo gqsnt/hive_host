@@ -5,7 +5,7 @@ use crate::app::pages::home::HomePage;
 use crate::app::pages::login::LoginPage;
 use crate::app::pages::signup::SignupPage;
 use crate::app::pages::user::dashboard::DashboardPage;
-use crate::app::pages::user::projects::new_project::{CreateProject, NewProjectPage};
+use crate::app::pages::user::projects::new_project::{server_fns::CreateProject, NewProjectPage};
 use crate::app::pages::user::projects::project::project_dashboard::ProjectDashboard;
 use crate::app::pages::user::projects::project::project_files::ProjectFiles;
 use crate::app::pages::user::projects::project::project_settings::ProjectSettings;
@@ -112,10 +112,8 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     .into_inner()
 }
 
-
-
 #[server]
-pub async fn get_server_url() -> Result<String, ServerFnError>{
+pub async fn get_server_url() -> Result<String, ServerFnError> {
     use crate::ssr::server_vars;
     let server_vars = server_vars()?;
     Ok(server_vars.server_url.to_string())

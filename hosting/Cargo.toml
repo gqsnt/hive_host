@@ -9,36 +9,25 @@ tokio = { workspace = true, features = [
     "rt-multi-thread",
     "net",
     "time",
+    "fs"
 ] }
-hyper={version="1", features = ["server", "nightly", "http1"]}
-hyper-util = {version = "0.1.11", features = ["full"]}
-hyper-content-encoding = {version = "0.1.1"}
+hyper = { workspace = true, features = ["server", "nightly", "http1"] }
+hyper-util = { version = "0.1.11", features = ["full"] }
 http-body-util = "0.1.3"
-hyper-staticfile = {version = "0.10"}
-log = { version = "0.4.26", features = ["release_max_level_off"] }
-tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
-thiserror = {workspace = true}
-dotenvy = {workspace = true}
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+dotenvy = { workspace = true }
 http = "1.3.1"
-rayon="1"
+rayon = "1"
 walkdir = "2.5.0"
-dashmap = "6.1.0"
+dashmap = { workspace = true }
 mime_guess = "2.0.5"
-socket2 = {version = "0.5.9", features = ["all"]}
-quick_cache = "0.6.13"
+socket2 = { version = "0.5.9", features = ["all"] }
+quick_cache = { workspace = true }
 deadpool-postgres = "0.14.1"
 num_cpus = "1.16.0"
-async-compression = {version = "0.4.23", features = ["all"]}
-common = {path="../common"}
-futures = {version = "0.3.31", features = ["compat"]}
-serde_json = "1.0.140"
+async-compression = { version = "0.4.23", features = ["all"] }
+common = { path = "../common" }
+serde_json = { workspace = true }
 
-[profile.release]
-opt-level = 3
-codegen-units = 1
-panic = 'abort'
-lto = 'fat'
-debug = false
-incremental = false
-overflow-checks = false

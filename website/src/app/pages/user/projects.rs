@@ -1,20 +1,19 @@
 use crate::app::components::select::FormSelect;
 
-use leptos::prelude::{signal};
-use leptos::prelude::{AddAnyAttr, Callback, Effect, For, ServerFnError};
-use leptos::prelude::{Get};
+use leptos::prelude::signal;
+use leptos::prelude::Get;
+use leptos::prelude::{AddAnyAttr, Callback, Effect, For};
 
-use crate::app::pages::user::projects::new_project::CreateProject;
-use crate::models::Project;
+use crate::app::pages::user::projects::new_project::server_fns::CreateProject;
 use leptos::either::Either;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{ClassAttribute, Resource, Suspend, Suspense};
 use leptos::server::ServerAction;
-use leptos::{component, server, view, IntoView};
+use leptos::{component, view, IntoView};
 use leptos_router::components::{Outlet, A};
-use leptos_router::hooks::{use_location};
+use leptos_router::hooks::use_location;
 
 pub mod new_project;
 pub mod project;
@@ -23,7 +22,7 @@ pub mod project;
 pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl IntoView {
     let projects = Resource::new(
         move || create_project_action.version().get(),
-        move |_| get_projects(),
+        move |_| server_fns::get_projects(),
     );
 
     let projects = move || {
@@ -80,7 +79,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                     }>
                         {move || Suspend::new(async move {
                             let projects = projects();
-                             if projects.is_empty() {
+                            if projects.is_empty() {
                                 Either::Right(
                                     view! { <option value="0">"No Projects Found"</option> },
                                 )
@@ -126,18 +125,26 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
     }
 }
 
-#[server]
-pub async fn get_projects() -> Result<Vec<Project>, ServerFnError> {
-    use crate::security::utils::ssr::get_auth_session_user_id;
+pub mod server_fns {
+    use crate::models::Project;
+    use leptos::prelude::ServerFnError;
+    use leptos::server;
 
-    let pool = crate::ssr::pool()?;
-    let auth = crate::ssr::auth(false)?;
-    let projects = sqlx::query_as!(Project,
+    cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+            use crate::security::utils::ssr::get_auth_session_user_id;
+
+    }}
+
+    #[server]
+    pub async fn get_projects() -> Result<Vec<Project>, ServerFnError> {
+        let pool = crate::ssr::pool()?;
+        let auth = crate::ssr::auth(false)?;
+        let projects = sqlx::query_as!(Project,
         "SELECT * FROM projects WHERE id IN (SELECT project_id FROM permissions WHERE user_id = $1)",
         get_auth_session_user_id(&auth).unwrap()
     )
-        .fetch_all(&pool)
-        .await.
-        map_err(|e| ServerFnError::new(e.to_string()))?;
-    Ok(projects)
+            .fetch_all(&pool)
+            .await?;
+        Ok(projects)
+    }
 }

@@ -6,18 +6,14 @@ edition = "2021"
 [dependencies]
 axum = { workspace = true, features = ["macros", "json"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs", "process"] }
-tower = { workspace = true }
 tower-http = { workspace = true, features = ["fs", "compression-full", "cors"] }
 moka = { workspace = true, features = ["future"] }
 common = { path = "../common" }
 dotenvy = { workspace = true }
 secrecy = { workspace = true }
-serde_json = { version = "1.0.140" }
-serde = { version = "1.0.219", features = ["derive"] }
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing = "0.1.41"
-log = "0.4.27"
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing = { workspace = true }
 async-tempfile = { version = "0.7.0", features = ["uuid"] }
-uuid = { version = "1.16.0", features = ["v4"] }
-
-chrono = { version = "0.4.40" }
+uuid = { workspace = true, features = ["v4"] }
+chrono = { workspace = true }
+thiserror = { workspace = true }

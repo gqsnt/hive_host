@@ -37,9 +37,7 @@ impl IsProjectServerAction for DirAction {
 
     fn require_csrf(&self) -> bool {
         match self {
-            DirAction::Create { .. }
-            | DirAction::Rename { .. }
-            | DirAction::Delete { .. } => true,
+            DirAction::Create { .. } | DirAction::Rename { .. } | DirAction::Delete { .. } => true,
             DirAction::Download | DirAction::Ls { .. } => false,
         }
     }

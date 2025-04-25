@@ -1,5 +1,5 @@
 use crate::models::User;
-use crate::BoolInput;
+use crate::{BoolInput};
 use leptos::prelude::ServerFnError;
 use leptos::server;
 
@@ -12,6 +12,8 @@ pub async fn login(
 ) -> Result<User, ServerFnError> {
     use crate::security::utils::ssr::verify_easy_hash;
     use secrecy::ExposeSecret;
+    use crate::AppError;
+
 
     let auth = crate::ssr::auth(true)?;
     let server_vars = crate::ssr::server_vars()?;
@@ -26,19 +28,14 @@ pub async fn login(
     let pool = crate::ssr::pool()?;
     let (user, password_hash) = User::get_from_email_with_password(&email, &pool)
         .await
-        .ok_or(ServerFnError::new("User not found"))?;
-    match password_auth::verify_password(
+        .map_err(|_| AppError::InvalidCredentials)?;
+    password_auth::verify_password(
         password.expose_secret().as_bytes(),
         password_hash.expose_secret(),
-    ) {
-        Ok(_) => {
-            auth.login_user(user.id);
-            auth.remember_user(remember);
-            leptos_axum::redirect("/user");
-            Ok(user)
-        }
-        Err(_) => Err(ServerFnError::ServerError(
-            "Password does not match".to_string(),
-        )),
-    }
+    )
+    .map_err(|_| AppError::InvalidCredentials)?;
+    auth.login_user(user.id);
+    auth.remember_user(remember);
+    leptos_axum::redirect("/user");
+    Ok(user)
 }

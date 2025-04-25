@@ -1,20 +1,30 @@
 use crate::app::components::csrf_field::CSRFField;
+use crate::app::pages::include_csrf;
 use crate::security::login::Login;
-use leptos::prelude::{AddAnyAttr};
 use leptos::prelude::ClassAttribute;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::{signal, AddAnyAttr, Effect, Get, ServerFnError, Set};
 use leptos::prelude::{ActionForm, ServerAction};
 use leptos::{component, view, IntoView};
 use leptos_router::components::A;
-use crate::app::pages::{include_csrf};
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
     include_csrf();
     let action = ServerAction::<Login>::new();
-    
+
+    let (login_result, set_login_result) = signal(" ".to_string());
+    Effect::new(move |_| {
+        action.version().get();
+        match action.value().get() {
+            Some(Ok(_)) => set_login_result.set(String::from("Login Successful")),
+            Some(Err(ServerFnError::ServerError(e))) => set_login_result.set(e.to_string()),
+            _ => (),
+        };
+    });
+
     view! {
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">
@@ -30,8 +40,9 @@ pub fn LoginPage() -> impl IntoView {
 
             <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
                 <ActionForm action=action>
-                   {move || {view!{<CSRFField />}}}
-                    <div>
+                    {move || {
+                        view! { <CSRFField /> }
+                    }} <div>
                         <label class="form-label">
                             Email address <div class="mt-2">
                                 <input
@@ -44,7 +55,6 @@ pub fn LoginPage() -> impl IntoView {
                             </div>
                         </label>
                     </div>
-
                     <div class="mt-2">
                         <label class="form-label flex items-center justify-between">
                             Password <div class="text-sm">
@@ -66,7 +76,6 @@ pub fn LoginPage() -> impl IntoView {
                             />
                         </div>
                     </div>
-
                     <div class="mt-2">
                         <label class="form-label flex">
                             Remember me <div class="flex h-6 shrink-0 items-center">
@@ -100,12 +109,11 @@ pub fn LoginPage() -> impl IntoView {
                                 </div>
                             </div>
                         </label>
-                    </div>
-                    <div class="mt-2">
+                    </div> <div class="mt-2">
                         <button type="submit" class="btn btn-primary">
                             Sign in
                         </button>
-                    </div>
+                    </div> <div>{login_result}</div>
                 </ActionForm>
 
                 <p class="mt-10 text-center text-sm/6 text-gray-500">

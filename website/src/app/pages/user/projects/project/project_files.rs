@@ -8,7 +8,7 @@ use crate::app::pages::user::projects::project::MemoProjectParams;
 use crate::app::IntoView;
 use crate::app::ServerFnError;
 
-use common::server_project_action::io_action::dir_action::{DirAction};
+use common::server_project_action::io_action::dir_action::DirAction;
 use common::server_project_action::ServerProjectActionResponse;
 use leptos::either::Either;
 
@@ -43,7 +43,8 @@ pub fn ProjectFiles() -> impl IntoView {
             match crate::api::get_action_server_project_action_inner(
                 slug,
                 DirAction::Ls { path }.into(),
-                None,None
+                None,
+                None,
             )
             .await
             {
@@ -152,4 +153,9 @@ pub fn ProjectFiles() -> impl IntoView {
             </div>
         </div>
     }
+}
+
+pub mod server_fns {
+    cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+    }}
 }

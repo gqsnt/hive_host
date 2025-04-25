@@ -1,3 +1,4 @@
+use crate::{ServerError, ServerResult};
 use async_tempfile::TempFile;
 use common::{ProjectUnixSlugStr, UserSlugStr, UserUnixSlugStr};
 use std::process::Stdio;
@@ -6,7 +7,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use uuid::Uuid;
 
-pub async fn run_sudo_cmd(args: &[&str]) -> Result<(), tokio::io::Error> {
+pub async fn run_sudo_cmd(args: &[&str]) -> ServerResult<()> {
     let status = Command::new("sudo")
         .args(args)
         .stdin(Stdio::null())
@@ -15,16 +16,12 @@ pub async fn run_sudo_cmd(args: &[&str]) -> Result<(), tokio::io::Error> {
         .status()
         .await?;
     if !status.success() {
-        return Err(std::io::Error::other(format!("Command failed: {:?}", args)));
+        return Err(ServerError::CommandFailed(status.to_string()));
     }
     Ok(())
 }
 
-pub async fn set_acl(
-    path: &str,
-    user_slug: UserUnixSlugStr,
-    perms: &str,
-) -> Result<(), tokio::io::Error> {
+pub async fn set_acl(path: &str, user_slug: UserUnixSlugStr, perms: &str) -> ServerResult<()> {
     run_sudo_cmd(&["setfacl", "-m", &format!("u:{}:{}", user_slug, perms), path]).await?;
     run_sudo_cmd(&[
         "setfacl",
@@ -37,7 +34,7 @@ pub async fn set_acl(
     Ok(())
 }
 
-pub async fn reload_sshd() -> Result<(), tokio::io::Error> {
+pub async fn reload_sshd() -> ServerResult<()> {
     run_sudo_cmd(&["systemctl", "reload", "sshd"]).await
 }
 
@@ -55,7 +52,7 @@ Match User {user_slug}
     )
 }
 
-pub async fn ensure_user_in_sshd(user_slug: UserUnixSlugStr) -> Result<(), tokio::io::Error> {
+pub async fn ensure_user_in_sshd(user_slug: UserUnixSlugStr) -> ServerResult<()> {
     let path = "/etc/ssh/sshd_config";
     let file = OpenOptions::new().read(true).open(path).await?;
     let mut lines = BufReader::new(file).lines();
@@ -73,14 +70,14 @@ pub async fn ensure_user_in_sshd(user_slug: UserUnixSlugStr) -> Result<(), tokio
     Ok(())
 }
 
-pub async fn ensure_user_removed_in_sshd(user_slug: UserSlugStr) -> Result<(), tokio::io::Error> {
+pub async fn ensure_user_removed_in_sshd(user_slug: UserSlugStr) -> ServerResult<()> {
     let path = "/etc/ssh/sshd_config";
     remove_block(path, &ssh_config_block(user_slug)).await?;
     reload_sshd().await?;
     Ok(())
 }
 
-pub async fn remove_block<P>(file_path: P, block: &str) -> tokio::io::Result<()>
+pub async fn remove_block<P>(file_path: P, block: &str) -> ServerResult<()>
 where
     P: AsRef<std::path::Path>,
 {
@@ -139,7 +136,7 @@ where
 pub async fn bind_project_to_user_chroot(
     user_slug: UserUnixSlugStr,
     project_slug: ProjectUnixSlugStr,
-) -> Result<(), tokio::io::Error> {
+) -> ServerResult<()> {
     let user_mount_point = user_project_path(user_slug, project_slug.clone());
     tokio::fs::create_dir_all(&user_mount_point).await?;
     run_sudo_cmd(&[

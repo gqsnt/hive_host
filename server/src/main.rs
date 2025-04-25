@@ -4,7 +4,7 @@ use moka::future::Cache;
 use secrecy::SecretString;
 use server::project_action::{server_project_action, server_project_action_token};
 use server::server_action::server_action;
-use server::AppState;
+use server::{AppState, ServerResult};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> ServerResult<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -23,11 +23,10 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
     dotenvy::dotenv().expect("Failed to load .env file");
-    let token_action_auth =
-        SecretString::from(dotenvy::var("TOKEN_AUTH").expect("TOKEN_AUTH must be set"));
+    let token_action_auth = SecretString::from(dotenvy::var("TOKEN_AUTH")?);
     // build our application with a route
-    let server_addr = dotenvy::var("SERVER_ADDR").expect("SERVER_URL must be set");
-    let addr = SocketAddr::from_str(&server_addr).expect("Failed to parse server url");
+    let server_addr = dotenvy::var("SERVER_ADDR")?;
+    let addr = SocketAddr::from_str(&server_addr)?;
 
     let app_state = AppState {
         server_project_action_cache: Arc::new(
@@ -46,7 +45,8 @@ async fn main() {
 
     tracing::debug!("listening on {addr}");
     // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await?;
 
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app).await?;
+    Ok(())
 }

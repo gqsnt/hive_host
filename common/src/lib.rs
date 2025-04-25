@@ -1,16 +1,16 @@
 #![feature(associated_type_defaults)]
 
+pub mod hosting_action;
 pub mod permission;
 pub mod server_action;
 pub mod server_project_action;
-pub mod hosting_action;
 
-use serde::de::StdError;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::str::FromStr;
+use thiserror::Error;
 
 #[macro_export]
 macro_rules! impl_chain_from {
@@ -66,24 +66,15 @@ pub struct Slug<I, U, S> {
     _u: PhantomData<U>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error, Serialize, Deserialize, Clone)]
 pub enum SlugParseError {
+    #[error("Missing separator")]
     MissingSeparator,
-    InvalidId(ParseIntError),
+    #[error("Invalid Id")]
+    InvalidId,
+    #[error("Empty name")]
     EmptyName,
 }
-
-impl Display for SlugParseError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SlugParseError::MissingSeparator => write!(f, "Missing separator '-' in project slug"),
-            SlugParseError::InvalidId(err) => write!(f, "Invalid project id: {}", err),
-            SlugParseError::EmptyName => write!(f, "Project name is empty"),
-        }
-    }
-}
-
-impl StdError for SlugParseError {}
 
 impl<I, S, U> FromStr for Slug<I, S, U>
 where
@@ -98,7 +89,7 @@ where
             return Err(SlugParseError::MissingSeparator);
         };
 
-        let id = id_str.parse::<I>().map_err(SlugParseError::InvalidId)?;
+        let id = id_str.parse::<I>().map_err(|_| SlugParseError::InvalidId)?;
 
         if name.is_empty() {
             return Err(SlugParseError::EmptyName);

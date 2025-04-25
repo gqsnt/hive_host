@@ -30,6 +30,6 @@ impl IsProjectServerAction for PermissionAction {
     }
 
     fn require_csrf(&self) -> bool {
-       true
+        true
     }
 }

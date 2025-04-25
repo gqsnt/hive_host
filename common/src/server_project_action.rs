@@ -52,7 +52,6 @@ pub enum ServerProjectActionResponse {
     File(FileInfo),
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectActionCreate {
     pub project_slug: ProjectSlug,
@@ -64,5 +63,4 @@ pub trait IsProjectServerAction {
     fn permission(&self) -> Permission;
 
     fn require_csrf(&self) -> bool;
-
 }

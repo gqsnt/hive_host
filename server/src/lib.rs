@@ -3,11 +3,60 @@ pub mod project_action;
 pub mod server_action;
 
 use axum::extract::FromRef;
+use axum::http::StatusCode;
 use common::server_project_action::ServerProjectAction;
 use common::{ProjectId, ProjectUnixSlugStr, UserId};
 use moka::future::Cache;
 use secrecy::SecretString;
+use std::path::StripPrefixError;
 use std::sync::Arc;
+use thiserror::Error;
+
+pub type ServerResult<T> = Result<T, ServerError>;
+
+#[derive(Debug, Error)]
+pub enum ServerError {
+    #[error("Tokio I/O error: {0}")]
+    Io(#[from] tokio::io::Error),
+    #[error("DotEnv error: {0}")]
+    DotEnv(#[from] dotenvy::Error),
+    #[error("AddrParse error: {0}")]
+    AddrParse(#[from] std::net::AddrParseError),
+    #[error("StripPrefix error: {0}")]
+    StripPrefixError(#[from] StripPrefixError),
+    #[error("Command failed: {0}")]
+    CommandFailed(String),
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error("Invalid path")]
+    InvalidPath,
+    #[error("Target not found")]
+    TargetNotFound,
+    #[error("Out of projects scope")]
+    OutOfProjectsScope,
+    #[error("Path is not a file")]
+    PathIsNotFile,
+    #[error("Path is not a directory")]
+    PathIsNotDir,
+    #[error("Path has no parent")]
+    PathHasNoParent,
+    #[error("Path is not a valid project path")]
+    PathNotAValidProjectPath,
+    #[error("Cant read file name {0}")]
+    CantReadFileName(String),
+}
+
+impl From<ServerError> for (axum::http::StatusCode, String) {
+    fn from(value: ServerError) -> Self {
+        let message = value.to_string();
+        let status_code = match value {
+            ServerError::Unauthorized => StatusCode::UNAUTHORIZED,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        tracing::error!("Server error: {}", message);
+        (status_code, message)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ServerUserId(pub String);
@@ -46,6 +95,6 @@ macro_rules! ensure_authorization {
                 }
             }
         }
-        return Err((StatusCode::UNAUTHORIZED, "Unauthorized".to_string()));
+        return Err(ServerError::Unauthorized.into());
     }};
 }

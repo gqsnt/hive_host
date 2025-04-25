@@ -1,13 +1,8 @@
-use memory_serve::{load_assets, CacheControl, MemoryServe};
+use website::AppResult;
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
-async fn main() {
-    use std::str::FromStr;
-    use tower_http::compression::{CompressionLayer, Predicate};
-    use tower_http::compression::predicate::{NotForContentType, SizeAbove};
-    use tower_http::CompressionLevel;
-
+async fn main() -> AppResult<()> {
     use axum::{routing::get, Router};
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
@@ -20,11 +15,12 @@ async fn main() {
     use secrecy::SecretString;
     use sqlx::PgPool;
     use std::net::SocketAddr;
+    use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
     use website::app::*;
     use website::models::User;
-    use website::rate_limiter::ssr::{rate_limit_middleware, RateLimiter};
+    use website::rate_limiter::ssr::RateLimiter;
     use website::ssr::ServerVars;
     use website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
     use website::tasks::refresh_server_csrf::RefreshServerCsrf;
@@ -32,38 +28,28 @@ async fn main() {
 
     dotenvy::dotenv().ok();
 
-    let database_url = dotenvy::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let token_action_auth =
-        SecretString::from(dotenvy::var("TOKEN_AUTH").expect("TOKEN_AUTH must be set"));
-    let website_addr =
-        dotenvy::var("WEBSITE_ADDR").expect("WEBSITE_URL must be set");
-    let server_url = dotenvy::var("SERVER_URL").expect("SERVER_URL must be set");
-    let hosting_url = dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set");
+    let database_url = dotenvy::var("DATABASE_URL")?;
+    let token_action_auth = SecretString::from(dotenvy::var("TOKEN_AUTH")?);
+    let website_addr = dotenvy::var("WEBSITE_ADDR")?;
+    let server_url = dotenvy::var("SERVER_URL")?;
+    let hosting_url = dotenvy::var("HOSTING_URL")?;
     let pool = PgPool::connect(database_url.as_str())
         .await
         .expect("Could not connect to database");
-    sqlx::migrate!().run(&pool).await.expect("Migration failed");
+    sqlx::migrate!().run(&pool).await?;
     let session_config = SessionConfig::default().with_table_name("sessions");
     let session_store =
-        SessionStore::<SessionPgPool>::new(Some(pool.clone().into()), session_config)
-            .await
-            .unwrap();
+        SessionStore::<SessionPgPool>::new(Some(pool.clone().into()), session_config).await?;
 
     let auth_config = AuthConfig::<UserId>::default().with_anonymous_user_id(Some(-1));
 
     let mut conf = get_configuration(None).unwrap();
-    let addr = SocketAddr::from_str(
-        &website_addr
-    ).expect("Could not parse website URL");
-    conf.leptos_options.site_addr = addr.clone();
+    let addr = SocketAddr::from_str(&website_addr)?;
+    conf.leptos_options.site_addr = addr;
     let leptos_options = conf.leptos_options;
     // Generate the list of routes in your Leptos App
     let routes = generate_route_list(App);
-    let server_vars = ServerVars::new(
-        token_action_auth,
-        server_url,
-        hosting_url,
-    );
+    let server_vars = ServerVars::new(token_action_auth, server_url, hosting_url);
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
@@ -76,7 +62,7 @@ async fn main() {
         server_vars,
         permissions: Arc::new(
             Cache::builder()
-                .time_to_live(Duration::from_secs(900))// 15 minutes
+                .time_to_live(Duration::from_secs(900)) // 15 minutes
                 .build(),
         ),
     };
@@ -144,6 +130,7 @@ async fn main() {
     )
     .await
     .unwrap();
+    Ok(())
 }
 
 #[cfg(not(feature = "ssr"))]

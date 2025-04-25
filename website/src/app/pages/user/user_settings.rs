@@ -1,27 +1,26 @@
 use crate::app::ReadUserSignal;
-use crate::models::SshKeyInfo;
 
 use leptos::control_flow::For;
 use leptos::either::Either;
 
+use leptos::prelude::{signal, AddAnyAttr, Effect, ServerFnError, Set};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{
-    expect_context, ActionForm, ClassAttribute, Get,
-    OnceResource, Resource, ServerAction, ServerFnError, Show, Signal, Suspense,
+    expect_context, ActionForm, ClassAttribute, Get, OnceResource, Resource, ServerAction
+    , Show, Signal, Suspense,
 };
-use leptos::prelude::{AddAnyAttr };
 use leptos::text_prop::TextProp;
-use leptos::{component, server, view, IntoView};
+use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
 
 #[component]
 pub fn UserSettingsPage() -> impl IntoView {
     let _user = expect_context::<ReadUserSignal>();
-    let delete_ssh_action = ServerAction::<DeleteSshKey>::new();
-    let add_ssh_action = ServerAction::<AddSshKey>::new();
-    let update_password_action = ServerAction::<UpdatePassword>::new();
+    let delete_ssh_action = ServerAction::<server_fns::DeleteSshKey>::new();
+    let add_ssh_action = ServerAction::<server_fns::AddSshKey>::new();
+    let update_password_action = ServerAction::<server_fns::UpdatePassword>::new();
     let ssh_keys_resource = Resource::new(
         move || {
             (
@@ -29,8 +28,20 @@ pub fn UserSettingsPage() -> impl IntoView {
                 add_ssh_action.version().get(),
             )
         },
-        |_| get_ssh_keys(),
+        |_| server_fns::get_ssh_keys(),
     );
+
+
+    let (new_ssh_key_result, set_new_ssh_key_result) = signal(" ".to_string());
+    Effect::new(move |_| {
+        add_ssh_action.version().get();
+        match add_ssh_action.value().get() {
+            Some(Ok(_)) => set_new_ssh_key_result.set(String::from("SSh key added")),
+            Some(Err(ServerFnError::ServerError(e))) => set_new_ssh_key_result.set(e.to_string()),
+            _ => (),
+        };
+    });
+    
     let csrf = OnceResource::new(crate::app::components::csrf_field::generate_csrf());
     let get_csrf = move || {
         csrf.get()
@@ -142,6 +153,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                         </button>
                     </div>
                 </ActionForm>
+
             </div>
             <div class="section-border">
                 <h2 class="section-title">"SSH Keys"</h2>
@@ -242,6 +254,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                                             >
                                                                                                                 "Delete"
                                                                                                             </button>
+                                                                                                            <div>{new_ssh_key_result}</div>
                                                                                                         </ActionForm>
 
                                                                                                     </div>
@@ -450,131 +463,174 @@ fn SingleColMessageRow(
     }
 }
 
-#[server]
-pub async fn get_ssh_keys() -> Result<Vec<SshKeyInfo>, ServerFnError> {
-    use crate::security::utils::ssr::get_auth_session_user_id;
-    use crate::ssr::auth;
-    use crate::ssr::pool;
+pub mod server_fns {
+    cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+        use crate::security::utils::ssr::get_auth_session_user_id;
+        use crate::api::ssr::request_server_action;
+        use crate::security::utils::ssr::verify_easy_hash;
+        use crate::ssr::auth;
+        use crate::ssr::pool;
+        use crate::ssr::server_vars;
+        use common::server_action::user_action::UserAction;
+        use secrecy::ExposeSecret;
+        use crate::security::utils::PasswordForm;
+    }}
 
-    let auth = auth(false)?;
-    let pool = pool()?;
-    let user_id = get_auth_session_user_id(&auth).unwrap();
-    sqlx::query_as!(
-        SshKeyInfo,
-        r#"
+    use crate::models::SshKeyInfo;
+    use leptos::prelude::ServerFnError;
+    use leptos::server;
+    use serde::{Deserialize, Serialize};
+    use validator::Validate;
+
+
+    #[server]
+    pub async fn get_ssh_keys() -> Result<Vec<SshKeyInfo>, ServerFnError> {
+        let auth = auth(false)?;
+        let pool = pool()?;
+        let user_id = get_auth_session_user_id(&auth).unwrap();
+        sqlx::query_as!(
+            SshKeyInfo,
+            r#"
         SELECT id, name, user_id FROM user_ssh_keys WHERE user_id = $1
         "#,
-        user_id
-    )
-    .fetch_all(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))
-}
+            user_id
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))
+    }
 
-#[server]
-pub async fn delete_ssh_key(csrf: String, ssh_key_id: i64) -> Result<(), ServerFnError> {
-    use crate::api::ssr::request_server_action;
-    use crate::security::utils::ssr::get_auth_session_user_id;
-    use crate::security::utils::ssr::verify_easy_hash;
-    use crate::ssr::auth;
-    use crate::ssr::pool;
-    use crate::ssr::server_vars;
-    use common::server_action::user_action::UserAction;
-
-    let auth = auth(false)?;
-    let pool = pool()?;
-    let server_vars = server_vars()?;
-    verify_easy_hash(
-        auth.session.get_session_id().to_string(),
-        server_vars.csrf_server.to_secret(),
-        csrf,
-    )?;
-    let user_id = get_auth_session_user_id(&auth).unwrap();
-    let record = sqlx::query!(
-        r#"
+    #[server]
+    pub async fn delete_ssh_key(csrf: String, ssh_key_id: i64) -> Result<(), ServerFnError> {
+        let auth = auth(false)?;
+        let pool = pool()?;
+        let server_vars = server_vars()?;
+        verify_easy_hash(
+            auth.session.get_session_id().to_string(),
+            server_vars.csrf_server.to_secret(),
+            csrf,
+        )?;
+        let user_id = get_auth_session_user_id(&auth).unwrap();
+        let record = sqlx::query!(
+            r#"
         DELETE FROM user_ssh_keys WHERE id = $1 AND user_id = $2 returning public_key
         "#,
-        ssh_key_id,
-        user_id
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
-    let _ = request_server_action(
-        UserAction::RemoveSshKey {
-            user_slug: auth.current_user.unwrap_or_default().get_slug(),
-            ssh_key: record.public_key,
-        }
-        .into(),
-    )
-    .await;
-    Ok(())
-}
+            ssh_key_id,
+            user_id
+        )
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        let _ = request_server_action(
+            UserAction::RemoveSshKey {
+                user_slug: auth.current_user.unwrap_or_default().get_slug(),
+                ssh_key: record.public_key,
+            }
+            .into(),
+        )
+        .await;
+        Ok(())
+    }
 
-#[server]
-pub async fn add_ssh_key(
-    csrf: String,
-    ssh_key_name: String,
-    ssh_key_value: String,
-) -> Result<(), ServerFnError> {
-    use crate::api::ssr::request_server_action;
-    use crate::security::utils::ssr::get_auth_session_user_id;
-    use crate::security::utils::ssr::verify_easy_hash;
-    use crate::ssr::auth;
-    use crate::ssr::pool;
-    use crate::ssr::server_vars;
-    use common::server_action::user_action::UserAction;
-
-    let auth = auth(false)?;
-    let pool = pool()?;
-    let server_vars = server_vars()?;
-    verify_easy_hash(
-        auth.session.get_session_id().to_string(),
-        server_vars.csrf_server.to_secret(),
-        csrf,
-    )?;
-    let user_id = get_auth_session_user_id(&auth).unwrap();
-    let _ = sqlx::query!(
-        r#"
+    
+    #[derive(Validate, Debug, Serialize, Deserialize)]
+    pub struct AddSshKeyForm {
+        #[validate(length(min = 1,max=20))]
+        pub ssh_key_name: String,
+        #[validate(length(min = 1, message = "SSH key value is required"))]
+        pub ssh_key_value: String,
+    }
+    
+    
+    #[server]
+    pub async fn add_ssh_key(
+        csrf: String,
+        ssh_key_name: String,
+        ssh_key_value: String,
+    ) -> Result<(), ServerFnError> {
+        let ssh_key_form = AddSshKeyForm {
+            ssh_key_name: ssh_key_name.clone(),
+            ssh_key_value: ssh_key_value.clone(),
+        };
+        ssh_key_form.validate()?;
+        let auth = auth(false)?;
+        let pool = pool()?;
+        let server_vars = server_vars()?;
+        verify_easy_hash(
+            auth.session.get_session_id().to_string(),
+            server_vars.csrf_server.to_secret(),
+            csrf,
+        )?;
+        let user_id = get_auth_session_user_id(&auth).unwrap();
+        let _ = sqlx::query!(
+            r#"
         INSERT INTO user_ssh_keys (name, public_key, user_id) VALUES ($1, $2, $3)
         "#,
-        ssh_key_name,
-        ssh_key_value,
-        user_id
-    )
-    .execute(&pool)
-    .await
-    .map_err(|e| ServerFnError::new(e.to_string()))?;
-    let _ = request_server_action(
-        UserAction::AddSshKey {
-            user_slug: auth.current_user.unwrap_or_default().get_slug(),
-            ssh_key: ssh_key_value,
-        }
-        .into(),
-    )
-    .await;
-    Ok(())
-}
+            ssh_key_name,
+            ssh_key_value,
+            user_id
+        )
+        .execute(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        let _ = request_server_action(
+            UserAction::AddSshKey {
+                user_slug: auth.current_user.unwrap_or_default().get_slug(),
+                ssh_key: ssh_key_value,
+            }
+            .into(),
+        )
+        .await;
+        Ok(())
+    }
 
-#[server]
-pub async fn update_password(
-    csrf: String,
-    _old_password: String,
-    _new_password: String,
-    _new_password_confirmation: String,
-) -> Result<(), ServerFnError> {
-    use crate::security::utils::ssr::verify_easy_hash;
-    use crate::ssr::auth;
-    use crate::ssr::server_vars;
+    #[server]
+    pub async fn update_password(
+        csrf: String,
+        old_password: String,
+        new_password: String,
+        new_password_confirmation: String,
+    ) -> Result<(), ServerFnError> {
+        let auth = auth(false)?;
+        let server_vars = server_vars()?;
+        verify_easy_hash(
+            auth.session.get_session_id().to_string(),
+            server_vars.csrf_server.to_secret(),
+            csrf,
+        )?;
 
+        let password_form = PasswordForm {
+            password: new_password.clone(),
+            password_confirmation: new_password_confirmation.clone(),
+        };
+        password_form.validate()?;
+        let pool = crate::ssr::pool()?;
+        let user_id = crate::security::utils::ssr::get_auth_session_user_id(&auth).unwrap();
 
-    let auth = auth(false)?;
-    let server_vars = server_vars()?;
-    verify_easy_hash(
-        auth.session.get_session_id().to_string(),
-        server_vars.csrf_server.to_secret(),
-        csrf,
-    )?;
+        // check old pwd
+        let result = sqlx::query!(
+            r#"
+        SELECT password FROM users WHERE id = $1
+        "#,
+            user_id
+        )
+        .fetch_one(&pool)
+        .await?;
+        let password = secrecy::SecretString::from(old_password.as_str());
+        password_auth::verify_password(password.expose_secret().as_bytes(), &result.password)
+                .map_err(|_| crate::AppError::InvalidCredentials)?;
 
-    Ok(())
+        // update password
+        sqlx::query!(
+            r#"
+        UPDATE users SET password = $1 WHERE id = $2
+        "#,
+            password_auth::generate_hash(&new_password.as_bytes()),
+            user_id
+        )
+        .execute(&pool)
+        .await?;
+
+        Ok(())
+    }
 }

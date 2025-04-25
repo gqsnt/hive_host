@@ -116,7 +116,7 @@ version = "0.3.0-rc2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27e538422e61068621db4927010ca2589d14fe46081446d29f93f0fd7dea8c78"
 dependencies = [
- "futures 0.3.31",
+ "futures",
  "thiserror 2.0.12",
  "tokio",
  "wasm-bindgen-futures",
@@ -471,7 +471,7 @@ dependencies = [
  "cookie",
  "dashmap",
  "forwarded-header-value",
- "futures 0.3.31",
+ "futures",
  "hmac",
  "http",
  "http-body",
@@ -501,7 +501,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dashmap",
- "futures 0.3.31",
+ "futures",
  "http",
  "http-body",
  "serde",
@@ -755,6 +755,7 @@ dependencies = [
  "sqlx",
  "strum",
  "strum_macros",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -970,6 +971,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
 dependencies = [
  "cipher",
+]
+
+[[package]]
+name = "darling"
+version = "0.20.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc7f46116c46ff9ab3eb1597a45688b6715c6e628b5c133e288e709a29bcb4ee"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.20.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.20.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc34b93ccb385b40dc71c6fceac4b2ad23662c7eeb248cf10d529b7e055b6ead"
+dependencies = [
+ "darling_core",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1276,12 +1312,6 @@ dependencies = [
 
 [[package]]
 name = "futures"
-version = "0.1.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a471a38ef8ed83cd6e40aa59c1ffe17db6855c18e3604d9c4ed8c08ebc28678"
-
-[[package]]
-name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
@@ -1397,7 +1427,6 @@ version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
 dependencies = [
- "futures 0.1.31",
  "futures-channel",
  "futures-core",
  "futures-io",
@@ -1633,14 +1662,10 @@ dependencies = [
  "dashmap",
  "deadpool-postgres",
  "dotenvy",
- "futures 0.3.31",
  "http",
  "http-body-util",
  "hyper",
- "hyper-content-encoding",
- "hyper-staticfile",
  "hyper-util",
- "log",
  "mime_guess",
  "num_cpus",
  "quick_cache",
@@ -1698,12 +1723,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-range"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21dec9db110f5f872ed9699c3ecf50cf16f423502706ba5c72462e28d3157573"
-
-[[package]]
 name = "http-range-header"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1727,7 +1746,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8714ae4adeaa846d838f380fbd72f049197de629948f91bf045329e0cf0a283"
 dependencies = [
- "futures 0.3.31",
+ "futures",
  "js-sys",
  "once_cell",
  "or_poisoned",
@@ -1759,19 +1778,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-content-encoding"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00ce7e85794005c5539a9847ca5e19628c40374f985c148646968ffbee82f32d"
-dependencies = [
- "bytes",
- "flate2",
- "http",
- "http-body-util",
- "hyper",
-]
-
-[[package]]
 name = "hyper-rustls"
 version = "0.27.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1787,25 +1793,6 @@ dependencies = [
  "tokio-rustls",
  "tower-service",
  "webpki-roots",
-]
-
-[[package]]
-name = "hyper-staticfile"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc4bce64c32578957926e75f832032f81ebb30bcee74f86c5848b13a69e547eb"
-dependencies = [
- "futures-util",
- "http",
- "http-range",
- "httpdate",
- "hyper",
- "mime_guess",
- "percent-encoding",
- "rand 0.8.5",
- "tokio",
- "url",
- "winapi",
 ]
 
 [[package]]
@@ -1987,6 +1974,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
+
+[[package]]
 name = "idna"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2130,7 +2123,7 @@ dependencies = [
  "base64",
  "cfg-if",
  "either_of",
- "futures 0.3.31",
+ "futures",
  "getrandom 0.2.15",
  "hydration_context",
  "leptos_config",
@@ -2168,7 +2161,7 @@ dependencies = [
  "any_spawner",
  "axum",
  "dashmap",
- "futures 0.3.31",
+ "futures",
  "hydration_context",
  "leptos",
  "leptos_integration_utils",
@@ -2236,7 +2229,7 @@ version = "0.8.0-rc2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "382c5429133788362e3596c9d7cd255dc12bf3aafbe2083fb2ddaa0dc50f6a90"
 dependencies = [
- "futures 0.3.31",
+ "futures",
  "hydration_context",
  "leptos",
  "leptos_config",
@@ -2274,7 +2267,7 @@ version = "0.8.0-rc2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81f763d7bc7d6fd8d93899ca6e2a9d69694fde6206b53451d127471f357d4e25"
 dependencies = [
- "futures 0.3.31",
+ "futures",
  "indexmap",
  "leptos",
  "once_cell",
@@ -2292,7 +2285,7 @@ checksum = "da9e0b360282c4e9b13783c9cf0c34664a1c7a51693fef37e21fa623322767ac"
 dependencies = [
  "any_spawner",
  "either_of",
- "futures 0.3.31",
+ "futures",
  "gloo-net",
  "js-sys",
  "leptos",
@@ -2331,7 +2324,7 @@ dependencies = [
  "any_spawner",
  "base64",
  "codee",
- "futures 0.3.31",
+ "futures",
  "hydration_context",
  "or_poisoned",
  "reactive_graph",
@@ -3336,7 +3329,7 @@ checksum = "f7887e51e05060cb569e2e20a6770203df9622ebab3fd34ab221b9c4f6ff90f9"
 dependencies = [
  "any_spawner",
  "async-lock 3.4.0",
- "futures 0.3.31",
+ "futures",
  "guardian",
  "hydration_context",
  "or_poisoned",
@@ -3808,13 +3801,10 @@ dependencies = [
  "chrono",
  "common",
  "dotenvy",
- "log",
  "moka",
  "secrecy",
- "serde",
- "serde_json",
+ "thiserror 2.0.12",
  "tokio",
- "tower 0.4.13",
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
@@ -3833,7 +3823,7 @@ dependencies = [
  "const-str",
  "const_format",
  "dashmap",
- "futures 0.3.31",
+ "futures",
  "gloo-net",
  "http",
  "http-body-util",
@@ -4251,6 +4241,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "strsim"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
 name = "strum"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4354,7 +4350,7 @@ dependencies = [
  "drain_filter_polyfill",
  "either_of",
  "erased",
- "futures 0.3.31",
+ "futures",
  "html-escape",
  "indexmap",
  "itertools",
@@ -4971,6 +4967,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "validator"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43fb22e1a008ece370ce08a3e9e4447a910e92621bb49b85d6e48a45397e7cfa"
+dependencies = [
+ "idna",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "url",
+ "validator_derive",
+]
+
+[[package]]
+name = "validator_derive"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7df16e474ef958526d1205f6dda359fdfab79d9aa6d54bafcb92dcd07673dca"
+dependencies = [
+ "darling",
+ "once_cell",
+ "proc-macro-error2",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5165,6 +5191,7 @@ dependencies = [
  "axum_session_sqlx",
  "base64",
  "blake2",
+ "cfg-if",
  "chrono",
  "common",
  "console_error_panic_hook",
@@ -5180,6 +5207,7 @@ dependencies = [
  "moka",
  "password-auth",
  "portable-atomic",
+ "regex",
  "reqwest",
  "secrecy",
  "send_wrapper",
@@ -5193,6 +5221,7 @@ dependencies = [
  "tower 0.4.13",
  "tower-http 0.5.2",
  "uuid",
+ "validator",
  "wasm-bindgen",
  "web-sys",
 ]

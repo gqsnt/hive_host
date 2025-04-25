@@ -3,7 +3,6 @@ use leptos::server;
 
 use crate::models::User;
 
-
 pub mod login;
 pub mod permission;
 pub mod signup;
@@ -30,6 +29,7 @@ pub async fn get_user() -> Result<Option<User>, ServerFnError> {
 #[cfg(feature = "ssr")]
 pub mod ssr {
     use crate::models::{RoleType, User};
+    use crate::AppResult;
     use anyhow::Error;
     use async_trait::async_trait;
     use axum_session_auth::Authentication;
@@ -83,15 +83,15 @@ pub mod ssr {
         pub async fn get_from_email_with_password(
             email: &str,
             pool: &PgPool,
-        ) -> Option<(Self, SecretString)> {
+        ) -> AppResult<(Self, SecretString)> {
             let user = sqlx::query_as!(
                 SqlUserLong,
                 r#"SELECT id, email, password, role as "role: RoleType", username FROM users WHERE email = $1"#,
                 email
             )
                 .fetch_one(pool)
-                .await.ok()?;
-            Some((
+                .await?;
+            Ok((
                 Self {
                     id: user.id,
                     email: user.email,

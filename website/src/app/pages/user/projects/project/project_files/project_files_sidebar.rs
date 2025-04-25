@@ -1,12 +1,13 @@
-use crate::api::{ServerProjectActionFront};
+use crate::api::ServerProjectActionFront;
+use crate::app::pages::CsrfValue;
 use common::server_project_action::io_action::dir_action::{DirAction, LsElement};
 use common::server_project_action::io_action::file_action::FileAction;
 use common::ProjectSlugStr;
 use leptos::callback::Callback;
 use leptos::either::{Either, EitherOf3};
 use leptos::html::Input;
+use leptos::prelude::{ElementChild, For};
 use leptos::prelude::{expect_context, CustomAttribute};
-use leptos::prelude::ElementChild;
 use leptos::prelude::{signal, NodeRef, NodeRefAttribute};
 use leptos::prelude::{Callable, Get, IntoMaybeErased, Transition};
 use leptos::prelude::{
@@ -14,7 +15,6 @@ use leptos::prelude::{
 };
 use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
-use crate::app::pages::CsrfValue;
 
 #[component]
 pub fn ProjectFilesSidebar(
@@ -43,7 +43,7 @@ pub fn ProjectFilesSidebar(
             }
             .into(),
             None,
-            Some(csrf_value().0)
+            Some(csrf_value().0),
         ));
     };
 
@@ -60,7 +60,7 @@ pub fn ProjectFilesSidebar(
             }
             .into(),
             None,
-            Some(csrf_value().0)
+            Some(csrf_value().0),
         ));
     };
 
@@ -121,7 +121,10 @@ pub fn ProjectFilesSidebar(
                             class="form-input flex-grow px-2 py-1 text-sm"
                             placeholder="New file name..."
                         />
-                        <button type="submit" class="btn btn-primary text-sm px-2 py-1 flex-shrink-0">
+                        <button
+                            type="submit"
+                            class="btn btn-primary text-sm px-2 py-1 flex-shrink-0"
+                        >
                             <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 fill="none"
@@ -171,95 +174,94 @@ pub fn ProjectFilesSidebarList(
 ) -> impl IntoView {
     view! {
         <div class="flex-grow overflow-y-auto -mr-4 pr-4">
-                <Transition fallback=move || {
-                    view! { <div>Loading...</div> }
-                }>
-                    {move || {
-                        file_list_resource
-                            .get()
-                            .map(|result| match result {
-                                Ok(ls_elements) => {
-                                    Either::Left({
-                                        if ls_elements.is_empty() && current_path.get() == "." {
-                                            EitherOf3::A(())
-                                        } else if ls_elements.is_empty() {
-                                            EitherOf3::B(
-                                                view! {
-                                                    <div class="px-2 py-1.5 text-sm text-gray-500 italic">
-                                                        "Folder is empty"
-                                                    </div>
-                                                },
-                                            )
-                                        } else {
-                                            EitherOf3::C(
-                                            view!{
-                                                {
-                    (current_path.get() != ".")
-                        .then(|| {
-                            view! {
-                                <div>
-                                    <button
-                                        class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
-                                        on:click=move |_| {
-                                            on_go_up.try_run(());
-                                        }
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke-width="1.5"
-                                            stroke="currentColor"
-                                            class="w-5 h-5 flex-shrink-0"
-                                        >
-                                            <path
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
-                                            />
-                                        </svg>
-                                        <span>".."</span>
-                                    </button>
-                                </div>
+            <Transition fallback=move || {
+                view! { <div>Loading...</div> }
+            }>
+                {move || {
+                    file_list_resource
+                        .get()
+                        .map(|result| match result {
+                            Ok(ls_elements) => {
+                                Either::Left({
+                                    if ls_elements.is_empty() && current_path.get() == "." {
+                                        EitherOf3::A(())
+                                    } else if ls_elements.is_empty() {
+                                        EitherOf3::B(
+                                            view! {
+                                                <div class="px-2 py-1.5 text-sm text-gray-500 italic">
+                                                    "Folder is empty"
+                                                </div>
+                                            },
+                                        )
+                                    } else {
+                                        EitherOf3::C(
+                                            view! {
+                                                {move || {
+                                                    (current_path.get() != ".")
+                                                        .then(|| {
+                                                            view! {
+                                                                <div>
+                                                                    <button
+                                                                        class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
+                                                                        on:click=move |_| {
+                                                                            on_go_up.try_run(());
+                                                                        }
+                                                                    >
+                                                                        <svg
+                                                                            xmlns="http://www.w3.org/2000/svg"
+                                                                            fill="none"
+                                                                            viewBox="0 0 24 24"
+                                                                            stroke-width="1.5"
+                                                                            stroke="currentColor"
+                                                                            class="w-5 h-5 flex-shrink-0"
+                                                                        >
+                                                                            <path
+                                                                                stroke-linecap="round"
+                                                                                stroke-linejoin="round"
+                                                                                d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
+                                                                            />
+                                                                        </svg>
+                                                                        <span>".."</span>
+                                                                    </button>
+                                                                </div>
+                                                            }
+                                                        })
+                                                }}
+                                                <ul class="space-y-1">
+                                                    <For
+                                                        each=move || ls_elements.clone()
+                                                        key=|item| item.name.clone()
+                                                        let(item)
+                                                    >
+                                                        <ProjectFilesSidebarItem
+                                                            slug=slug
+                                                            current_path=current_path
+                                                            item=item
+                                                            server_project_action=server_project_action
+                                                            on_navigate_dir=on_navigate_dir
+                                                            on_select_file=on_select_file
+                                                            csrf_value=csrf_value
+                                                        />
+                                                    </For>
+                                                </ul>
+                                            },
+                                        )
+                                    }
+                                })
+                            }
+                            Err(e) => {
+                                Either::Right(
+                                    // Collect into a view
+                                    view! {
+                                        <div class="px-2 py-1.5 text-sm text-red-400">
+                                            "Error: " {e.to_string()}
+                                        </div>
+                                    },
+                                )
                             }
                         })
-                }
-                                                 <ul class="space-y-1">
-                                                    {  ls_elements
-                                                    .into_iter()
-                                                    .map(|item| {
-                                                        view! {
-                                                            <ProjectFilesSidebarItem
-                                                                slug=slug
-                                                                current_path=current_path
-                                                                item=item
-                                                                server_project_action=server_project_action
-                                                                on_navigate_dir=on_navigate_dir
-                                                                on_select_file=on_select_file
-                                                                csrf_value=csrf_value
-                                                            />
-                                                        }
-                                                    })
-                                                    .collect_view()}
-                                                </ul>
-                                            }
-                                            )
-                                        }
-                                    })
-                                }
-                                Err(e) => {
-                                    Either::Right(
-                                        // Collect into a view
-                                        view! {
-                                            <div class="px-2 py-1.5 text-sm text-red-400">
-                                                "Error: " {e.to_string()}
-                                            </div>
-                                        },
-                                    )
-                                }
-                            })
-                    }}
-                </Transition>
+                }}
+            </Transition>
         </div>
     }
 }
@@ -286,7 +288,7 @@ pub fn ProjectFilesSidebarItem(
         } else {
             FileAction::Delete { path }.into()
         };
-        server_project_action.dispatch((slug(), action, None,Some(csrf_value().0)));
+        server_project_action.dispatch((slug(), action, None, Some(csrf_value().0)));
     };
 
     let on_rename_item_submit = move |ev: SubmitEvent| {
@@ -309,7 +311,7 @@ pub fn ProjectFilesSidebarItem(
             }
             .into()
         };
-        server_project_action.dispatch((slug(), action, None,Some(csrf_value().0)));
+        server_project_action.dispatch((slug(), action, None, Some(csrf_value().0)));
         set_is_renaming_item(false)
     };
 
@@ -499,4 +501,9 @@ pub fn ProjectFilesSidebarItem(
             </div>
         </li>
     }
+}
+
+pub mod server_fns {
+    cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+    }}
 }

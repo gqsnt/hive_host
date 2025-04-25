@@ -14,8 +14,8 @@ create table if not exists users
 
 create table if not exists projects
 (
-    id   bigserial primary key,
-    name text not null,
+    id        bigserial primary key,
+    name      text                  not null,
     is_active boolean default false not null
 );
 

@@ -1,22 +1,20 @@
-use leptos::prelude::{expect_context, Signal, Suspend, Suspense};
-use leptos::prelude::{Get, ServerFnError};
-use leptos::{component, server, view, IntoView};
 use crate::app::pages::CsrfValue;
+use leptos::prelude::ServerFnError;
+use leptos::prelude::{expect_context, Signal, Suspend, Suspense};
+use leptos::{component, server, view, IntoView};
 
 #[component]
-pub fn CSRFField(
-) -> impl IntoView {
+pub fn CSRFField() -> impl IntoView {
     let csrf_value = expect_context::<Signal<CsrfValue>>();
 
     view! {
-        <Suspense fallback=move || view! { <div></div> }>
-        {move || Suspend::new(async move {
-            view! {
-                <input type="hidden" name="csrf" value= csrf_value().0 />
-            }
-        })}
+        <Suspense fallback=move || {
+            view! { <div></div> }
+        }>
+            {move || Suspend::new(async move {
+                view! { <input type="hidden" name="csrf" value=csrf_value().0 /> }
+            })}
         </Suspense>
-
     }
 }
 

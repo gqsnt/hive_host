@@ -1,16 +1,18 @@
 use crate::api::get_action_server_project_action;
+use crate::app::pages::CsrfValue;
 use common::server_project_action::io_action::file_action::FileAction;
 use common::server_project_action::ServerProjectActionResponse;
 use common::ProjectSlugStr;
 use leptos::either::Either;
 use leptos::html::Textarea;
-use leptos::prelude::{expect_context, signal, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute};
+use leptos::prelude::{
+    expect_context, signal, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute,
+};
 use leptos::prelude::{ClassAttribute, Get, Resource, Signal, Transition};
 use leptos::prelude::{GetUntracked, OnAttribute};
 use leptos::prelude::{IntoMaybeErased, ServerFnError, Suspend};
 use leptos::{component, view, IntoView};
 use web_sys::MouseEvent;
-use crate::app::pages::CsrfValue;
 
 #[component]
 pub fn FileContentView(
@@ -18,7 +20,7 @@ pub fn FileContentView(
     slug: Signal<ProjectSlugStr>,
 ) -> impl IntoView {
     let csrf_value = expect_context::<Signal<CsrfValue>>();
-    
+
     let file_content_resource = Resource::new(
         move || (selected_file.get(), slug.get()),
         |(file_path_opt, slug)| async move {
@@ -27,7 +29,8 @@ pub fn FileContentView(
                     match crate::api::get_action_server_project_action_inner(
                         slug,
                         FileAction::View { path: file_path }.into(),
-                        None, None
+                        None,
+                        None,
                     )
                     .await
                     {
@@ -67,9 +70,7 @@ pub fn FileContentView(
                                     match result {
                                         Ok(file_info) => {
                                             let server_project_action = get_action_server_project_action();
-                                            let (content_signal, _) = signal(
-                                                file_info.content.clone(),
-                                            );
+                                            let (content_signal, _) = signal(file_info.content.clone());
                                             let node_ref: NodeRef<Textarea> = NodeRef::new();
                                             let path_clone = file_info.path.clone();
                                             let on_click_update = move |ev: MouseEvent| {
@@ -86,7 +87,7 @@ pub fn FileContentView(
                                                         }
                                                             .into(),
                                                         Some(content_to_save),
-                                                        Some(csrf_value().0)
+                                                        Some(csrf_value().0),
                                                     ));
                                             };
                                             Either::Left(
@@ -175,6 +176,11 @@ pub fn FileContentView(
             })}
         </Transition>
     }
+}
+
+pub mod server_fns {
+    cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+    }}
 }
 
 fn format_bytes(bytes: u64) -> String {

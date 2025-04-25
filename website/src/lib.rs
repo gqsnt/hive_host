@@ -1,10 +1,17 @@
-use http::StatusCode;
+use std::str::FromStr;
+use common::SlugParseError;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
+#[cfg(feature = "ssr")]
+use axum_session::SessionError;
+use leptos::prelude::{ServerFnError};
+#[cfg(feature = "ssr")]
+use sqlx::migrate::MigrateError;
+use validator::{ValidationError, ValidationErrors};
+
 pub mod api;
 pub mod app;
-pub mod error_template;
 pub mod models;
 pub mod rate_limiter;
 pub mod security;
@@ -18,22 +25,138 @@ pub fn hydrate() {
     leptos::mount::hydrate_body(App);
 }
 
-#[derive(Debug, Clone, Error)]
-pub enum AppError {
-    #[error("Not Found")]
-    NotFound,
-    #[error("Internal Server Error")]
-    InternalServerError,
+pub type AppResult<T> = Result<T, AppError>;
+pub type ServerFnResult<T> = Result<T, ServerFnError<MyServerFnError>>;
+
+
+#[derive(Debug, Clone, Deserialize, Serialize, Error)]
+pub enum MyServerFnError {
+    #[error("ServerFnError {0}")]
+    InternalError(String),
+    #[error("ValidationError {0}")]
+    ValidationError(ValidationError),
+    #[error("ValidationErrors {0}")]
+    ValidationErrors(ValidationErrors),
+    #[error("SlugError {0}")]
+    SlugError(SlugParseError),
+    #[error("Unauthorized Project Access")]
+    UnauthorizedProjectAccess,
+    #[error("Unauthorized Project Action")]
+    UnauthorizedProjectAction,
+    #[error("Unauthorized Auth Access")]
+    UnauthorizedAuthAccess,
+    #[error("Project not found")]
+    ProjectNotFound,
+    #[error("Invalid Csrf")]
+    InvalidCsrf,
+    #[error("Invalid credentials")]
+    InvalidCredentials,
+    #[error("Custom {0}")]
+    Custom(String),
 }
 
-impl AppError {
-    pub fn status_code(&self) -> StatusCode {
-        match self {
-            AppError::NotFound => StatusCode::NOT_FOUND,
-            AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
-        }
+
+impl FromStr for MyServerFnError {
+    type Err = MyServerFnError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(&s).map_err(|e| {
+            MyServerFnError::Custom(format!("Failed to parse MyServerFnError: {}", e))
+        })
     }
 }
+
+impl From<AppError> for ServerFnError<MyServerFnError>{
+    fn from(value: AppError) -> Self {
+        ServerFnError::WrappedServerError(match value{
+            #[cfg(feature = "ssr")]
+            AppError::RequestError(e) => MyServerFnError::InternalError(e.to_string()),
+            #[cfg(feature = "ssr")]
+            AppError::SqlxError(e) => MyServerFnError::InternalError(e.to_string()),
+            #[cfg(feature = "ssr")]
+            AppError::MigrateError(_) => MyServerFnError::InternalError(String::new()),
+            #[cfg(feature = "ssr")]
+            AppError::DotEnv(_) => MyServerFnError::InternalError(String::new()),
+            #[cfg(feature = "ssr")]
+            AppError::SessionError(_) => MyServerFnError::InternalError(String::new()),
+            #[cfg(feature = "ssr")]
+            AppError::AddrParse(_) => MyServerFnError::InternalError(String::new()),
+            AppError::GlooNet(e) => MyServerFnError::InternalError(e.to_string()),
+            AppError::PoolNotFound => MyServerFnError::InternalError(String::from("Pool not found")),
+            AppError::ServerVarsNotFound => MyServerFnError::InternalError(String::from("Server Vars not found")),
+            AppError::RateLimiterNotFound => MyServerFnError::InternalError(String::from("Rate Limiter not found")),
+            AppError::AuthNotFound => MyServerFnError::InternalError(String::from("Auth not found")),
+            AppError::PermissionsNotFound => MyServerFnError::InternalError(String::from("Permissions not found")),
+            AppError::InvalidProjectSlug => MyServerFnError::InternalError(String::from("Invalid Project Slug")),
+            AppError::ParseSlug(e) => MyServerFnError::SlugError(e),
+            AppError::ValidationError(e) =>MyServerFnError::ValidationError(e),
+            AppError::ValidationErrors(e) => MyServerFnError::ValidationErrors(e),
+            AppError::UnauthorizedAuthAccess => MyServerFnError::UnauthorizedAuthAccess,
+            AppError::UnauthorizedProjectAccess => MyServerFnError::UnauthorizedProjectAccess,
+            AppError::UnauthorizedProjectAction => MyServerFnError::UnauthorizedProjectAction,
+            AppError::ProjectNotFound => MyServerFnError::ProjectNotFound,
+            AppError::InvalidCsrf => MyServerFnError::InvalidCsrf,
+            AppError::InvalidCredentials => MyServerFnError::InvalidCredentials
+        })
+    }
+}
+
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[cfg(feature = "ssr")]
+    #[error("Reqwuest error {0}")]
+    RequestError(#[from] reqwest::Error),
+    #[cfg(feature = "ssr")]
+    #[error("Sqlx error {0}")]
+    SqlxError(#[from] sqlx::Error),
+    #[cfg(feature = "ssr")]
+    #[error("Migrate error {0}")]
+    MigrateError(#[from] MigrateError),
+    #[cfg(feature = "ssr")]
+    #[error("DotEnv error: {0}")]
+    DotEnv(#[from] dotenvy::Error),
+    #[cfg(feature = "ssr")]
+    #[error("Session error: {0}")]
+    SessionError(#[from] SessionError),
+    #[cfg(feature = "ssr")]
+    #[error("AddrParse error: {0}")]
+    AddrParse(#[from] std::net::AddrParseError),
+    #[error("gloo_net error: {0}")]
+    GlooNet(#[from] gloo_net::Error),
+    #[error("Pool not found")]
+    PoolNotFound,
+    #[error("Server vars not found")]
+    ServerVarsNotFound,
+    #[error("Rate limiter not found")]
+    RateLimiterNotFound,
+    #[error("Auth not found")]
+    AuthNotFound,
+    #[error("Permissions not found")]
+    PermissionsNotFound,
+    #[error("Invalid ProjectSlug")]
+    InvalidProjectSlug,
+    #[error("Invalid Slug {0}")]
+    ParseSlug(#[from] SlugParseError),
+    #[error("Validation Error {0}")]
+    ValidationError(#[from] ValidationError),
+    #[error("Validation Errors {0}")]
+    ValidationErrors(#[from] ValidationErrors),
+    #[error("Unauthorized Auth Access")]
+    UnauthorizedAuthAccess,
+    #[error("Unauthorized Project Access")]
+    UnauthorizedProjectAccess,
+    #[error("Unauthorized Project Action")]
+    UnauthorizedProjectAction,
+    #[error("Project not found")]
+    ProjectNotFound,
+    #[error("Invalid Csrf")]
+    InvalidCsrf,
+    #[error("Invalid credentials")]
+    InvalidCredentials,
+}
+
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct BoolInput(pub bool);
@@ -74,6 +197,7 @@ pub mod ssr {
     use crate::rate_limiter::ssr::RateLimiter;
     use crate::security::ssr::AppAuthSession;
     use crate::security::utils::ssr::stringify_u128_base64;
+    use crate::{AppError, AppResult};
     use axum::{
         body::Body as AxumBody,
         extract::{FromRef, Path, State},
@@ -84,7 +208,6 @@ pub mod ssr {
     use common::{ProjectId, UserId};
     use leptos::config::LeptosOptions;
     use leptos::context::{provide_context, use_context};
-    use leptos::prelude::ServerFnError;
     use leptos_axum::{handle_server_fns_with_context, AxumRouteListing};
     use moka::future::Cache;
     use portable_atomic::AtomicU128;
@@ -148,38 +271,30 @@ pub mod ssr {
         }
     }
 
-    pub fn pool() -> Result<PgPool, ServerFnError> {
-        use_context::<PgPool>().ok_or_else(|| ServerFnError::ServerError("Pool missing.".into()))
+    pub fn pool() -> AppResult<PgPool> {
+        use_context::<PgPool>().ok_or(AppError::PoolNotFound)
     }
 
-    pub fn server_vars() -> Result<ServerVars, ServerFnError> {
-        use_context::<ServerVars>()
-            .ok_or_else(|| ServerFnError::ServerError("Server vars missing.".into()))
+    pub fn server_vars() -> AppResult<ServerVars> {
+        use_context::<ServerVars>().ok_or(AppError::ServerVarsNotFound)
     }
 
-    pub fn rate_limiters() -> Result<Arc<RateLimiter>, ServerFnError> {
-        use_context::<Arc<RateLimiter>>()
-            .ok_or_else(|| ServerFnError::ServerError("Rate limiter missing.".into()))
+    pub fn rate_limiters() -> AppResult<Arc<RateLimiter>> {
+        use_context::<Arc<RateLimiter>>().ok_or(AppError::RateLimiterNotFound)
     }
 
-    pub fn auth(guest_allowed: bool) -> Result<AppAuthSession, ServerFnError> {
-        let auth = use_context::<AppAuthSession>()
-            .ok_or_else(|| ServerFnError::ServerError("Auth session missing.".into()));
-        let is_guest = auth
-            .as_ref()
-            .map(|auth| auth.is_anonymous())
-            .unwrap_or_default();
-        if !guest_allowed && is_guest {
+    pub fn auth(guest_allowed: bool) -> AppResult<AppAuthSession> {
+        let auth = use_context::<AppAuthSession>().ok_or(AppError::AuthNotFound)?;
+        if !guest_allowed && auth.is_anonymous() {
             leptos_axum::redirect("/login");
-            Err(ServerFnError::ServerError("Guest user not allowed.".into()))
+            Err(AppError::AuthNotFound)
         } else {
-            auth
+            Ok(auth)
         }
     }
 
-    pub fn permissions() -> Result<Permissions, ServerFnError> {
-        use_context::<Permissions>()
-            .ok_or_else(|| ServerFnError::ServerError("Permissions missing.".into()))
+    pub fn permissions() -> AppResult<Permissions> {
+        use_context::<Permissions>().ok_or(AppError::PermissionsNotFound)
     }
 
     pub async fn server_fn_handler(
