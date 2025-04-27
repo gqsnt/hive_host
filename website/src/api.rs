@@ -3,7 +3,7 @@ use crate::security::permission::{request_server_project_action_front, token_url
 use crate::AppResult;
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
 use common::{ProjectSlugStr, StringContent};
-use leptos::prelude::{Action, ServerFnError};
+use leptos::prelude::{Action};
 
 #[cfg(not(feature = "ssr"))]
 pub fn fetch_api(
@@ -178,7 +178,7 @@ pub type ServerProjectActionFront = Action<
         Option<String>,
         Option<String>,
     ),
-    Result<ServerProjectActionResponse, ServerFnError>,
+    AppResult<ServerProjectActionResponse>,
 >;
 
 pub fn get_action_server_project_action() -> ServerProjectActionFront {
@@ -208,7 +208,7 @@ pub async fn get_action_server_project_action_inner(
     action: ServerProjectAction,
     content: Option<String>,
     csrf: Option<String>,
-) -> Result<ServerProjectActionResponse, ServerFnError> {
+) -> AppResult<ServerProjectActionResponse> {
     let response = request_server_project_action_front(project_slug, action, csrf).await?;
     if let ServerProjectActionResponse::Token(token) = response.clone() {
         Ok(fetch_api(

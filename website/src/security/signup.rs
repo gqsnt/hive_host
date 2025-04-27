@@ -1,7 +1,6 @@
 
 use crate::models::User;
-use crate::{ BoolInput};
-use leptos::prelude::ServerFnError;
+use crate::{AppResult, BoolInput};
 use leptos::server;
 
 
@@ -15,7 +14,7 @@ pub async fn signup(
     password: String,
     password_confirmation: String,
     remember: Option<BoolInput>,
-) -> Result<User, ServerFnError> {
+) -> AppResult<User> {
     use crate::models::RoleType;
     use crate::security::utils::ssr::verify_easy_hash;
     use common::server_action::user_action::UserAction;
@@ -77,7 +76,7 @@ pub async fn signup(
     };
     form.validate_with_args(
         &context
-    ).map_err(AppError::from)?;
+    )?;
 
     let remember = remember.unwrap_or_default().into();
     let password = secrecy::SecretString::from(password.as_str());

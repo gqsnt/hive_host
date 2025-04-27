@@ -4,7 +4,7 @@ use crate::security::signup::Signup;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, AddAnyAttr, OnceResource, Suspend, Transition, Update};
-use leptos::prelude::{signal, Effect, ElementChild, Get, ServerFnError, Set};
+use leptos::prelude::{signal, Effect, ElementChild, Get, Set};
 use leptos::prelude::{ActionForm, ClassAttribute, ServerAction};
 use leptos::{component, view, IntoView};
 use leptos_router::components::A;
@@ -21,8 +21,8 @@ pub fn SignupPage() -> impl IntoView {
         action.version().get();
         match action.value().get() {
             Some(Ok(_)) => set_signup_result.set(String::from("Signup Successful")),
-            Some(Err(ServerFnError::ServerError(e))) => {
-                set_signup_result.set(e)
+            Some(Err(e)) => {
+                set_signup_result.set(e.to_string())
             },
             _ => (),
         };

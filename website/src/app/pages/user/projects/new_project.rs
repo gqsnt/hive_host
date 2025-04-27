@@ -1,7 +1,7 @@
 use crate::app::components::csrf_field::CSRFField;
 use leptos::form::ActionForm;
 
-use leptos::prelude::{signal, Effect, ElementChild, Get, ServerFnError, Set};
+use leptos::prelude::{signal, Effect, ElementChild, Get, Set};
 use leptos::prelude::{ClassAttribute, IntoMaybeErased};
 use leptos::server::ServerAction;
 use leptos::{component, view, IntoView};
@@ -16,7 +16,7 @@ pub fn NewProjectPage(
         create_project_action.version().get();
         match create_project_action.value().get() {
             Some(Ok(_)) => set_new_project_result.set(String::from("Project created")),
-            Some(Err(ServerFnError::ServerError(e))) => set_new_project_result.set(e.to_string()),
+            Some(Err(e)) => set_new_project_result.set(e.to_string()),
             _ => (),
         };
     });
@@ -53,10 +53,10 @@ pub fn NewProjectPage(
 }
 
 pub mod server_fns {
-    use leptos::prelude::ServerFnError;
     use leptos::server;
     use serde::{Deserialize, Serialize};
     use validator::Validate;
+    use crate::AppResult;
     use crate::security::utils::SANITIZED_REGEX;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
@@ -71,7 +71,7 @@ pub mod server_fns {
     }
 
     #[server]
-    pub async fn create_project(csrf: String, name: String) -> Result<(), ServerFnError> {
+    pub async fn create_project(csrf: String, name: String) -> AppResult<()> {
         let new_project_form = NewProjectForm{
             name: name.clone(),
         };
@@ -105,19 +105,18 @@ pub mod server_fns {
         use common::permission::Permission;
         use common::server_action::user_action::UserAction;
         use common::{Slug, UserSlug};
-        use leptos::prelude::ServerFnError;
+        use crate::AppResult;
 
         pub async fn create_project(
             user_slug: UserSlug,
             name: String,
-        ) -> Result<Project, ServerFnError> {
+        ) -> AppResult<Project> {
             use crate::api::ssr::request_server_action;
             let pool = crate::ssr::pool()?;
             let project =
                 sqlx::query!("INSERT INTO projects (name) VALUES ($1) returning id", name)
                     .fetch_one(&pool)
-                    .await
-                    .map_err(|e| ServerFnError::new(e.to_string()))?;
+                    .await?;
             sqlx::query!(
                 "INSERT INTO permissions (user_id, project_id, permission) VALUES ($1, $2, $3)",
                 user_slug.id,
@@ -125,8 +124,7 @@ pub mod server_fns {
                 Permission::Owner as Permission
             )
             .execute(&pool)
-            .await
-            .map_err(|e| ServerFnError::new(e.to_string()))?;
+            .await?;
             request_server_action(
                 UserAction::AddProject {
                     user_slug,

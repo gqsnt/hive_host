@@ -1,7 +1,7 @@
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
 use common::ProjectSlugStr;
-use leptos::prelude::ServerFnError;
 use leptos::server;
+use crate::AppResult;
 
 pub fn token_url(server_url: &str, token: &str) -> String {
     format!("http://{}/token/{}", server_url, token)
@@ -12,7 +12,7 @@ pub async fn request_server_project_action_front(
     project_slug: ProjectSlugStr,
     action: ServerProjectAction,
     csrf: Option<String>,
-) -> Result<ServerProjectActionResponse, ServerFnError> {
+) -> AppResult<ServerProjectActionResponse> {
     use crate::api::ssr::{request_server_project_action, request_server_project_action_token};
     use common::server_project_action::IsProjectServerAction;
 

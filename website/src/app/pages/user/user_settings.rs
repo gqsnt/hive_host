@@ -5,7 +5,7 @@ use crate::app::components::csrf_field::CSRFField;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::{signal, AddAnyAttr, Effect, ServerFnError, Set};
+use leptos::prelude::{signal, AddAnyAttr, Effect, Set};
 use leptos::prelude::{
     ActionForm, ClassAttribute, Get, Resource, ServerAction
     , Signal, Suspense,
@@ -38,7 +38,7 @@ pub fn UserSettingsPage() -> impl IntoView {
         update_password_action.version().get();
         match update_password_action.value().get() {
             Some(Ok(_)) => set_password_change_result.set(String::from("Password changed")),
-            Some(Err(ServerFnError::ServerError(e))) => set_password_change_result.set(e.to_string()),
+            Some(Err(e)) => set_password_change_result.set(e.to_string()),
             _ => (),
         };
     });
@@ -47,7 +47,7 @@ pub fn UserSettingsPage() -> impl IntoView {
         add_ssh_action.version().get();
         match add_ssh_action.value().get() {
             Some(Ok(_)) => set_new_ssh_key_result.set(String::from("SSh key added")),
-            Some(Err(ServerFnError::ServerError(e))) => set_new_ssh_key_result.set(e.to_string()),
+            Some(Err(e)) => set_new_ssh_key_result.set(e.to_string()),
             _ => (),
         };
     });
@@ -399,18 +399,17 @@ pub mod server_fns {
     }}
 
     use crate::models::SshKeyInfo;
-    use leptos::prelude::ServerFnError;
     use leptos::server;
     use serde::{Deserialize, Serialize};
     use validator::Validate;
-
+    use crate::AppResult;
 
     #[server]
-    pub async fn get_ssh_keys() -> Result<Vec<SshKeyInfo>, ServerFnError> {
+    pub async fn get_ssh_keys() -> AppResult<Vec<SshKeyInfo>> {
         let auth = auth(false)?;
         let pool = pool()?;
         let user_id = get_auth_session_user_id(&auth).unwrap();
-        sqlx::query_as!(
+        Ok(sqlx::query_as!(
             SshKeyInfo,
             r#"
         SELECT id, name, user_id FROM user_ssh_keys WHERE user_id = $1
@@ -418,12 +417,11 @@ pub mod server_fns {
             user_id
         )
         .fetch_all(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))
+        .await?)
     }
 
     #[server]
-    pub async fn delete_ssh_key(csrf: String, ssh_key_id: i64) -> Result<(), ServerFnError> {
+    pub async fn delete_ssh_key(csrf: String, ssh_key_id: i64) -> AppResult<()> {
         let auth = auth(false)?;
         let pool = pool()?;
         let server_vars = server_vars()?;
@@ -441,8 +439,7 @@ pub mod server_fns {
             user_id
         )
         .fetch_one(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .await?;
         let _ = request_server_action(
             UserAction::RemoveSshKey {
                 user_slug: auth.current_user.unwrap_or_default().get_slug(),
@@ -469,7 +466,7 @@ pub mod server_fns {
         csrf: String,
         ssh_key_name: String,
         ssh_key_value: String,
-    ) -> Result<(), ServerFnError> {
+    ) -> AppResult<()> {
         let ssh_key_form = AddSshKeyForm {
             ssh_key_name: ssh_key_name.clone(),
             ssh_key_value: ssh_key_value.clone(),
@@ -493,8 +490,7 @@ pub mod server_fns {
             user_id
         )
         .execute(&pool)
-        .await
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
+        .await?;
         let _ = request_server_action(
             UserAction::AddSshKey {
                 user_slug: auth.current_user.unwrap_or_default().get_slug(),
@@ -512,7 +508,7 @@ pub mod server_fns {
         old_password: String,
         new_password: String,
         new_password_confirm: String,
-    ) -> Result<(), ServerFnError> {
+    ) -> AppResult<()> {
         let auth = auth(false)?;
         let server_vars = server_vars()?;
         verify_easy_hash(

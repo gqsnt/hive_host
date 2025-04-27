@@ -244,7 +244,7 @@ pub fn ProjectSettings() -> impl IntoView {
 
             // --- Danger Zone ---
             // Subtle red border hint
-            <div class="section-border border-red-500/30 pb-6">
+            <div class=" pb-6">
                 // Red title
                 <h2 class="section-title text-red-400">"Danger Zone"</h2>
                 <p class="section-desc">"These actions are permanent and cannot be undone."</p>
@@ -275,8 +275,8 @@ pub fn ProjectSettings() -> impl IntoView {
 
 pub mod server_fns {
     use common::ProjectSlugStr;
-    use leptos::prelude::ServerFnError;
     use leptos::server;
+    use crate::AppResult;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::permission::ssr::handle_project_permission_request;
@@ -290,7 +290,7 @@ pub mod server_fns {
     pub async fn delete_project(
         csrf: String,
         project_slug: ProjectSlugStr,
-    ) -> Result<(), ServerFnError> {
+    ) -> AppResult<()> {
         Ok(handle_project_permission_request(
             project_slug,
             Permission::Owner,
@@ -346,7 +346,7 @@ pub mod server_fns {
         csrf: String,
         project_slug: ProjectSlugStr,
         is_active: bool,
-    ) -> Result<(), ServerFnError> {
+    ) -> AppResult<()> {
         Ok(handle_project_permission_request(
             project_slug,
             Permission::Owner,
@@ -375,7 +375,7 @@ pub mod server_fns {
     pub async fn on_reload_project(
         csrf: String,
         project_slug: ProjectSlugStr,
-    ) -> Result<(), ServerFnError> {
+    ) -> AppResult<()> {
         Ok(handle_project_permission_request(
             project_slug,
             Permission::Owner,

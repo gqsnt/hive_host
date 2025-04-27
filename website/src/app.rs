@@ -22,6 +22,7 @@ use leptos_router::{components::{Route, Router, Routes}, path};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 use crate::app::pages::GlobalState;
+use crate::AppResult;
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -120,7 +121,7 @@ fn ProjectRoutes()-> impl MatchNestedRoutes + Clone {
 }
 
 #[server]
-pub async fn get_server_url() -> Result<String, ServerFnError> {
+pub async fn get_server_url() -> AppResult<String> {
     use crate::ssr::server_vars;
     let server_vars = server_vars()?;
     Ok(server_vars.server_url.to_string())
@@ -131,7 +132,7 @@ pub async fn get_server_url() -> Result<String, ServerFnError> {
 pub struct HostingUrl(pub String);
 
 #[server]
-pub async fn get_hosting_url() -> Result<String, ServerFnError> {
+pub async fn get_hosting_url() -> AppResult<String>{
     use crate::ssr::server_vars;
     let server_vars = server_vars()?;
     Ok(server_vars.hosting_url.to_string())

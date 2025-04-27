@@ -1,10 +1,10 @@
 use leptos::prelude::{Get};
-use leptos::prelude::{ServerFnError};
 use leptos::prelude::{expect_context, Signal};
 use leptos::{component, server, view, IntoView};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::AppResult;
 
 pub type CsrfSignal = Signal<Option<CsrfValue>>;
 
@@ -23,7 +23,7 @@ pub fn CSRFField() -> impl IntoView {
 
 
 #[server]
-pub async fn generate_csrf() -> Result<String, ServerFnError> {
+pub async fn generate_csrf() -> AppResult<String> {
     use crate::security::utils::ssr::gen_easy_hash;
 
     let auth = crate::ssr::auth(true)?;

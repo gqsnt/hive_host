@@ -132,8 +132,8 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
 
 pub mod server_fns {
     use crate::models::Project;
-    use leptos::prelude::ServerFnError;
     use leptos::server;
+    use crate::AppResult;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
             use crate::security::utils::ssr::get_auth_session_user_id;
@@ -141,7 +141,7 @@ pub mod server_fns {
     }}
 
     #[server]
-    pub async fn get_projects() -> Result<Vec<Project>, ServerFnError> {
+    pub async fn get_projects() -> AppResult<Vec<Project>> {
         let pool = crate::ssr::pool()?;
         let auth = crate::ssr::auth(false)?;
         let projects = sqlx::query_as!(Project,

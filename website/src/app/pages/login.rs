@@ -5,7 +5,7 @@ use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, ClassAttribute, OnceResource, Suspend, Transition, Update};
-use leptos::prelude::{signal, AddAnyAttr, Effect, Get, ServerFnError, Set};
+use leptos::prelude::{signal, AddAnyAttr, Effect, Get, Set};
 use leptos::prelude::{ActionForm, ServerAction};
 use leptos::{component, view, IntoView};
 use leptos_router::components::A;
@@ -22,7 +22,7 @@ pub fn LoginPage() -> impl IntoView {
         action.version().get();
         match action.value().get() {
             Some(Ok(_)) => set_login_result.set(String::from("Login Successful")),
-            Some(Err(ServerFnError::ServerError(e))) => set_login_result.set(e.to_string()),
+            Some(Err(e)) => set_login_result.set(e.to_string()),
             _ => (),
         };
     });

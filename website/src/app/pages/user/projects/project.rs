@@ -223,10 +223,8 @@ fn SectionNav(
 pub mod server_fns {
     use crate::models::Project;
     use common::ProjectSlugStr;
-    use leptos::prelude::ServerFnError;
     use leptos::server;
-
-
+    use crate::AppResult;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use common::permission::Permission;
@@ -235,7 +233,7 @@ pub mod server_fns {
     #[server]
     pub async fn get_project(
         project_slug: ProjectSlugStr,
-    ) -> Result<Project, ServerFnError> {
+    ) -> AppResult<Project> {
         Ok(
             crate::security::permission::ssr::handle_project_permission_request(
                 project_slug,

@@ -1,11 +1,11 @@
-use std::str::FromStr;
 use common::SlugParseError;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 #[cfg(feature = "ssr")]
 use axum_session::SessionError;
-use leptos::prelude::{ServerFnError};
+use leptos::prelude::{FromServerFnError, ServerFnErrorErr};
+use leptos::server_fn::codec::JsonEncoding;
 #[cfg(feature = "ssr")]
 use sqlx::migrate::MigrateError;
 use validator::{ValidationError, ValidationErrors};
@@ -26,104 +26,33 @@ pub fn hydrate() {
 }
 
 pub type AppResult<T> = Result<T, AppError>;
-pub type ServerFnResult<T> = Result<T, ServerFnError<MyServerFnError>>;
+pub type ServerFnResult<T> = Result<T, AppError>;
 
 
-#[derive(Debug, Clone, Deserialize, Serialize, Error)]
-pub enum MyServerFnError {
-    #[error("ServerFnError {0}")]
-    InternalError(String),
-    #[error("ValidationError {0}")]
-    ValidationError(ValidationError),
-    #[error("ValidationErrors {0}")]
-    ValidationErrors(ValidationErrors),
-    #[error("SlugError {0}")]
-    SlugError(SlugParseError),
-    #[error("Unauthorized Project Access")]
-    UnauthorizedProjectAccess,
-    #[error("Unauthorized Project Action")]
-    UnauthorizedProjectAction,
-    #[error("Unauthorized Auth Access")]
-    UnauthorizedAuthAccess,
-    #[error("Project not found")]
-    ProjectNotFound,
-    #[error("Invalid Csrf")]
-    InvalidCsrf,
-    #[error("Invalid credentials")]
-    InvalidCredentials,
-    #[error("Custom {0}")]
-    Custom(String),
-}
 
 
-impl FromStr for MyServerFnError {
-    type Err = MyServerFnError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(|e| {
-            MyServerFnError::Custom(format!("Failed to parse MyServerFnError: {}", e))
-        })
-    }
-}
-
-impl From<AppError> for ServerFnError<MyServerFnError>{
-    fn from(value: AppError) -> Self {
-        ServerFnError::WrappedServerError(match value{
-            #[cfg(feature = "ssr")]
-            AppError::RequestError(e) => MyServerFnError::InternalError(e.to_string()),
-            #[cfg(feature = "ssr")]
-            AppError::SqlxError(e) => MyServerFnError::InternalError(e.to_string()),
-            #[cfg(feature = "ssr")]
-            AppError::MigrateError(_) => MyServerFnError::InternalError(String::new()),
-            #[cfg(feature = "ssr")]
-            AppError::DotEnv(_) => MyServerFnError::InternalError(String::new()),
-            #[cfg(feature = "ssr")]
-            AppError::SessionError(_) => MyServerFnError::InternalError(String::new()),
-            #[cfg(feature = "ssr")]
-            AppError::AddrParse(_) => MyServerFnError::InternalError(String::new()),
-            AppError::GlooNet(e) => MyServerFnError::InternalError(e.to_string()),
-            AppError::PoolNotFound => MyServerFnError::InternalError(String::from("Pool not found")),
-            AppError::ServerVarsNotFound => MyServerFnError::InternalError(String::from("Server Vars not found")),
-            AppError::RateLimiterNotFound => MyServerFnError::InternalError(String::from("Rate Limiter not found")),
-            AppError::AuthNotFound => MyServerFnError::InternalError(String::from("Auth not found")),
-            AppError::PermissionsNotFound => MyServerFnError::InternalError(String::from("Permissions not found")),
-            AppError::InvalidProjectSlug => MyServerFnError::InternalError(String::from("Invalid Project Slug")),
-            AppError::ParseSlug(e) => MyServerFnError::SlugError(e),
-            AppError::ValidationError(e) =>MyServerFnError::ValidationError(e),
-            AppError::ValidationErrors(e) => MyServerFnError::ValidationErrors(e),
-            AppError::UnauthorizedAuthAccess => MyServerFnError::UnauthorizedAuthAccess,
-            AppError::UnauthorizedProjectAccess => MyServerFnError::UnauthorizedProjectAccess,
-            AppError::UnauthorizedProjectAction => MyServerFnError::UnauthorizedProjectAction,
-            AppError::ProjectNotFound => MyServerFnError::ProjectNotFound,
-            AppError::InvalidCsrf => MyServerFnError::InvalidCsrf,
-            AppError::InvalidCredentials => MyServerFnError::InvalidCredentials
-        })
-    }
-}
-
-
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Deserialize, Serialize, Clone)]
 pub enum AppError {
     #[cfg(feature = "ssr")]
     #[error("Reqwuest error {0}")]
-    RequestError(#[from] reqwest::Error),
+    RequestError(String),
     #[cfg(feature = "ssr")]
     #[error("Sqlx error {0}")]
-    SqlxError(#[from] sqlx::Error),
+    SqlxError(String),
     #[cfg(feature = "ssr")]
     #[error("Migrate error {0}")]
-    MigrateError(#[from] MigrateError),
+    MigrateError(String),
     #[cfg(feature = "ssr")]
     #[error("DotEnv error: {0}")]
-    DotEnv(#[from] dotenvy::Error),
+    DotEnv(String),
     #[cfg(feature = "ssr")]
     #[error("Session error: {0}")]
-    SessionError(#[from] SessionError),
+    SessionError(String ),
     #[cfg(feature = "ssr")]
     #[error("AddrParse error: {0}")]
-    AddrParse(#[from] std::net::AddrParseError),
+    AddrParse(String),
     #[error("gloo_net error: {0}")]
-    GlooNet(#[from] gloo_net::Error),
+    GlooNet(String),
     #[error("Pool not found")]
     PoolNotFound,
     #[error("Server vars not found")]
@@ -142,6 +71,8 @@ pub enum AppError {
     ValidationError(#[from] ValidationError),
     #[error("Validation Errors {0}")]
     ValidationErrors(#[from] ValidationErrors),
+    #[error("ServerFnError {0}")]
+    ServerFnError(#[from] ServerFnErrorErr),
     #[error("Unauthorized Auth Access")]
     UnauthorizedAuthAccess,
     #[error("Unauthorized Project Access")]
@@ -156,6 +87,38 @@ pub enum AppError {
     InvalidCredentials,
 }
 
+macro_rules! impl_from_to_string {
+    ($res:path, $from:ty) => {
+        impl From<$from> for AppError {
+            fn from(value: $from) -> Self {
+                $res(value.to_string())
+            }
+        }
+    };
+}
+
+impl_from_to_string!(AppError::GlooNet, gloo_net::Error);
+#[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::AddrParse, std::net::AddrParseError);
+#[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::SessionError, SessionError);
+#[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::MigrateError, MigrateError);
+#[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::DotEnv, dotenvy::Error);
+#[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::RequestError, reqwest::Error);
+#[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::SqlxError, sqlx::Error);
+
+
+
+impl FromServerFnError for AppError{
+    type Encoder = JsonEncoding;
+    fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
+        value.into()
+    }
+}
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

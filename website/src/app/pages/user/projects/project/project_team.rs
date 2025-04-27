@@ -14,7 +14,7 @@ use leptos::prelude::{
     expect_context, ActionForm, ClassAttribute, For, Get, IntoMaybeErased, Resource, ServerAction,
     Show, Suspend,
 };
-use leptos::prelude::{signal, AddAnyAttr, Effect, Read, ServerFnError, Set, Signal, Transition};
+use leptos::prelude::{signal, AddAnyAttr, Effect, Read, Set, Signal, Transition};
 use leptos::{component, view};
 use strum::IntoEnumIterator;
 
@@ -62,7 +62,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                     Some(Ok(_)) => {
                                         set_add_member_result.set(String::from("Member added"))
                                     }
-                                    Some(Err(ServerFnError::ServerError(e))) => {
+                                    Some(Err(e)) => {
                                         set_add_member_result.set(e.to_string())
                                     }
                                     _ => {}
@@ -222,10 +222,9 @@ pub fn ProjectTeam() -> impl IntoView {
 pub mod server_fns {
     use common::permission::Permission;
     use common::{ProjectId, ProjectSlugStr, UserId};
-    use leptos::prelude::ServerFnError;
     use leptos::server;
     use serde::{Deserialize, Serialize};
-
+    use crate::AppResult;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
          use crate::security::utils::ssr::get_auth_session_user_id;
@@ -242,7 +241,7 @@ pub mod server_fns {
         csrf: String,
         project_slug: ProjectSlugStr,
         user_id: UserId,
-    ) -> Result<(), ServerFnError> {
+    ) -> AppResult<()> {
         Ok(handle_project_permission_request(
             project_slug,
             Permission::Owner,
@@ -284,7 +283,7 @@ pub mod server_fns {
         project_slug: ProjectSlugStr,
         user_id: UserId,
         permission: Permission,
-    ) -> Result<(), ServerFnError> {
+    ) -> AppResult<()> {
         Ok(handle_project_permission_request(
             project_slug,
             Permission::Owner,
@@ -335,7 +334,7 @@ pub mod server_fns {
         project_slug: ProjectSlugStr,
         email: String,
         permission: Permission,
-    ) -> Result<(), ServerFnError> {
+    ) -> AppResult<()> {
         Ok(handle_project_permission_request(
             project_slug,
             Permission::Owner,
@@ -385,7 +384,7 @@ pub mod server_fns {
     #[server]
     pub async fn get_project_team(
         project_slug: ProjectSlugStr,
-    ) -> Result<ProjectTeamResponse, ServerFnError> {
+    ) -> AppResult<ProjectTeamResponse> {
         Ok(handle_project_permission_request(
             project_slug,
             Permission::Read,

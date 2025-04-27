@@ -24,7 +24,7 @@ use leptos::prelude::{Callback, Signal};
 use leptos::server::Resource;
 use leptos::{component, view, Params};
 use leptos_router::components::A;
-use leptos_router::hooks::{use_params};
+use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::ParamsError;
 use reactive_stores::Store;
 
@@ -184,6 +184,14 @@ pub fn ProjectFiles() -> impl IntoView {
                                             })
                                     }),
                             );
+
+                            Effect::new(move |_|{
+                                if file_list.read().as_ref().is_none(){
+                                    let navigate = use_navigate();
+                                    navigate(&format!("/user/projects/{}/files/root/", slug()), Default::default());
+                                }
+
+                            });
 
                             view! {
                                 <div class="w-64 md:w-80 flex-shrink-0 border-r border-white/10 overflow-y-auto">

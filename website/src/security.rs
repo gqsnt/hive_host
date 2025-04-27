@@ -1,6 +1,5 @@
-use leptos::prelude::ServerFnError;
 use leptos::server;
-
+use crate::AppResult;
 use crate::models::User;
 
 pub mod login;
@@ -9,7 +8,7 @@ pub mod signup;
 pub mod utils;
 
 #[server]
-pub async fn logout() -> Result<(), ServerFnError> {
+pub async fn logout() -> AppResult<()>{
     let auth = crate::ssr::auth(false)?;
     auth.logout_user();
     leptos_axum::redirect("/");
@@ -17,7 +16,7 @@ pub async fn logout() -> Result<(), ServerFnError> {
 }
 
 #[server]
-pub async fn get_user() -> Result<User, ServerFnError> {
+pub async fn get_user() -> AppResult<User> {
     use crate::AppError;
     let auth = crate::ssr::auth(true)?;
     if let Some(user) = auth.current_user {
