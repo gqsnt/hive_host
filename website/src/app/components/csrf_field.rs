@@ -1,22 +1,26 @@
-use crate::app::pages::CsrfValue;
-use leptos::prelude::ServerFnError;
-use leptos::prelude::{expect_context, Signal, Suspend, Suspense};
+use leptos::prelude::{Get};
+use leptos::prelude::{ServerFnError};
+use leptos::prelude::{expect_context, Signal, Suspense};
 use leptos::{component, server, view, IntoView};
+use reactive_stores::Store;
+use serde::{Deserialize, Serialize};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+
+pub type CsrfSignal = Signal<Option<CsrfValue>>;
 
 #[component]
 pub fn CSRFField() -> impl IntoView {
-    let csrf_value = expect_context::<Signal<CsrfValue>>();
-
+    let global_state:Store<GlobalState> = expect_context();
     view! {
-        <Suspense fallback=move || {
-            view! { <div></div> }
-        }>
-            {move || Suspend::new(async move {
-                view! { <input type="hidden" name="csrf" value=csrf_value().0 /> }
-            })}
-        </Suspense>
+        <input
+            type="hidden"
+            name="csrf"
+            value=move || global_state.csrf().get().unwrap_or_default()
+        />
     }
 }
+
+
 
 #[server]
 pub async fn generate_csrf() -> Result<String, ServerFnError> {
@@ -30,3 +34,9 @@ pub async fn generate_csrf() -> Result<String, ServerFnError> {
         server_vars.csrf_server.to_secret(),
     ))
 }
+
+
+
+#[derive(Default, Deserialize, Clone, Debug, Serialize)]
+pub struct CsrfValue(pub String);
+

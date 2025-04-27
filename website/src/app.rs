@@ -10,8 +10,8 @@ use crate::app::pages::user::projects::project::project_dashboard::ProjectDashbo
 use crate::app::pages::user::projects::project::project_files::ProjectFiles;
 use crate::app::pages::user::projects::project::project_settings::ProjectSettings;
 use crate::app::pages::user::projects::project::project_team::ProjectTeam;
-use crate::app::pages::user::projects::project::ProjectPage;
-use crate::app::pages::user::projects::ProjectsPage;
+use crate::app::pages::user::projects::project::{ProjectPage, ProjectSlugSignal};
+use crate::app::pages::user::projects::{project, ProjectsPage};
 use crate::app::pages::user::user_settings::UserSettingsPage;
 use crate::app::pages::user::UserPage;
 use crate::models::User;
@@ -19,10 +19,10 @@ use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::components::ParentRoute;
-use leptos_router::{
-    components::{Route, Router, Routes},
-    path, SsrMode,
-};
+use leptos_router::{components::{Route, Router, Routes}, path, MatchNestedRoutes, SsrMode};
+use reactive_stores::Store;
+use serde::{Deserialize, Serialize};
+use crate::app::pages::GlobalState;
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -42,12 +42,13 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
-pub type ReadUserSignal = ReadSignal<User>;
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
     #[cfg(feature = "ssr")]
     crate::security::utils::ssr::set_headers();
+    
+    provide_context(Store::new(GlobalState::default()));
 
     // Provides context that manages stylesheets, titles, meta tags, etc.
 
@@ -66,9 +67,9 @@ pub fn App() -> impl IntoView {
                     <div class="h-full">
                         <Routes fallback=|| "Page not found.">
                             <Route path=path!("") view=HomePage />
-                            <Route path=path!("signup") view=move || view! { <SignupPage /> } />
+                            <Route path=path!("signup") view=SignupPage />
 
-                            <Route path=path!("login") view=move || view! { <LoginPage /> } />
+                            <Route path=path!("login") view=LoginPage />
                             <UserRoutes />
                         </Routes>
                     </div>
@@ -81,10 +82,10 @@ pub fn App() -> impl IntoView {
 #[component(transparent)]
 fn UserRoutes() -> impl MatchNestedRoutes + Clone {
     view! {
-        <ParentRoute path=path!("user") view=move || view! { <UserPage /> }>
+        <ParentRoute path=path!("user") view=UserPage>
             <Route path=path!("") view=DashboardPage />
             <Route path=path!("settings") view=UserSettingsPage />
-            <ProjectRoutes />
+            <ProjectsRoutes />
 
         </ParentRoute>
     }
@@ -92,7 +93,7 @@ fn UserRoutes() -> impl MatchNestedRoutes + Clone {
 }
 
 #[component(transparent)]
-fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
+fn ProjectsRoutes() -> impl MatchNestedRoutes + Clone {
     let create_project_action = ServerAction::<CreateProject>::new();
     view! {
         <ParentRoute
@@ -100,16 +101,28 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
             view=move || view! { <ProjectsPage create_project_action /> }
         >
             <Route path=path!("") view=move || view! { <NewProjectPage create_project_action /> } />
-            <ParentRoute path=path!(":project_slug") view=ProjectPage ssr=SsrMode::Async>
-                <Route path=path!("") view=ProjectDashboard />
-                <Route path=path!("settings") view=ProjectSettings />
-                <Route path=path!("files") view=ProjectFiles />
-                <Route path=path!("team") view=ProjectTeam />
-            </ParentRoute>
-
+            <ProjectRoutes />
         </ParentRoute>
     }
     .into_inner()
+}
+
+#[component(transparent)]
+fn ProjectRoutes()-> impl MatchNestedRoutes + Clone {
+    // let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
+    // let project_resource = Resource::new(
+    //     move || project_slug_signal(),
+    //     move |project_slug| project::server_fns::get_project(project_slug.0),
+    // );
+    view! {
+        <ParentRoute path=path!(":project_slug") view=ProjectPage>
+            <Route path=path!("") view=ProjectDashboard />
+            <Route path=path!("settings") view=ProjectSettings />
+            <Route path=path!("files") view=ProjectFiles />
+            <Route path=path!("team") view=ProjectTeam />
+        </ParentRoute>
+    }.into_inner()
+    
 }
 
 #[server]
@@ -118,6 +131,10 @@ pub async fn get_server_url() -> Result<String, ServerFnError> {
     let server_vars = server_vars()?;
     Ok(server_vars.server_url.to_string())
 }
+
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HostingUrl(pub String);
 
 #[server]
 pub async fn get_hosting_url() -> Result<String, ServerFnError> {

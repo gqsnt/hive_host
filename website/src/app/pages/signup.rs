@@ -1,17 +1,20 @@
-use crate::app::components::csrf_field::CSRFField;
-use crate::app::pages::include_csrf;
+use crate::app::components::csrf_field::{generate_csrf, CSRFField};
 use crate::security::signup::Signup;
-use leptos::prelude::AddAnyAttr;
+use leptos::prelude::{expect_context, AddAnyAttr, OnceResource, Suspend, Suspense, Update};
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, Effect, ElementChild, Get, ServerFnError, Set};
 use leptos::prelude::{ActionForm, ClassAttribute, ServerAction};
 use leptos::{component, view, IntoView};
+use leptos::context::provide_context;
 use leptos_router::components::A;
+use reactive_stores::Store;
+use crate::app::pages::GlobalState;
 
 #[component]
 pub fn SignupPage() -> impl IntoView {
-    include_csrf();
+    let global_store:Store<GlobalState>=  expect_context();
+    let csrf_resource= OnceResource::new(generate_csrf());
 
     let action = ServerAction::<Signup>::new();
     let (signup_result, set_signup_result) = signal(" ".to_string());
@@ -27,6 +30,22 @@ pub fn SignupPage() -> impl IntoView {
     });
 
     view! {
+        <Suspense fallback=move || {
+            view! {}
+        }>
+            {move || Suspend::new(async move {
+                let csrf = csrf_resource.await;
+                match csrf {
+                    Ok(csrf) => {
+                        global_store.update(|inner| inner.csrf = Some(csrf));
+                    }
+                    Err(_) => {
+                        global_store.update(|inner| inner.csrf = None);
+                    }
+                }
+                view! {}
+            })}
+        </Suspense>
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">
                 <img

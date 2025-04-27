@@ -1,18 +1,21 @@
-use crate::app::components::csrf_field::CSRFField;
-use crate::app::pages::include_csrf;
+use crate::app::components::csrf_field::{generate_csrf, CSRFField, CsrfValue};
 use crate::security::login::Login;
-use leptos::prelude::ClassAttribute;
+use leptos::prelude::{expect_context, ClassAttribute, OnceResource, Suspend, Suspense, Update};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, AddAnyAttr, Effect, Get, ServerFnError, Set};
 use leptos::prelude::{ActionForm, ServerAction};
 use leptos::{component, view, IntoView};
+use leptos::context::provide_context;
 use leptos_router::components::A;
+use reactive_stores::Store;
+use crate::app::pages::GlobalState;
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
-    include_csrf();
+        let global_store:Store<GlobalState>=  expect_context();
+    let csrf_resource= OnceResource::new(generate_csrf());
     let action = ServerAction::<Login>::new();
 
     let (login_result, set_login_result) = signal(" ".to_string());
@@ -26,6 +29,22 @@ pub fn LoginPage() -> impl IntoView {
     });
 
     view! {
+        <Suspense fallback=move || {
+            view! {}
+        }>
+            {move || Suspend::new(async move {
+                let csrf = csrf_resource.await;
+                match csrf {
+                    Ok(csrf) => {
+                        global_store.update(|inner| inner.csrf = Some(csrf));
+                    }
+                    Err(_) => {
+                        global_store.update(|inner| inner.csrf = None);
+                    }
+                }
+                view! {}
+            })}
+        </Suspense>
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">
                 <img
@@ -40,9 +59,8 @@ pub fn LoginPage() -> impl IntoView {
 
             <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
                 <ActionForm action=action>
-                    {move || {
-                        view! { <CSRFField /> }
-                    }} <div>
+                    <CSRFField />
+                    <div>
                         <label class="form-label">
                             Email address <div class="mt-2">
                                 <input
@@ -109,11 +127,13 @@ pub fn LoginPage() -> impl IntoView {
                                 </div>
                             </div>
                         </label>
-                    </div> <div class="mt-2">
+                    </div>
+                    <div class="mt-2">
                         <button type="submit" class="btn btn-primary">
                             Sign in
                         </button>
-                    </div> <div>{login_result}</div>
+                    </div>
+                    <div>{login_result}</div>
                 </ActionForm>
 
                 <p class="mt-10 text-center text-sm/6 text-gray-500">

@@ -1,12 +1,12 @@
 use crate::api::ServerProjectActionFront;
-use crate::app::pages::CsrfValue;
+use crate::app::components::csrf_field::{CsrfSignal, CsrfValue};
 use common::server_project_action::io_action::dir_action::{DirAction, LsElement};
 use common::server_project_action::io_action::file_action::FileAction;
 use common::ProjectSlugStr;
 use leptos::callback::Callback;
 use leptos::either::{Either, EitherOf3};
 use leptos::html::Input;
-use leptos::prelude::{ElementChild, For};
+use leptos::prelude::{ElementChild, For, Read, ReadSignal, Show, Suspend, Suspense};
 use leptos::prelude::{expect_context, CustomAttribute};
 use leptos::prelude::{signal, NodeRef, NodeRefAttribute};
 use leptos::prelude::{Callable, Get, IntoMaybeErased, Transition};
@@ -15,20 +15,21 @@ use leptos::prelude::{
 };
 use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
+use crate::app::pages::user::projects::project::ProjectSlugSignal;
 
 #[component]
 pub fn ProjectFilesSidebar(
-    file_list_resource: Resource<Result<Vec<LsElement>, ServerFnError>>,
+    file_list: Signal<Option<Vec<LsElement>>>,
     current_path: Signal<String>,
-    slug: Signal<ProjectSlugStr>,
+    slug: Signal<String>,
     on_go_up: Callback<()>,
     on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
+    csrf_signal:Signal<Option<String>>
 ) -> impl IntoView {
     let folder_name_ref: NodeRef<Input> = NodeRef::new();
     let file_name_ref: NodeRef<Input> = NodeRef::new();
-    let csrf_value = expect_context::<Signal<CsrfValue>>();
 
     let on_folder_create_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
@@ -43,7 +44,7 @@ pub fn ProjectFilesSidebar(
             }
             .into(),
             None,
-            Some(csrf_value().0),
+            Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default()),
         ));
     };
 
@@ -60,7 +61,7 @@ pub fn ProjectFilesSidebar(
             }
             .into(),
             None,
-            Some(csrf_value().0),
+            Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default()),
         ));
     };
 
@@ -149,12 +150,12 @@ pub fn ProjectFilesSidebar(
             <ProjectFilesSidebarList
                 slug=slug
                 current_path=current_path
-                file_list_resource=file_list_resource
+                file_list=file_list
                 on_go_up=on_go_up
                 on_navigate_dir=on_navigate_dir
                 on_select_file=on_select_file
                 server_project_action=server_project_action
-                csrf_value=csrf_value
+                csrf_signal
             />
 
         </div>
@@ -163,10 +164,10 @@ pub fn ProjectFilesSidebar(
 
 #[component]
 pub fn ProjectFilesSidebarList(
-    csrf_value: Signal<CsrfValue>,
-    slug: Signal<ProjectSlugStr>,
+    csrf_signal: Signal<Option<String>>,
+    slug: Signal<String>,
     current_path: Signal<String>,
-    file_list_resource: Resource<Result<Vec<LsElement>, ServerFnError>>,
+    file_list: Signal<Option<Vec<LsElement>>>,
     on_go_up: Callback<()>,
     on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
@@ -174,102 +175,88 @@ pub fn ProjectFilesSidebarList(
 ) -> impl IntoView {
     view! {
         <div class="flex-grow overflow-y-auto -mr-4 pr-4">
-            <Transition fallback=move || {
-                view! { <div>Loading...</div> }
-            }>
-                {move || {
-                    file_list_resource
-                        .get()
-                        .map(|result| match result {
-                            Ok(ls_elements) => {
-                                Either::Left({
-                                    if ls_elements.is_empty() && current_path.get() == "." {
-                                        EitherOf3::A(())
-                                    } else if ls_elements.is_empty() {
-                                        EitherOf3::B(
-                                            view! {
-                                                <div class="px-2 py-1.5 text-sm text-gray-500 italic">
-                                                    "Folder is empty"
-                                                </div>
-                                            },
-                                        )
-                                    } else {
-                                        EitherOf3::C(
-                                            view! {
-                                                {move || {
-                                                    (current_path.get() != ".")
-                                                        .then(|| {
-                                                            view! {
-                                                                <div>
-                                                                    <button
-                                                                        class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
-                                                                        on:click=move |_| {
-                                                                            on_go_up.try_run(());
-                                                                        }
-                                                                    >
-                                                                        <svg
-                                                                            xmlns="http://www.w3.org/2000/svg"
-                                                                            fill="none"
-                                                                            viewBox="0 0 24 24"
-                                                                            stroke-width="1.5"
-                                                                            stroke="currentColor"
-                                                                            class="w-5 h-5 flex-shrink-0"
-                                                                        >
-                                                                            <path
-                                                                                stroke-linecap="round"
-                                                                                stroke-linejoin="round"
-                                                                                d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
-                                                                            />
-                                                                        </svg>
-                                                                        <span>".."</span>
-                                                                    </button>
-                                                                </div>
-                                                            }
-                                                        })
-                                                }}
-                                                <ul class="space-y-1">
-                                                    <For
-                                                        each=move || ls_elements.clone()
-                                                        key=|item| item.name.clone()
-                                                        let(item)
-                                                    >
-                                                        <ProjectFilesSidebarItem
-                                                            slug=slug
-                                                            current_path=current_path
-                                                            item=item
-                                                            server_project_action=server_project_action
-                                                            on_navigate_dir=on_navigate_dir
-                                                            on_select_file=on_select_file
-                                                            csrf_value=csrf_value
-                                                        />
-                                                    </For>
-                                                </ul>
-                                            },
-                                        )
-                                    }
-                                })
+            <Show
+                when=move || file_list.get().is_some()
+                fallback=move || {
+                    view! {
+                        <div class="px-2 py-1.5 text-sm text-gray-500 italic">"Loading..."</div>
+                    }
+                }
+            >
+                {
+                    let items = file_list.get().unwrap_or_default();
+                    let is_empty = items.is_empty();
+                    view! {
+                        <Show
+                            when=move || !is_empty
+                            fallback=move || {
+                                view! {
+                                    <div class="px-2 py-1.5 text-sm text-gray-500 italic">
+                                        "Folder is empty"
+                                    </div>
+                                }
                             }
-                            Err(e) => {
-                                Either::Right(
-                                    // Collect into a view
+                        >
+                            {(current_path.get() != ".")
+                                .then(|| {
                                     view! {
-                                        <div class="px-2 py-1.5 text-sm text-red-400">
-                                            "Error: " {e.to_string()}
+                                        <div>
+                                            <button
+                                                class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
+                                                on:click=move |_| {
+                                                    on_go_up.try_run(());
+                                                }
+                                            >
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke-width="1.5"
+                                                    stroke="currentColor"
+                                                    class="w-5 h-5 flex-shrink-0"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
+                                                    />
+                                                </svg>
+                                                <span>".."</span>
+                                            </button>
                                         </div>
-                                    },
-                                )
-                            }
-                        })
-                }}
-            </Transition>
+                                    }
+                                })}
+                            <ul class="space-y-1">
+                                {items
+                                    .iter()
+                                    .map(|item| {
+                                        let item = item.clone();
+                                        view! {
+                                            <ProjectFilesSidebarItem
+                                                csrf_signal
+                                                slug=slug
+                                                current_path=current_path
+                                                item=item
+                                                server_project_action=server_project_action
+                                                on_navigate_dir=on_navigate_dir
+                                                on_select_file=on_select_file
+                                            />
+                                        }
+                                    })
+                                    .collect_view()}
+                            </ul>
+                        </Show>
+                    }
+                }
+            </Show>
         </div>
     }
 }
 
 #[component]
 pub fn ProjectFilesSidebarItem(
-    csrf_value: Signal<CsrfValue>,
-    slug: Signal<ProjectSlugStr>,
+    csrf_signal: Signal<Option<String>>,
+    slug: Signal<String>,
     current_path: Signal<String>,
     item: LsElement,
     server_project_action: ServerProjectActionFront,
@@ -288,7 +275,7 @@ pub fn ProjectFilesSidebarItem(
         } else {
             FileAction::Delete { path }.into()
         };
-        server_project_action.dispatch((slug(), action, None, Some(csrf_value().0)));
+        server_project_action.dispatch((slug(), action, None, Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default())));
     };
 
     let on_rename_item_submit = move |ev: SubmitEvent| {
@@ -311,7 +298,7 @@ pub fn ProjectFilesSidebarItem(
             }
             .into()
         };
-        server_project_action.dispatch((slug(), action, None, Some(csrf_value().0)));
+        server_project_action.dispatch((slug(), action, None, Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default())));
         set_is_renaming_item(false)
     };
 

@@ -1,6 +1,8 @@
 use common::permission::Permission;
 use common::{ProjectId, ProjectSlug, Slug, UserId, UserSlug};
 use serde::{Deserialize, Serialize};
+use reactive_stores::Store;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::Type))]
@@ -14,7 +16,7 @@ pub enum RoleType {
     Admin,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Store)]
 pub struct User {
     pub id: UserId,
     pub email: String,
@@ -47,7 +49,7 @@ impl Default for User {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Store)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Project {
     pub id: ProjectId,

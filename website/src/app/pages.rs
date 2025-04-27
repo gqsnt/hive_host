@@ -1,25 +1,23 @@
 use leptos::context::provide_context;
-use leptos::prelude::{Get, OnceResource, Signal};
+use leptos::prelude::{ClassAttribute, Get, OnceResource, ServerFnError, Signal};
+use leptos::prelude::codee::{Decoder, Encoder};
+use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use common::{ProjectSlug, UserSlug};
+use crate::app::components::csrf_field::generate_csrf;
+use crate::models::{Project, User};
 
 pub mod home;
 pub mod login;
 pub mod signup;
 pub mod user;
 
-#[derive(Default, Deserialize, Clone, Debug, Serialize)]
-pub struct CsrfValue(pub String);
 
-pub fn include_csrf() {
-    let csrf = OnceResource::new_blocking(async {
-        crate::app::components::csrf_field::generate_csrf().await
-    });
-    let csrf_signal = Signal::derive(move || {
-        CsrfValue(
-            csrf.get()
-                .map(|csrf| csrf.unwrap_or_default())
-                .unwrap_or_default(),
-        )
-    });
-    provide_context(csrf_signal);
+#[derive(Default, Clone, Debug, Store)]
+pub struct GlobalState {
+    pub csrf: Option<String>,
+    pub user:Option<(UserSlug, User)>,
+    pub project:Option<(ProjectSlug, Project)>,
+    pub hosting_url:Option<String>,
 }

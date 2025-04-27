@@ -1,13 +1,11 @@
 use crate::api::get_action_server_project_action;
-use crate::app::pages::CsrfValue;
+use crate::app::components::csrf_field::{CsrfSignal, CsrfValue};
 use common::server_project_action::io_action::file_action::FileAction;
 use common::server_project_action::ServerProjectActionResponse;
 use common::ProjectSlugStr;
 use leptos::either::Either;
 use leptos::html::Textarea;
-use leptos::prelude::{
-    expect_context, signal, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute,
-};
+use leptos::prelude::{expect_context, signal, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, Read, ReadSignal};
 use leptos::prelude::{ClassAttribute, Get, Resource, Signal, Transition};
 use leptos::prelude::{GetUntracked, OnAttribute};
 use leptos::prelude::{IntoMaybeErased, ServerFnError, Suspend};
@@ -18,8 +16,8 @@ use web_sys::MouseEvent;
 pub fn FileContentView(
     selected_file: Signal<Option<String>>,
     slug: Signal<ProjectSlugStr>,
+    csrf_signal:Signal<Option<String>>,
 ) -> impl IntoView {
-    let csrf_value = expect_context::<Signal<CsrfValue>>();
 
     let file_content_resource = Resource::new(
         move || (selected_file.get(), slug.get()),
@@ -87,7 +85,13 @@ pub fn FileContentView(
                                                         }
                                                             .into(),
                                                         Some(content_to_save),
-                                                        Some(csrf_value().0),
+                                                        Some(
+                                                            csrf_signal
+                                                                .read()
+                                                                .as_ref()
+                                                                .map(|csrf| csrf.clone())
+                                                                .unwrap_or_default(),
+                                                        ),
                                                     ));
                                             };
                                             Either::Left(

@@ -1,4 +1,5 @@
-use crate::app::components::select::FormSelect;
+use leptos::prelude::{OnAttribute, OnTargetAttribute, PropAttribute};
+use crate::app::components::select::{FormSelectIcon};
 
 use leptos::prelude::signal;
 use leptos::prelude::Get;
@@ -12,6 +13,7 @@ use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{ClassAttribute, Resource, Suspend, Suspense};
 use leptos::server::ServerAction;
 use leptos::{component, view, IntoView};
+use leptos::leptos_dom::log;
 use leptos_router::components::{Outlet, A};
 use leptos_router::hooks::use_location;
 
@@ -24,101 +26,108 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
         move || create_project_action.version().get(),
         move |_| server_fns::get_projects(),
     );
+    
 
-    let projects = move || {
-        projects
-            .get()
-            .map(|p| p.unwrap_or_default())
-            .unwrap_or_default()
-    };
-
-    let get_project_slug = || {
-        let location = use_location().pathname.get().clone();
-        let split = location.split("/").collect::<Vec<_>>();
-        // find projets string and return next or "0"
+    let get_project_slug = move |path:String| {
+        let split = path.split("/").collect::<Vec<_>>();
         let mut found = false;
         for s in split.iter() {
             if found {
-                return s.to_string();
+                return Some(s.to_string());
             }
             if s.eq(&"projects") {
                 found = true;
             }
         }
-        "0".to_string()
+        None
     };
-    let (project_id, set_project_id) = signal(get_project_slug());
+    let location_path = use_location().pathname.get();
+    let (project_id, set_project_id) = signal(get_project_slug(location_path));
 
-    let handle_select_project = move |value: String| {
+    let handle_select_project = move |value: Option<String>| {
         let navigate = leptos_router::hooks::use_navigate();
         set_project_id(value.clone());
-        match value.as_str() {
-            "0" => navigate("/user/projects", Default::default()),
-            _ => navigate(
-                format!("/user/projects/{value}").as_str(),
+        match value {
+            None => navigate("/user/projects", Default::default()),
+            Some(project_slug) => navigate(
+                format!("/user/projects/{project_slug}").as_str(),
                 Default::default(),
             ),
         };
     };
     Effect::new(move || {
-        let project_id = get_project_slug();
+        let location = use_location().pathname.get();
+        let project_id = get_project_slug(location);
         set_project_id(project_id.clone());
-    });
-    let select_project_callback = Callback::new(move |e| {
-        handle_select_project(e);
     });
 
     view! {
         <div>
             <h2>"Projects"</h2>
             <div class="mt-2 mb-6 flex items-center content-center space-x-2 border-b border-white/10 pb-6">
-                <FormSelect name="project_id".to_string() on_change=select_project_callback>
-                    <option value="0">"New Project"</option>
-                    <Suspense fallback=|| {
-                        view! { <option value="0">"No Projects Found"</option> }
-                    }>
-                        {move || Suspend::new(async move {
-                            let projects = projects();
-                            if projects.is_empty() {
-                                Either::Right(
-                                    view! { <option value="0">"No Projects Found"</option> },
-                                )
+                <div class="relative">
+                    <select
+                        name="project_id"
+                        class="form-select"
+                        prop:value=move || project_id.get().unwrap_or_default()
+                        on:change:target=move |e| {
+                            let target_value = e.target().value();
+                            if target_value == "" {
+                                handle_select_project(None);
                             } else {
-                                Either::Left(
-                                    view! {
-                                        <For
-                                            each=move || projects.clone()
-                                            key=|project| project.id
-                                            children=move |project| {
-                                                let project_slug = project.get_slug().to_str();
-                                                view! {
-                                                    <option
-                                                        value=project_slug.clone()
-                                                        selected=move || project_id.get() == project_slug
-                                                    >
-                                                        {project.name}
-                                                    </option>
-                                                }
-                                            }
-                                        />
-                                    },
-                                )
+                                handle_select_project(Some(target_value));
                             }
-                        })}
+                        }
+                    >
+                        <option value="">Select a project</option>
 
-                    </Suspense>
+                        <Suspense fallback=move || {
+                            view! { <option>Loading ...</option> }
+                        }>
+                            {move || Suspend::new(async move {
+                                let projects = projects.await.unwrap_or_default();
+                                if projects.is_empty() {
+                                    return Either::Right(
+                                        view! { <option>Create a project</option> },
+                                    );
+                                } else {
+                                    return Either::Left(
+                                        view! {
+                                            <For
+                                                each=move || projects.clone()
+                                                key=move |project| project.id
+                                                children=move |project| {
+                                                    let project_slug = project.get_slug().to_str();
+                                                    view! {
+                                                        <option
+                                                            value=project_slug.clone()
+                                                            selected=move || {
+                                                                project_slug == project_id.get().unwrap_or_default()
+                                                            }
+                                                        >
+                                                            {project.name}
+                                                        </option>
+                                                    }
+                                                }
+                                            />
+                                        },
+                                    )
+                                }
+                            })}
+                        </Suspense>
 
-                </FormSelect>
-
-                <A
-                    attr:class=" rounded-md bg-indigo-500 p-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
-                    href="/user/projects"
-                    on:click=move |_| {
-                        set_project_id("0".to_string());
+                    </select>
+                    <FormSelectIcon />
+                </div>
+                <button
+                    class="btn btn-primary"
+                    on:click=move |e| {
+                        e.prevent_default();
+                        handle_select_project(None);
                     }
                 >
                     New Project
-                </A>
+                </button>
             </div>
             <Outlet />
         </div>

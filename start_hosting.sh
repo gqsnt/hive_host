@@ -1,0 +1,1 @@
+cargo build --bin hosting && sudo ./target/debug/hosting

@@ -4,7 +4,7 @@ pub mod project_files_sidebar;
 use crate::api::get_action_server_project_action;
 use crate::app::pages::user::projects::project::project_files::file_content_view::FileContentView;
 use crate::app::pages::user::projects::project::project_files::project_files_sidebar::ProjectFilesSidebar;
-use crate::app::pages::user::projects::project::MemoProjectParams;
+use crate::app::pages::user::projects::project::{MemoProjectParams, ProjectSlugSignal};
 use crate::app::IntoView;
 use crate::app::ServerFnError;
 
@@ -12,7 +12,7 @@ use common::server_project_action::io_action::dir_action::DirAction;
 use common::server_project_action::ServerProjectActionResponse;
 use leptos::either::Either;
 
-use leptos::prelude::ElementChild;
+use leptos::prelude::{ElementChild, Read, Suspend, Suspense};
 
 use leptos::prelude::{
     expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased, OnAttribute,
@@ -20,11 +20,22 @@ use leptos::prelude::{
 use leptos::prelude::{Callback, Signal};
 use leptos::server::Resource;
 use leptos::{component, view};
+use leptos::logging::log;
+use reactive_stores::Store;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 
 #[component]
 pub fn ProjectFiles() -> impl IntoView {
-    let params: MemoProjectParams = expect_context();
-    let slug = Signal::derive(move || params.get().unwrap().project_slug.clone());
+    let global_state:Store<GlobalState> = expect_context();
+
+    let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
+    let slug = Signal::derive(move ||
+        project_slug_signal.read().0.clone());
+
+    let csrf_signal =  Signal::derive(move || {
+        global_state.csrf().get()
+    });
+    
 
     let (current_path, set_current_path) = signal(".".to_string());
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
@@ -39,18 +50,14 @@ pub fn ProjectFiles() -> impl IntoView {
                 server_project_action.version().get(),
             )
         },
-        |(path, slug, _)| async {
-            match crate::api::get_action_server_project_action_inner(
+        |(path, slug, _)|  {
+            log!("Fetching file list for path: {}", path);
+            crate::api::get_action_server_project_action_inner(
                 slug,
                 DirAction::Ls { path }.into(),
                 None,
                 None,
             )
-            .await
-            {
-                Ok(ServerProjectActionResponse::Ls(files)) => Ok(files.inner),
-                _ => Err(ServerFnError::new("Invalid response")),
-            }
         },
     );
 
@@ -134,23 +141,51 @@ pub fn ProjectFiles() -> impl IntoView {
                     }}
                 </nav>
             </div>
+            <Suspense fallback=move || {
+                view! { Loading... }
+            }>
+                {move || {
+                    Suspend::new(async move {
+                        let file_list = Signal::derive(move || {
+                            file_list_resource
+                                .get()
+                                .map(|r| {
+                                    r.ok()
+                                        .map(|r| match r {
+                                            ServerProjectActionResponse::Ls(inner) => Some(inner.inner),
+                                            _ => None,
+                                        })
+                                        .flatten()
+                                })
+                                .flatten()
+                        });
+                        view! {
+                            <div class="flex flex-grow overflow-hidden">
+                                <div class="w-64 md:w-80 flex-shrink-0 border-r border-white/10 overflow-y-auto">
+                                    <ProjectFilesSidebar
+                                        csrf_signal
+                                        file_list=file_list
+                                        current_path=current_path.into()
+                                        slug=slug
+                                        on_go_up=Callback::new(move |_| go_up_one_level(()))
+                                        on_navigate_dir=handle_navigate_dir
+                                        on_select_file=handle_select_file
+                                        server_project_action=server_project_action
+                                    />
+                                </div>
+                                <div class="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
+                                    <FileContentView
+                                        csrf_signal
+                                        selected_file=selected_file.into()
+                                        slug=slug
+                                    />
+                                </div>
+                            </div>
+                        }
+                    })
+                }}
+            </Suspense>
 
-            <div class="flex flex-grow overflow-hidden">
-                <div class="w-64 md:w-80 flex-shrink-0 border-r border-white/10 overflow-y-auto">
-                    <ProjectFilesSidebar
-                        file_list_resource=file_list_resource
-                        current_path=current_path.into()
-                        slug=slug
-                        on_go_up=Callback::new(move |_| go_up_one_level(()))
-                        on_navigate_dir=handle_navigate_dir
-                        on_select_file=handle_select_file
-                        server_project_action=server_project_action
-                    />
-                </div>
-                <div class="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
-                    <FileContentView selected_file=selected_file.into() slug=slug />
-                </div>
-            </div>
         </div>
     }
 }

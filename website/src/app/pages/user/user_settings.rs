@@ -1,5 +1,3 @@
-use crate::app::ReadUserSignal;
-
 use leptos::control_flow::For;
 use leptos::either::Either;
 
@@ -8,16 +6,17 @@ use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{
-    expect_context, ActionForm, ClassAttribute, Get, OnceResource, Resource, ServerAction
+    ActionForm, ClassAttribute, Get, OnceResource, Resource, ServerAction
     , Show, Signal, Suspense,
 };
 use leptos::text_prop::TextProp;
 use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
+use crate::app::components::csrf_field::CSRFField;
+
 
 #[component]
 pub fn UserSettingsPage() -> impl IntoView {
-    let _user = expect_context::<ReadUserSignal>();
     let delete_ssh_action = ServerAction::<server_fns::DeleteSshKey>::new();
     let add_ssh_action = ServerAction::<server_fns::AddSshKey>::new();
     let update_password_action = ServerAction::<server_fns::UpdatePassword>::new();
@@ -33,6 +32,17 @@ pub fn UserSettingsPage() -> impl IntoView {
 
 
     let (new_ssh_key_result, set_new_ssh_key_result) = signal(" ".to_string());
+    let (password_change_result, set_password_change_result) = signal(" ".to_string());
+    
+    Effect::new(move |_|{
+        update_password_action.version().get();
+        match update_password_action.value().get() {
+            Some(Ok(_)) => set_password_change_result.set(String::from("Password changed")),
+            Some(Err(ServerFnError::ServerError(e))) => set_password_change_result.set(e.to_string()),
+            _ => (),
+        };
+    });
+    
     Effect::new(move |_| {
         add_ssh_action.version().get();
         match add_ssh_action.value().get() {
@@ -41,13 +51,6 @@ pub fn UserSettingsPage() -> impl IntoView {
             _ => (),
         };
     });
-    
-    let csrf = OnceResource::new(crate::app::components::csrf_field::generate_csrf());
-    let get_csrf = move || {
-        csrf.get()
-            .map(|c| c.clone().unwrap_or_default())
-            .unwrap_or_default()
-    };
 
     view! {
         // --- Profile Section (Empty as requested) ---
@@ -66,7 +69,7 @@ pub fn UserSettingsPage() -> impl IntoView {
 
                 // Separate form for password change for clarity
                 <ActionForm action=update_password_action>
-                    <input type="hidden" value=get_csrf name="csrf" />
+                    <CSRFField />
                     <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
                         <div class="sm:col-span-4">
                             <label for="old_password" class="form-label">
@@ -97,13 +100,13 @@ pub fn UserSettingsPage() -> impl IntoView {
                         </div>
 
                         <div class="sm:col-span-4">
-                            <label for="confirm_password" class="form-label">
+                            <label for="new_password_confirm" class="form-label">
                                 "Confirm New Password"
                             </label>
                             <div class="mt-2">
                                 <input
                                     type="password"
-                                    name="confirm_password"
+                                    name="new_password_confirm"
                                     required
                                     class="form-input"
                                 />
@@ -114,36 +117,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                     // --- Action Feedback and Submit Button ---
                     <div class="mt-6 flex items-center justify-end gap-x-6">
                         // Feedback area
-                        <div class="text-sm mr-auto">
-                            <Show when=move || update_password_action.pending().get()>
-                                <p class="text-gray-400">"Updating password..."</p>
-                            </Show>
-                            {move || {
-                                update_password_action
-                                    .value()
-                                    .get()
-                                    .map(|result| {
-                                        match result {
-                                            Ok(_) => {
-                                                Either::Left(
-                                                    view! {
-                                                        <p class="text-green-400">
-                                                            "Password updated successfully!"
-                                                        </p>
-                                                    },
-                                                )
-                                            }
-                                            Err(e) => {
-                                                Either::Right(
-                                                    view! {
-                                                        <p class="text-red-400">{format!("Error: {}", e)}</p>
-                                                    },
-                                                )
-                                            }
-                                        }
-                                    })
-                            }}
-                        </div>
+                        <div class="text-sm mr-auto">{password_change_result}</div>
                         <button
                             type="submit"
                             disabled=move || update_password_action.pending().get()
@@ -245,7 +219,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                                             action=delete_ssh_action
                                                                                                             on:submit=on_delete_click
                                                                                                         >
-                                                                                                            <input type="hidden" value=get_csrf name="csrf" />
+                                                                                                            <CSRFField />
                                                                                                             <input type="hidden" name="ssh_key_id" value=key.id />
                                                                                                             <button
                                                                                                                 type="submit"
@@ -288,29 +262,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                                             </Suspense>
                                         </tbody>
                                     </table>
-                                    // Feedback for delete action
-                                    // Use .output()
-                                    {move || {
-                                        delete_ssh_action
-                                            .value()
-                                            .get()
-                                            .map(|result| {
-                                                match result {
-                                                    Ok(_) => Either::Left(()),
-                                                    Err(e) => {
-                                                        Either::Right(
-                                                            // Feedback might be less useful here if the list just updates.
-                                                            // Consider removing or making it appear briefly.
-                                                            view! {
-                                                                <p class="mt-2 text-sm text-red-400">
-                                                                    {format!("Error deleting key: {}", e)}
-                                                                </p>
-                                                            },
-                                                        )
-                                                    }
-                                                }
-                                            })
-                                    }}
                                 </div>
                             </div>
                         </div>
@@ -327,7 +278,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                     <div class="flex-1 md:pl-2">
                         <h3 class="text-base font-medium text-white mb-4">"Add New SSH Key"</h3>
                         <ActionForm action=add_ssh_action>
-                            <input type="hidden" value=get_csrf name="csrf" />
+                            <CSRFField />
                             // Keep grid for form layout
                             <div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-6">
                                 // Adjust span if needed based on parent width
@@ -365,35 +316,6 @@ pub fn UserSettingsPage() -> impl IntoView {
 
                             // --- Action Feedback and Submit Button ---
                             <div class="mt-6 flex items-center justify-end gap-x-6">
-                                // Feedback area
-                                <div class="text-sm mr-auto">
-                                    <Show when=move || add_ssh_action.pending().get()>
-                                        <p class="text-gray-400">"Adding key..."</p>
-                                    </Show>
-                                    {move || {
-                                        add_ssh_action
-                                            .value()
-                                            .get()
-                                            .map(|result| {
-                                                match result {
-                                                    Ok(_) => {
-                                                        Either::Left(
-                                                            view! {
-                                                                <p class="text-green-400">"SSH Key added successfully!"</p>
-                                                            },
-                                                        )
-                                                    }
-                                                    Err(e) => {
-                                                        Either::Right(
-                                                            view! {
-                                                                <p class="text-red-400">{format!("Error: {}", e)}</p>
-                                                            },
-                                                        )
-                                                    }
-                                                }
-                                            })
-                                    }}
-                                </div>
                                 <button
                                     type="submit"
                                     disabled=move || add_ssh_action.pending().get()
@@ -589,7 +511,7 @@ pub mod server_fns {
         csrf: String,
         old_password: String,
         new_password: String,
-        new_password_confirmation: String,
+        new_password_confirm: String,
     ) -> Result<(), ServerFnError> {
         let auth = auth(false)?;
         let server_vars = server_vars()?;
@@ -601,7 +523,7 @@ pub mod server_fns {
 
         let password_form = PasswordForm {
             password: new_password.clone(),
-            password_confirmation: new_password_confirmation.clone(),
+            password_confirmation: new_password_confirm.clone(),
         };
         password_form.validate()?;
         let pool = crate::ssr::pool()?;

@@ -1,12 +1,12 @@
-use crate::app::components::select::FormSelect;
-use crate::app::pages::user::projects::project::MemoProjectParams;
+use crate::app::components::select::{FormSelectIcon};
+use crate::app::pages::user::projects::project::{MemoProjectParams, ProjectSlugSignal};
 use crate::app::IntoView;
 
 use common::permission::Permission;
 
 use crate::app::components::csrf_field::CSRFField;
 use leptos::either::Either;
-use leptos::prelude::{signal, AddAnyAttr, Effect, ServerFnError, Set};
+use leptos::prelude::{signal, AddAnyAttr, Effect, Read, ServerFnError, Set, Signal};
 use leptos::prelude::CollectView;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
@@ -15,44 +15,36 @@ use leptos::prelude::{
     Show, Suspend, Suspense,
 };
 use leptos::{component, view};
+use leptos::logging::log;
+use reactive_stores::Store;
 use strum::IntoEnumIterator;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 
 #[component]
 pub fn ProjectTeam() -> impl IntoView {
-    let params: MemoProjectParams = expect_context();
-    let slug = move || params.get().unwrap().project_slug.clone();
+    let global_state:Store<GlobalState> = expect_context();
+    let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
+    let slug = move ||
+        project_slug_signal.read().0.clone(); 
 
     let update_member = ServerAction::<server_fns::UpdateProjectTeamPermission>::new();
     let add_member = ServerAction::<server_fns::AddProjectTeamPermission>::new();
     let delete_member = ServerAction::<server_fns::DeleteProjectTeamMember>::new();
-
-    let (add_member_result, set_add_member_result) = signal(" ".to_string());
-    Effect::new(move |_| {
-        add_member.version().get();
-        match add_member.value().get() {
-            Some(Ok(_)) => set_add_member_result.set(String::from("Member added")),
-            Some(Err(ServerFnError::ServerError(e))) => set_add_member_result.set(e.to_string()),
-            _ => (),
-        };
-    });
-
-    let team_res = Resource::new(
+    
+    let team_res = Resource::new_blocking(
         move || {
             (
                 update_member.version().get(),
                 add_member.version().get(),
                 delete_member.version().get(),
-                slug(),
+                slug()
             )
         },
-        move |(_, _, _, s)| server_fns::get_project_team(s),
+        move |(u, a, d, s)| {
+            log!("Fetching team for with u:{} a:{}, d:{}, s:{}", u, a, d, s);
+            server_fns::get_project_team(s)
+        },
     );
-    let team_data = move || {
-        team_res
-            .get()
-            .map(|r| r.unwrap_or_default())
-            .unwrap_or_default()
-    };
 
     view! {
         <div>
@@ -63,135 +55,160 @@ pub fn ProjectTeam() -> impl IntoView {
                 view! { <p class="text-gray-400">"Loading team..."</p> }
             }>
                 {move || Suspend::new(async move {
-                    let project_response = team_data();
-                    view! {
-                        <div class="mt-6 flex flex-col gap-y-8">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th class="table-th">"Username"</th>
-                                        <th class="table-th">"Permission"</th>
-                                        <th class="table-th">"Actions"</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-800">
-                                    <For
-                                        each=move || project_response.user_permissions.clone()
-                                        key=|p| p.user_id
-                                        let(perm)
-                                    >
-                                        <tr>
-                                            <td class="table-td">{perm.username.clone()}</td>
-                                            <td class="px-4 py-3">
-                                                {match project_response.is_owner {
-                                                    true => {
-                                                        Either::Left(
-                                                            view! {
+                    match team_res.get() {
+                        Some(Ok(project_response)) => {
+                            let (add_member_result, set_add_member_result) = signal(
+                                " ".to_string(),
+                            );
+                            Effect::new(move |_| {
+                                add_member.version().get();
+                                log!("add_member: {:?}", add_member.value().get());
+                                match add_member.value().get() {
+                                    Some(Ok(_)) => {
+                                        set_add_member_result.set(String::from("Member added"))
+                                    }
+                                    Some(Err(ServerFnError::ServerError(e))) => {
+                                        set_add_member_result.set(e.to_string())
+                                    }
+                                    _ => {}
+                                };
+                            });
+                            Either::Right(
+
+                                view! {
+                                    <div class="mt-6 flex flex-col gap-y-8">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th class="table-th">"Username"</th>
+                                                    <th class="table-th">"Permission"</th>
+                                                    <th class="table-th">"Actions"</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-800">
+                                                <For
+                                                    each=move || project_response.user_permissions.clone()
+                                                    key=|p| p.user_id
+                                                    let(perm)
+                                                >
+                                                    <tr>
+                                                        <td class="table-td">{perm.username.clone()}</td>
+                                                        <td class="px-4 py-3">
+                                                            <Show
+                                                                when=move || project_response.is_owner
+                                                                fallback=move || {
+                                                                    view! {
+                                                                        <span class="text-gray-500">
+                                                                            {perm.permission.to_string()}
+                                                                        </span>
+                                                                    }
+                                                                }
+                                                            >
                                                                 <ActionForm action=update_member>
                                                                     <input type="hidden" name="project_slug" value=slug() />
                                                                     <input type="hidden" name="user_id" value=perm.user_id />
                                                                     <CSRFField />
                                                                     <div class="flex flex-col gap-y-2 lg:flex-row lg:items-center lg:gap-x-4">
-                                                                        <FormSelect name="permission"
-                                                                            .to_string()>
-                                                                            {Permission::iter()
-                                                                                .map(|p| {
-                                                                                    view! {
-                                                                                        <option value=p.to_string() selected=perm.permission == p>
-                                                                                            {p.label()}
-                                                                                        </option>
-                                                                                    }
-                                                                                })
-                                                                                .collect_view()}
-                                                                        </FormSelect>
+                                                                        <div class="relative">
+                                                                            <select name="permission" class="form-select">
+                                                                                {Permission::iter()
+                                                                                    .map(|p| {
+                                                                                        view! {
+                                                                                            <option value=p.to_string() selected=perm.permission == p>
+                                                                                                {p.label()}
+                                                                                            </option>
+                                                                                        }
+                                                                                    })
+                                                                                    .collect_view()}
+                                                                            </select>
+                                                                            <FormSelectIcon />
+                                                                        </div>
+
                                                                         <button type="submit" class="btn btn-primary">
                                                                             "Update"
                                                                         </button>
                                                                     </div>
                                                                 </ActionForm>
-                                                            },
-                                                        )
-                                                    }
-                                                    false => {
-                                                        Either::Right(
+                                                            </Show>
+                                                        </td>
+                                                        <td class="px-4 py-3">
+                                                            <Show
+                                                                when=move || project_response.is_owner
+                                                                fallback=move || view! {}
+                                                            >
+                                                                <ActionForm action=delete_member on:submit=move |_| {}>
+                                                                    <input type="hidden" name="project_slug" value=slug() />
+                                                                    <input type="hidden" name="user_id" value=perm.user_id />
+                                                                    <CSRFField />
+                                                                    <button type="submit" class="btn btn-danger">
+                                                                        "Remove"
+                                                                    </button>
+                                                                </ActionForm>
+                                                            </Show>
+                                                        </td>
+                                                    </tr>
+                                                </For>
 
-                                                            view! {
-                                                                <span class="text-gray-500">
-                                                                    {perm.permission.to_string()}
-                                                                </span>
-                                                            },
-                                                        )
-                                                    }
-                                                }}
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <Show when=move || project_response.is_owner>
-                                                    <ActionForm action=delete_member on:submit=move |_| {}>
-                                                        <input type="hidden" name="project_slug" value=slug() />
-                                                        <input type="hidden" name="user_id" value=perm.user_id />
-                                                        <CSRFField />
-                                                        <button type="submit" class="btn btn-danger">
-                                                            "Remove"
+                                            </tbody>
+                                        </table>
+
+                                        <Show when=move || project_response.is_owner>
+                                            <div class="pt-6 section-border">
+                                                <h3 class="section-title">"Add Member"</h3>
+                                                <ActionForm action=add_member>
+                                                    <input type="hidden" name="project_slug" value=slug() />
+                                                    <CSRFField />
+                                                    <div class="mt-4 flex flex-col gap-y-4">
+                                                        <div class="flex flex-col gap-y-2 lg:flex-row lg:gap-x-6">
+                                                            <div class="flex-1">
+                                                                <label for="email" class="form-label">
+                                                                    "Email"
+                                                                </label>
+                                                                <input
+                                                                    type="email"
+                                                                    name="email"
+                                                                    required
+                                                                    class="form-input"
+                                                                />
+                                                            </div>
+                                                            <div class="flex-1">
+                                                                <label for="permission" class="form-label">
+                                                                    "Permission"
+                                                                </label>
+                                                                <div class="relative">
+                                                                    <select name="permission" class="form-select">
+                                                                        {Permission::iter()
+                                                                            .map(|p| {
+                                                                                view! {
+                                                                                    <option
+                                                                                        value=p.to_string()
+                                                                                        selected=Permission::default() == p
+                                                                                    >
+                                                                                        {p.label()}
+                                                                                    </option>
+                                                                                }
+                                                                            })
+                                                                            .collect_view()}
+                                                                    </select>
+                                                                    <FormSelectIcon />
+
+                                                                </div>
+
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-primary">
+                                                            "Add"
                                                         </button>
-                                                    </ActionForm>
-                                                </Show>
-                                            </td>
-                                        </tr>
-                                    </For>
-
-                                </tbody>
-                            </table>
-
-                            <Show when=move || project_response.is_owner>
-                                <div class="pt-6 section-border">
-                                    <h3 class="section-title">"Add Member"</h3>
-                                    <ActionForm action=add_member>
-                                        <input type="hidden" name="project_slug" value=slug() />
-                                        <CSRFField />
-                                        <div class="mt-4 flex flex-col gap-y-4">
-                                            <div class="flex flex-col gap-y-2 lg:flex-row lg:gap-x-6">
-                                                <div class="flex-1">
-                                                    <label for="email" class="form-label">
-                                                        "Email"
-                                                    </label>
-                                                    <input
-                                                        type="email"
-                                                        name="email"
-                                                        required
-                                                        class="form-input"
-                                                    />
-                                                </div>
-                                                <div class="flex-1">
-                                                    <label for="permission" class="form-label">
-                                                        "Permission"
-                                                    </label>
-                                                    <FormSelect name="permission"
-                                                        .to_string()>
-                                                        {Permission::iter()
-                                                            .map(|p| {
-                                                                view! {
-                                                                    <option
-                                                                        value=p.to_string()
-                                                                        selected=Permission::default() == p
-                                                                    >
-                                                                        {p.label()}
-                                                                    </option>
-                                                                }
-                                                            })
-                                                            .collect_view()}
-                                                    </FormSelect>
-
-                                                </div>
+                                                    </div>
+                                                    <div>{add_member_result}</div>
+                                                </ActionForm>
                                             </div>
-                                            <button type="submit" class="btn btn-primary">
-                                                "Add"
-                                            </button>
-                                        </div>
-                                        <div>{add_member_result}</div>
-                                    </ActionForm>
-                                </div>
-                            </Show>
-                        </div>
+                                        </Show>
+                                    </div>
+                                },
+                            )
+                        }
+                        _ => Either::Left(()),
                     }
                 })}
             </Suspense>

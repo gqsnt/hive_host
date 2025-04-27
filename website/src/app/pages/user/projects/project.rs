@@ -1,4 +1,4 @@
-use leptos::prelude::Signal;
+use leptos::prelude::{expect_context, OnceResource, Read, Signal, Update};
 use leptos::prelude::{AddAnyAttr, Resource, Suspend, Suspense};
 use std::fmt::Display;
 pub mod project_dashboard;
@@ -11,6 +11,7 @@ use leptos::prelude::{
     signal, ClassAttribute, CollectView, Effect, Get, Memo, ReadSignal, Set, WriteSignal,
 };
 use leptos::{component, view, IntoView, Params};
+use leptos::logging::log;
 use leptos_router::hooks::{use_location, use_params};
 
 use leptos::prelude::ElementChild;
@@ -18,8 +19,14 @@ use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos_router::components::{Outlet, A};
 use leptos_router::params::{Params, ParamsError};
+use reactive_stores::Store;
+use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+use crate::app::components::csrf_field::generate_csrf;
+use crate::app::{get_hosting_url, get_server_url};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::pages::user::projects::project::server_fns::get_project;
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectParams {
@@ -79,30 +86,38 @@ impl Display for ProjectSection {
     }
 }
 
+
+#[derive(Clone, Debug, PartialEq,Eq, Serialize,Deserialize)]
+pub struct ProjectSlugSignal(pub String);
+
+
+
+
 #[component]
 pub fn ProjectPage() -> impl IntoView {
     let params: MemoProjectParams = use_params::<ProjectParams>();
-    let project_resource = Resource::new(
-        move || params.get().unwrap().project_slug,
-        server_fns::get_project,
-    );
-
-    let _project_data = move || {
-        project_resource
-            .get()
-            .map(|p| p.unwrap_or_default())
+    let project_slug =  move || {
+        params.read()
+            .as_ref()
+            .ok()
+            .and_then(|params|Some(params.project_slug.clone()))
             .unwrap_or_default()
     };
-    provide_context(params);
-    let get_project_slug = Signal::derive(move || {
+    let project_slug_signal = Signal::derive(move || {
         params
-            .get()
-            .map(|pp| pp.project_slug)
+            .read()
+            .as_ref()
+            .map(|pp| ProjectSlugSignal(pp.project_slug.clone()))
             .expect("Project slug not found")
     });
-
-    let get_project_section = move || {
-        let location = use_location().pathname.get().clone();
+    provide_context(project_slug_signal);
+    
+    let global_state:Store<GlobalState> = expect_context();
+    let project_resource= OnceResource::new(get_project(project_slug()));
+    let hosting_url_resource= OnceResource::new(get_hosting_url());
+    
+    
+    let get_project_section = move |location:String| {
         let split = location.split("/").collect::<Vec<_>>();
         // find projets string and return next next
         let mut found_1 = false;
@@ -120,38 +135,67 @@ pub fn ProjectPage() -> impl IntoView {
         ProjectSection::default()
     };
 
+    let location = use_location().pathname.get();
     // Gestion de la section active
     let (current, set_current): (ReadSignal<ProjectSection>, WriteSignal<ProjectSection>) =
-        signal(get_project_section());
+        signal(get_project_section(location));
     Effect::new(move |_| {
-        let sec = get_project_section();
+        let location = use_location().pathname.get();
+        let sec = get_project_section(location);
         set_current.set(sec);
     });
 
     view! {
-        <Suspense fallback=move || {
-            view! { Loading... }
-        }>{move || { Suspend::new(async move {}) }}</Suspense>
-        <nav class="nav-main">
-            <div class="nav-container">
-                <div class="nav-inner">
-                    {move || {
-                        ProjectSection::iter()
-                            .map(|s| {
-                                view! {
-                                    <SectionNav
-                                        section=s
-                                        current_section=current
-                                        project_slug=get_project_slug
-                                    />
-                                }
-                            })
-                            .collect_view()
-                    }}
+        <div>
+            <nav class="nav-main">
+                <div class="nav-container">
+                    <div class="nav-inner">
+                        {move || {
+                            ProjectSection::iter()
+                                .map(|s| {
+                                    view! {
+                                        <SectionNav
+                                            section=s
+                                            current_section=current
+                                            project_slug_signal
+                                        />
+                                    }
+                                })
+                                .collect_view()
+                        }}
+                    </div>
                 </div>
-            </div>
-        </nav>
-        <Outlet />
+            </nav>
+            <Suspense fallback=move || {
+                view! {}
+            }>
+                {move || Suspend::new(async move {
+                    let project = project_resource.await;
+                    match project {
+                        Ok(project) => {
+                            global_state
+                                .update(|inner| {
+                                    inner.project = Some((project.get_slug(), project));
+                                });
+                        }
+                        Err(_) => {
+                            global_state.update(|inner| inner.project = None);
+                        }
+                    }
+                    let hosting_url = hosting_url_resource.await;
+                    match hosting_url {
+                        Ok(hosting_url) => {
+                            global_state.update(|inner| inner.hosting_url = Some(hosting_url));
+                        }
+                        Err(_) => {
+                            global_state.update(|inner| inner.hosting_url = None);
+                        }
+                    }
+                    view! { <Outlet /> }
+                })}
+            </Suspense>
+
+        </div>
     }
 }
 
@@ -159,11 +203,11 @@ pub fn ProjectPage() -> impl IntoView {
 fn SectionNav(
     #[prop(into)] section: ProjectSection,
     #[prop(into)] current_section: ReadSignal<ProjectSection>,
-    #[prop(into)] project_slug: Signal<String>,
+    #[prop(into)] project_slug_signal: Signal<ProjectSlugSignal>,
 ) -> impl IntoView {
     view! {
         <A
-            href=move || section.href(project_slug.get().as_str())
+            href=move || section.href(project_slug_signal.read().0.as_str())
             attr:class=move || {
                 format!(
                     "nav-link {}",
@@ -189,14 +233,13 @@ pub mod server_fns {
 
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
-        use crate::ssr::server_vars;
         use common::permission::Permission;
     }}
 
     #[server]
     pub async fn get_project(
         project_slug: ProjectSlugStr,
-    ) -> Result<(String, Project), ServerFnError> {
+    ) -> Result<Project, ServerFnError> {
         Ok(
             crate::security::permission::ssr::handle_project_permission_request(
                 project_slug,
@@ -210,9 +253,7 @@ pub mod server_fns {
                     )
                     .fetch_one(&pool)
                     .await?;
-                    let server_vars = server_vars()?;
-
-                    Ok((server_vars.hosting_url.as_str().to_string(), project))
+                    Ok(project)
                 },
             )
             .await?,
