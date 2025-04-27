@@ -46,7 +46,7 @@ pub enum ServerError {
     CantReadFileName(String),
 }
 
-impl From<ServerError> for (axum::http::StatusCode, String) {
+impl From<ServerError> for (StatusCode, String) {
     fn from(value: ServerError) -> Self {
         let message = value.to_string();
         let status_code = match value {

@@ -1,22 +1,19 @@
 use crate::api::ServerProjectActionFront;
-use crate::app::components::csrf_field::{CsrfSignal, CsrfValue};
 use common::server_project_action::io_action::dir_action::{DirAction, LsElement};
 use common::server_project_action::io_action::file_action::FileAction;
-use common::ProjectSlugStr;
 use leptos::callback::Callback;
-use leptos::either::{Either, EitherOf3};
+use leptos::either::Either;
 use leptos::html::Input;
-use leptos::prelude::{ElementChild, For, Read, ReadSignal, Show, Suspend, Suspense};
-use leptos::prelude::{expect_context, CustomAttribute};
-use leptos::prelude::{signal, NodeRef, NodeRefAttribute};
-use leptos::prelude::{Callable, Get, IntoMaybeErased, Transition};
-use leptos::prelude::{
-    ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Resource, ServerFnError, Signal,
-};
-use leptos::{component, view, IntoView};
 use leptos::leptos_dom::log;
+use leptos::prelude::{signal, NodeRef, NodeRefAttribute};
+use leptos::prelude::{Callable, Get, IntoMaybeErased};
+use leptos::prelude::{
+    ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Signal,
+};
+use leptos::prelude::CustomAttribute;
+use leptos::prelude::{ElementChild, Read, Show};
+use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
-use crate::app::pages::user::projects::project::ProjectSlugSignal;
 
 #[component]
 pub fn ProjectFilesSidebar(
@@ -181,63 +178,63 @@ pub fn ProjectFilesSidebarList(
             {move || match file_list.get() {
                 None => Either::Left("Loading...".to_string()),
                 Some(file_list) => {
-                    Either::Right(
-                        match file_list.is_empty() {
-                            true => Either::Left("Folder is empty".to_string()),
-                            false => {
-                                Either::Right(
+                    Either::Right({
+                        let is_empty = file_list.is_empty();
+                        view! {
+                            {(current_path.get() != ".")
+                                .then(|| {
                                     view! {
-                                        {(current_path.get() != ".")
-                                            .then(|| {
-                                                view! {
-                                                    <div>
-                                                        <button
-                                                            class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
-                                                            on:click=move |_| {
-                                                                on_go_up.try_run(());
-                                                            }
-                                                        >
-                                                            <svg
-                                                                xmlns="http://www.w3.org/2000/svg"
-                                                                fill="none"
-                                                                viewBox="0 0 24 24"
-                                                                stroke-width="1.5"
-                                                                stroke="currentColor"
-                                                                class="w-5 h-5 flex-shrink-0"
-                                                            >
-                                                                <path
-                                                                    stroke-linecap="round"
-                                                                    stroke-linejoin="round"
-                                                                    d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
-                                                                />
-                                                            </svg>
-                                                            <span>".."</span>
-                                                        </button>
-                                                    </div>
+                                        <div>
+                                            <button
+                                                class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
+                                                on:click=move |_| {
+                                                    on_go_up.try_run(());
                                                 }
-                                            })}
-                                        <ul class="space-y-1">
-                                            <For
-                                                each=move || file_list.clone()
-                                                key=|item| item.name.clone()
-                                                let(item)
                                             >
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke-width="1.5"
+                                                    stroke="currentColor"
+                                                    class="w-5 h-5 flex-shrink-0"
+                                                >
+                                                    <path
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                        d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
+                                                    />
+                                                </svg>
+                                                <span>".."</span>
+                                            </button>
+                                        </div>
+                                    }
+                                })}
+                            <Show
+                                when=move || !is_empty
+                                fallback=move || view! { "Folder is empty" }
+                            >
+                                <ul class="space-y-1">
+                                    {file_list
+                                        .iter()
+                                        .map(|item| {
+                                            view! {
                                                 <ProjectFilesSidebarItem
-                                                    csrf_signal
+                                                    csrf_signal=csrf_signal
                                                     slug=slug
                                                     current_path=current_path
-                                                    item=item
+                                                    item=item.clone()
                                                     server_project_action=server_project_action
                                                     on_navigate_dir=on_navigate_dir
                                                     on_select_file=on_select_file
                                                 />
-                                            </For>
-                                        </ul>
-                                    },
-                                )
-                            }
-                        },
-                    )
+                                            }
+                                        })
+                                        .collect_view()}
+                                </ul>
+                            </Show>
+                        }
+                    })
                 }
             }}
         </div>

@@ -1,16 +1,15 @@
 use crate::api::get_action_server_project_action;
-use crate::app::components::csrf_field::{CsrfSignal, CsrfValue};
 use common::server_project_action::io_action::file_action::FileAction;
 use common::server_project_action::ServerProjectActionResponse;
 use common::ProjectSlugStr;
 use leptos::either::Either;
 use leptos::html::Textarea;
-use leptos::prelude::{expect_context, signal, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, Read, ReadSignal};
+use leptos::logging::log;
+use leptos::prelude::{signal, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, Read};
 use leptos::prelude::{ClassAttribute, Get, Resource, Signal, Transition};
 use leptos::prelude::{GetUntracked, OnAttribute};
 use leptos::prelude::{IntoMaybeErased, ServerFnError, Suspend};
 use leptos::{component, view, IntoView};
-use leptos::logging::log;
 use web_sys::MouseEvent;
 
 #[component]

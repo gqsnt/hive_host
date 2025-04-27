@@ -1,12 +1,6 @@
-use leptos::context::provide_context;
-use leptos::prelude::{ClassAttribute, Get, OnceResource, ServerFnError, Signal};
-use leptos::prelude::codee::{Decoder, Encoder};
-use reactive_stores::Store;
-use serde::{Deserialize, Serialize};
-use serde::de::DeserializeOwned;
-use common::{ProjectSlug, UserSlug};
-use crate::app::components::csrf_field::generate_csrf;
 use crate::models::{Project, User};
+use common::{ProjectSlug, UserSlug};
+use reactive_stores::Store;
 
 pub mod home;
 pub mod login;

@@ -1,6 +1,6 @@
 use leptos::prelude::{Get};
 use leptos::prelude::{ServerFnError};
-use leptos::prelude::{expect_context, Signal, Suspense};
+use leptos::prelude::{expect_context, Signal};
 use leptos::{component, server, view, IntoView};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};

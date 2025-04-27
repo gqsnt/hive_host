@@ -60,7 +60,7 @@ impl FromStr for MyServerFnError {
     type Err = MyServerFnError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(&s).map_err(|e| {
+        serde_json::from_str(s).map_err(|e| {
             MyServerFnError::Custom(format!("Failed to parse MyServerFnError: {}", e))
         })
     }

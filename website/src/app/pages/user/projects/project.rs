@@ -1,5 +1,5 @@
-use leptos::prelude::{expect_context, OnceResource, Read, Signal, Update};
-use leptos::prelude::{AddAnyAttr, Resource, Suspend, Suspense};
+use leptos::prelude::{expect_context, OnceResource, Read, Signal, Transition, Update};
+use leptos::prelude::{AddAnyAttr, Suspend};
 use std::fmt::Display;
 pub mod project_dashboard;
 pub mod project_files;
@@ -11,9 +11,11 @@ use leptos::prelude::{
     signal, ClassAttribute, CollectView, Effect, Get, Memo, ReadSignal, Set, WriteSignal,
 };
 use leptos::{component, view, IntoView, Params};
-use leptos::logging::log;
 use leptos_router::hooks::{use_location, use_params};
 
+use crate::app::pages::user::projects::project::server_fns::get_project;
+use crate::app::pages::{GlobalState};
+use crate::app::get_hosting_url;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
@@ -23,10 +25,6 @@ use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use crate::app::components::csrf_field::generate_csrf;
-use crate::app::{get_hosting_url, get_server_url};
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
-use crate::app::pages::user::projects::project::server_fns::get_project;
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectParams {
@@ -100,7 +98,7 @@ pub fn ProjectPage() -> impl IntoView {
         params.read()
             .as_ref()
             .ok()
-            .and_then(|params|Some(params.project_slug.clone()))
+            .map(|p|p.project_slug.clone())
             .unwrap_or_default()
     };
     let project_slug_signal = Signal::derive(move || {
@@ -166,9 +164,7 @@ pub fn ProjectPage() -> impl IntoView {
                     </div>
                 </div>
             </nav>
-            <Suspense fallback=move || {
-                view! {}
-            }>
+            <Transition>
                 {move || Suspend::new(async move {
                     let project = project_resource.await;
                     match project {
@@ -193,7 +189,7 @@ pub fn ProjectPage() -> impl IntoView {
                     }
                     view! { <Outlet /> }
                 })}
-            </Suspense>
+            </Transition>
 
         </div>
     }

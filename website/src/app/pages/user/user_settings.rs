@@ -1,18 +1,18 @@
 use leptos::control_flow::For;
 use leptos::either::Either;
 
-use leptos::prelude::{signal, AddAnyAttr, Effect, ServerFnError, Set};
+use crate::app::components::csrf_field::CSRFField;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::{signal, AddAnyAttr, Effect, ServerFnError, Set};
 use leptos::prelude::{
-    ActionForm, ClassAttribute, Get, OnceResource, Resource, ServerAction
-    , Show, Signal, Suspense,
+    ActionForm, ClassAttribute, Get, Resource, ServerAction
+    , Signal, Suspense,
 };
 use leptos::text_prop::TextProp;
 use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
-use crate::app::components::csrf_field::CSRFField;
 
 
 #[component]
@@ -526,8 +526,8 @@ pub mod server_fns {
             password_confirmation: new_password_confirm.clone(),
         };
         password_form.validate()?;
-        let pool = crate::ssr::pool()?;
-        let user_id = crate::security::utils::ssr::get_auth_session_user_id(&auth).unwrap();
+        let pool = pool()?;
+        let user_id = get_auth_session_user_id(&auth).unwrap();
 
         // check old pwd
         let result = sqlx::query!(

@@ -32,7 +32,7 @@ pub async fn signup(
     pub fn unique_email(email: &str, context:&AsyncValidationContext) -> Result<(), ValidationError>{
         tokio::task::block_in_place(|| {
             let AsyncValidationContext { pg_pool, handle } = context;
-            let result = handle.block_on(User::get_from_email_with_password(email, &pg_pool));
+            let result = handle.block_on(User::get_from_email_with_password(email, pg_pool));
             if result.is_ok() {
                 return Err(ValidationError::new("Email already taken"));
             }

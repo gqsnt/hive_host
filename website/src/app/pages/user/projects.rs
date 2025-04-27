@@ -1,20 +1,18 @@
-use leptos::prelude::{OnAttribute, OnTargetAttribute, PropAttribute};
-use crate::app::components::select::{FormSelectIcon};
+use crate::app::components::select::FormSelectIcon;
+use leptos::prelude::{OnAttribute, OnTargetAttribute, PropAttribute, Transition};
 
 use leptos::prelude::signal;
 use leptos::prelude::Get;
-use leptos::prelude::{AddAnyAttr, Callback, Effect, For};
+use leptos::prelude::{Effect, For};
 
 use crate::app::pages::user::projects::new_project::server_fns::CreateProject;
 use leptos::either::Either;
 use leptos::prelude::ElementChild;
-use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::{ClassAttribute, Resource, Suspend, Suspense};
+use leptos::prelude::{ClassAttribute, Resource, Suspend};
 use leptos::server::ServerAction;
 use leptos::{component, view, IntoView};
-use leptos::leptos_dom::log;
-use leptos_router::components::{Outlet, A};
+use leptos_router::components::Outlet;
 use leptos_router::hooks::use_location;
 
 pub mod new_project;
@@ -72,7 +70,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                         prop:value=move || project_id.get().unwrap_or_default()
                         on:change:target=move |e| {
                             let target_value = e.target().value();
-                            if target_value == "" {
+                            if target_value.is_empty() {
                                 handle_select_project(None);
                             } else {
                                 handle_select_project(Some(target_value));
@@ -81,17 +79,15 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                     >
                         <option value="">Select a project</option>
 
-                        <Suspense fallback=move || {
+                        <Transition fallback=move || {
                             view! { <option>Loading ...</option> }
                         }>
                             {move || Suspend::new(async move {
                                 let projects = projects.await.unwrap_or_default();
                                 if projects.is_empty() {
-                                    return Either::Right(
-                                        view! { <option>Create a project</option> },
-                                    );
+                                    Either::Right(view! { <option>Create a project</option> })
                                 } else {
-                                    return Either::Left(
+                                    Either::Left(
                                         view! {
                                             <For
                                                 each=move || projects.clone()
@@ -114,7 +110,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                                     )
                                 }
                             })}
-                        </Suspense>
+                        </Transition>
 
                     </select>
                     <FormSelectIcon />

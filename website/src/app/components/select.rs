@@ -1,6 +1,4 @@
-use leptos::ev::Targeted;
 use leptos::prelude::*;
-use web_sys::{Event, HtmlSelectElement};
 
 
 #[component]

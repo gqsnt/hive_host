@@ -4,25 +4,24 @@ pub mod project_files_sidebar;
 use crate::api::get_action_server_project_action;
 use crate::app::pages::user::projects::project::project_files::file_content_view::FileContentView;
 use crate::app::pages::user::projects::project::project_files::project_files_sidebar::ProjectFilesSidebar;
-use crate::app::pages::user::projects::project::{MemoProjectParams, ProjectSlugSignal};
+use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::IntoView;
-use crate::app::ServerFnError;
 
 use common::server_project_action::io_action::dir_action::DirAction;
 use common::server_project_action::ServerProjectActionResponse;
 use leptos::either::Either;
 
-use leptos::prelude::{ElementChild, Read, Suspend, Suspense};
+use leptos::prelude::{ElementChild, Read, Suspend, Transition};
 
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use leptos::logging::log;
 use leptos::prelude::{
     expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased, OnAttribute,
 };
 use leptos::prelude::{Callback, Signal};
 use leptos::server::Resource;
 use leptos::{component, view};
-use leptos::logging::log;
 use reactive_stores::Store;
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 
 #[component]
 pub fn ProjectFiles() -> impl IntoView {
@@ -99,6 +98,12 @@ pub fn ProjectFiles() -> impl IntoView {
         set_current_path(dir_path);
         set_selected_file(None);
     });
+    
+    
+    let handle_on_go_up = Callback::new(move |_| {
+        go_up_one_level(());
+        set_selected_file(None);
+    });
 
     view! {
         <div class="flex flex-col h-full">
@@ -143,7 +148,7 @@ pub fn ProjectFiles() -> impl IntoView {
             </div>
             <div class="flex flex-grow overflow-hidden">
 
-                <Suspense fallback=move || {
+                <Transition fallback=move || {
                     view! { Loading... }
                 }>
                     {move || {
@@ -151,16 +156,15 @@ pub fn ProjectFiles() -> impl IntoView {
                             let file_list = Signal::derive(move || {
                                 file_list_resource
                                     .get()
-                                    .map(|r| {
+                                    .and_then(|r| {
                                         r.ok()
-                                            .map(|r| match r {
+                                            .and_then(|r| match r {
                                                 ServerProjectActionResponse::Ls(inner) => Some(inner.inner),
                                                 _ => None,
                                             })
-                                            .flatten()
                                     })
-                                    .flatten()
                             });
+
                             view! {
                                 <div class="w-64 md:w-80 flex-shrink-0 border-r border-white/10 overflow-y-auto">
                                     <ProjectFilesSidebar
@@ -168,7 +172,7 @@ pub fn ProjectFiles() -> impl IntoView {
                                         file_list=file_list
                                         current_path=current_path.into()
                                         slug=slug
-                                        on_go_up=Callback::new(move |_| go_up_one_level(()))
+                                        on_go_up=handle_on_go_up
                                         on_navigate_dir=handle_navigate_dir
                                         on_select_file=handle_select_file
                                         server_project_action=server_project_action
@@ -178,7 +182,7 @@ pub fn ProjectFiles() -> impl IntoView {
                             }
                         })
                     }}
-                </Suspense>
+                </Transition>
                 <div class="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
                     <FileContentView csrf_signal selected_file=selected_file.into() slug=slug />
                 </div>

@@ -1,28 +1,25 @@
-use crate::app::components::select::{FormSelectIcon};
-use crate::app::pages::user::projects::project::{MemoProjectParams, ProjectSlugSignal};
+use crate::app::components::select::FormSelectIcon;
+use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::IntoView;
 
 use common::permission::Permission;
 
 use crate::app::components::csrf_field::CSRFField;
-use leptos::either::{Either, EitherOf3};
-use leptos::prelude::{signal, AddAnyAttr, Effect, Read, ServerFnError, Set, Signal};
+use leptos::either::EitherOf3;
+use leptos::logging::log;
 use leptos::prelude::CollectView;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::{
     expect_context, ActionForm, ClassAttribute, For, Get, IntoMaybeErased, Resource, ServerAction,
-    Show, Suspend, Suspense,
+    Show, Suspend,
 };
+use leptos::prelude::{signal, AddAnyAttr, Effect, Read, ServerFnError, Set, Signal, Transition};
 use leptos::{component, view};
-use leptos::logging::log;
-use reactive_stores::Store;
 use strum::IntoEnumIterator;
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 
 #[component]
 pub fn ProjectTeam() -> impl IntoView {
-    let global_state:Store<GlobalState> = expect_context();
     let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
     let slug = move ||
         project_slug_signal.read().0.clone(); 
@@ -51,7 +48,7 @@ pub fn ProjectTeam() -> impl IntoView {
             <h2 class="section-title">"Team"</h2>
             <p class="section-description">"Manage project team members and permissions."</p>
 
-            <Suspense fallback=move || {
+            <Transition fallback=move || {
                 view! { <p class="text-gray-400">"Loading team..."</p> }
             }>
                 {move || Suspend::new(async move {
@@ -132,10 +129,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                             </Show>
                                                         </td>
                                                         <td class="px-4 py-3">
-                                                            <Show
-                                                                when=move || project_response.is_owner
-                                                                fallback=move || view! {}
-                                                            >
+                                                            <Show when=move || project_response.is_owner>
                                                                 <ActionForm action=delete_member on:submit=move |_| {}>
                                                                     <input type="hidden" name="project_slug" value=slug() />
                                                                     <input type="hidden" name="user_id" value=perm.user_id />
@@ -222,13 +216,12 @@ pub fn ProjectTeam() -> impl IntoView {
                         }
                     }
                 })}
-            </Suspense>
+            </Transition>
         </div>
     }
 }
 
 pub mod server_fns {
-
     use common::permission::Permission;
     use common::{ProjectId, ProjectSlugStr, UserId};
     use leptos::prelude::ServerFnError;

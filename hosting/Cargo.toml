@@ -19,14 +19,12 @@ tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 dotenvy = { workspace = true }
 http = "1.3.1"
-rayon = "1"
 walkdir = "2.5.0"
 dashmap = { workspace = true }
 mime_guess = "2.0.5"
 socket2 = { version = "0.5.9", features = ["all"] }
 quick_cache = { workspace = true }
 deadpool-postgres = "0.14.1"
-num_cpus = "1.16.0"
 async-compression = { version = "0.4.23", features = ["all"] }
 common = { path = "../common" }
 serde_json = { workspace = true }

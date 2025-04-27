@@ -1,22 +1,20 @@
-use crate::app::components::csrf_field::{generate_csrf, CsrfSignal, CsrfValue};
+use crate::app::components::csrf_field::generate_csrf;
+use crate::app::pages::GlobalState;
 use crate::models::User;
 use crate::security::{get_user, Logout};
-use leptos::context::provide_context;
 use leptos::form::ActionForm;
-use leptos::prelude::{expect_context, CustomAttribute, Signal, Suspend, Update};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::{expect_context, CustomAttribute, Signal, Suspend, Transition, Update};
 use leptos::prelude::{signal, ClassAttribute, Get, GlobalAttributes};
-use leptos::prelude::{AddAnyAttr, Effect, ReadSignal, ServerAction, Suspense};
+use leptos::prelude::{AddAnyAttr, Effect, ReadSignal, ServerAction};
 use leptos::prelude::{AriaAttributes, OnAttribute};
 use leptos::server::OnceResource;
 use leptos::{component, view, IntoView};
 use leptos_router::components::{Outlet, A};
 use leptos_router::hooks::use_location;
 use reactive_stores::Store;
-use common::UserSlug;
-use crate::app::pages::{GlobalState};
 
 pub mod dashboard;
 pub mod projects;
@@ -93,9 +91,7 @@ pub fn UserPage() -> impl IntoView {
     view! {
         // Add h-full if body/html are h-full
         <div class="dark h-full">
-            <Suspense fallback=move || {
-                view! {}
-            }>
+            <Transition>
                 {move || Suspend::new(async move {
                     let user = user_resource.await;
                     let csrf = csrf_resource.await;
@@ -303,7 +299,7 @@ pub fn UserPage() -> impl IntoView {
             </div>
                     }
                 })}
-            </Suspense>
+            </Transition>
         </div>
     }
 }

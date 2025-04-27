@@ -1,16 +1,15 @@
-use crate::app::components::csrf_field::{generate_csrf, CSRFField, CsrfValue};
+use crate::app::components::csrf_field::{generate_csrf, CSRFField};
+use crate::app::pages::GlobalState;
 use crate::security::login::Login;
-use leptos::prelude::{expect_context, ClassAttribute, OnceResource, Suspend, Suspense, Update};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::{expect_context, ClassAttribute, OnceResource, Suspend, Transition, Update};
 use leptos::prelude::{signal, AddAnyAttr, Effect, Get, ServerFnError, Set};
 use leptos::prelude::{ActionForm, ServerAction};
 use leptos::{component, view, IntoView};
-use leptos::context::provide_context;
 use leptos_router::components::A;
 use reactive_stores::Store;
-use crate::app::pages::GlobalState;
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
@@ -29,9 +28,7 @@ pub fn LoginPage() -> impl IntoView {
     });
 
     view! {
-        <Suspense fallback=move || {
-            view! {}
-        }>
+        <Transition>
             {move || Suspend::new(async move {
                 let csrf = csrf_resource.await;
                 match csrf {
@@ -42,9 +39,8 @@ pub fn LoginPage() -> impl IntoView {
                         global_store.update(|inner| inner.csrf = None);
                     }
                 }
-                view! {}
             })}
-        </Suspense>
+        </Transition>
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">
                 <img

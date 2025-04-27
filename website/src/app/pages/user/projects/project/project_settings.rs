@@ -1,19 +1,15 @@
-use crate::app::pages::user::projects::project::{server_fns::get_project, MemoProjectParams, ProjectSlugSignal};
-use crate::app::components::csrf_field::{CsrfSignal, CsrfValue};
-use crate::app::{HostingUrl, IntoView};
-use common::{ProjectSlugStr, ProjectSlug};
-use leptos::prelude::{CustomAttribute, Effect, IntoAny, Read, ReadSignal, Set, Update, With};
+use crate::app::pages::user::projects::project::ProjectSlugSignal;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::IntoView;
+use common::{ProjectSlug, ProjectSlugStr};
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, Action, ElementChild, Signal};
-use leptos::prelude::{signal, ClassAttribute, OnAttribute, Resource, Suspend, Suspense};
+use leptos::prelude::{signal, ClassAttribute, OnAttribute};
+use leptos::prelude::{CustomAttribute, Effect, Read};
 use leptos::prelude::{Get, GlobalAttributes, Show};
 use leptos::{component, view};
-use std::str::FromStr;
-use leptos::either::Either;
-use leptos::logging::log;
 use reactive_stores::Store;
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
-use crate::models::Project;
+use std::str::FromStr;
 
 #[component]
 pub fn ProjectSettings() -> impl IntoView {
@@ -149,10 +145,7 @@ pub fn ProjectSettings() -> impl IntoView {
                 <div class="mt-2 text-sm text-right min-h-[1.25em]">
                     {toggle_project_action_result}
                 </div>
-                <Show
-                    when=move || is_active() && !toggle_project_action.pending().get()
-                    fallback=move || view! {}
-                >
+                <Show when=move || is_active() && !toggle_project_action.pending().get()>
                     <div class="mt-6 pt-6 border-t border-gray-700 space-y-4">
                         <div class="flex justify-between items-center">
                             <h3 class="text-base font-semibold leading-6 text-white">
