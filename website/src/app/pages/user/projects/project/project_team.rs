@@ -38,7 +38,6 @@ pub fn ProjectTeam() -> impl IntoView {
             )
         },
         move |(u, a, d, s)| {
-            log!("Fetching team for with u:{} a:{}, d:{}, s:{}", u, a, d, s);
             server_fns::get_project_team(s)
         },
     );

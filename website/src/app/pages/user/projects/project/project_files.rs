@@ -40,7 +40,6 @@ pub fn ProjectFiles() -> impl IntoView {
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
 
     let server_project_action = get_action_server_project_action();
-    log!("Path : {}, Slug: {}, Version: {}", current_path.get(), slug.get(), server_project_action.version().get());
     let file_list_resource = Resource::new(
         move || {
             (
@@ -50,7 +49,6 @@ pub fn ProjectFiles() -> impl IntoView {
             )
         },
         |(path, slug, _)|  {
-            log!("Fetching file list for path: {}", path);
             crate::api::get_action_server_project_action_inner(
                 slug,
                 DirAction::Ls { path }.into(),

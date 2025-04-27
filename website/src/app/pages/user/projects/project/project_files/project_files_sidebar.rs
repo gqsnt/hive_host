@@ -172,7 +172,6 @@ pub fn ProjectFilesSidebarList(
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
 ) -> impl IntoView {
-    log!("File list: {:?}", file_list.read().as_ref());
     view! {
         <div class="flex-grow overflow-y-auto -mr-4 pr-4">
             {move || match file_list.get() {

@@ -21,7 +21,6 @@ pub fn FileContentView(
     let file_content_resource = Resource::new(
         move || (selected_file.get(), slug.get()),
         |(file_path_opt, slug)| async move {
-            log!("Fetching file content for path: {:?}, slug:{}", file_path_opt, slug);
             match file_path_opt {
                 Some(file_path) => {
                     match crate::api::get_action_server_project_action_inner(
