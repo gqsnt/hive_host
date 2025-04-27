@@ -14,6 +14,7 @@ use leptos::prelude::{
     ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Resource, ServerFnError, Signal,
 };
 use leptos::{component, view, IntoView};
+use leptos::leptos_dom::log;
 use web_sys::SubmitEvent;
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
 
@@ -147,6 +148,7 @@ pub fn ProjectFilesSidebar(
             </div>
 
             <hr class="border-white/10 my-3 flex-shrink-0" />
+
             <ProjectFilesSidebarList
                 slug=slug
                 current_path=current_path
@@ -173,82 +175,71 @@ pub fn ProjectFilesSidebarList(
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
 ) -> impl IntoView {
+    log!("File list: {:?}", file_list.read().as_ref());
     view! {
         <div class="flex-grow overflow-y-auto -mr-4 pr-4">
-            <Show
-                when=move || file_list.get().is_some()
-                fallback=move || {
-                    view! {
-                        <div class="px-2 py-1.5 text-sm text-gray-500 italic">"Loading..."</div>
-                    }
-                }
-            >
-                {
-                    let items = file_list.get().unwrap_or_default();
-                    let is_empty = items.is_empty();
-                    view! {
-                        <Show
-                            when=move || !is_empty
-                            fallback=move || {
-                                view! {
-                                    <div class="px-2 py-1.5 text-sm text-gray-500 italic">
-                                        "Folder is empty"
-                                    </div>
-                                }
-                            }
-                        >
-                            {(current_path.get() != ".")
-                                .then(|| {
+            {move || match file_list.get() {
+                None => Either::Left("Loading...".to_string()),
+                Some(file_list) => {
+                    Either::Right(
+                        match file_list.is_empty() {
+                            true => Either::Left("Folder is empty".to_string()),
+                            false => {
+                                Either::Right(
                                     view! {
-                                        <div>
-                                            <button
-                                                class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
-                                                on:click=move |_| {
-                                                    on_go_up.try_run(());
+                                        {(current_path.get() != ".")
+                                            .then(|| {
+                                                view! {
+                                                    <div>
+                                                        <button
+                                                            class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
+                                                            on:click=move |_| {
+                                                                on_go_up.try_run(());
+                                                            }
+                                                        >
+                                                            <svg
+                                                                xmlns="http://www.w3.org/2000/svg"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke-width="1.5"
+                                                                stroke="currentColor"
+                                                                class="w-5 h-5 flex-shrink-0"
+                                                            >
+                                                                <path
+                                                                    stroke-linecap="round"
+                                                                    stroke-linejoin="round"
+                                                                    d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
+                                                                />
+                                                            </svg>
+                                                            <span>".."</span>
+                                                        </button>
+                                                    </div>
                                                 }
+                                            })}
+                                        <ul class="space-y-1">
+                                            <For
+                                                each=move || file_list.clone()
+                                                key=|item| item.name.clone()
+                                                let(item)
                                             >
-                                                <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke-width="1.5"
-                                                    stroke="currentColor"
-                                                    class="w-5 h-5 flex-shrink-0"
-                                                >
-                                                    <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
-                                                    />
-                                                </svg>
-                                                <span>".."</span>
-                                            </button>
-                                        </div>
-                                    }
-                                })}
-                            <ul class="space-y-1">
-                                {items
-                                    .iter()
-                                    .map(|item| {
-                                        let item = item.clone();
-                                        view! {
-                                            <ProjectFilesSidebarItem
-                                                csrf_signal
-                                                slug=slug
-                                                current_path=current_path
-                                                item=item
-                                                server_project_action=server_project_action
-                                                on_navigate_dir=on_navigate_dir
-                                                on_select_file=on_select_file
-                                            />
-                                        }
-                                    })
-                                    .collect_view()}
-                            </ul>
-                        </Show>
-                    }
+                                                <ProjectFilesSidebarItem
+                                                    csrf_signal
+                                                    slug=slug
+                                                    current_path=current_path
+                                                    item=item
+                                                    server_project_action=server_project_action
+                                                    on_navigate_dir=on_navigate_dir
+                                                    on_select_file=on_select_file
+                                                />
+                                            </For>
+                                        </ul>
+                                    },
+                                )
+                            }
+                        },
+                    )
                 }
-            </Show>
+            }}
         </div>
     }
 }

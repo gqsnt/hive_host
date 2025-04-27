@@ -149,7 +149,10 @@ pub fn ProjectSettings() -> impl IntoView {
                 <div class="mt-2 text-sm text-right min-h-[1.25em]">
                     {toggle_project_action_result}
                 </div>
-                <Show when=move || is_active() && !toggle_project_action.pending().get() fallback=move || view! {}>
+                <Show
+                    when=move || is_active() && !toggle_project_action.pending().get()
+                    fallback=move || view! {}
+                >
                     <div class="mt-6 pt-6 border-t border-gray-700 space-y-4">
                         <div class="flex justify-between items-center">
                             <h3 class="text-base font-semibold leading-6 text-white">

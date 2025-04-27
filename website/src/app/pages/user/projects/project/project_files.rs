@@ -41,7 +41,7 @@ pub fn ProjectFiles() -> impl IntoView {
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
 
     let server_project_action = get_action_server_project_action();
-
+    log!("Path : {}, Slug: {}, Version: {}", current_path.get(), slug.get(), server_project_action.version().get());
     let file_list_resource = Resource::new(
         move || {
             (
@@ -141,26 +141,27 @@ pub fn ProjectFiles() -> impl IntoView {
                     }}
                 </nav>
             </div>
-            <Suspense fallback=move || {
-                view! { Loading... }
-            }>
-                {move || {
-                    Suspend::new(async move {
-                        let file_list = Signal::derive(move || {
-                            file_list_resource
-                                .get()
-                                .map(|r| {
-                                    r.ok()
-                                        .map(|r| match r {
-                                            ServerProjectActionResponse::Ls(inner) => Some(inner.inner),
-                                            _ => None,
-                                        })
-                                        .flatten()
-                                })
-                                .flatten()
-                        });
-                        view! {
-                            <div class="flex flex-grow overflow-hidden">
+            <div class="flex flex-grow overflow-hidden">
+
+                <Suspense fallback=move || {
+                    view! { Loading... }
+                }>
+                    {move || {
+                        Suspend::new(async move {
+                            let file_list = Signal::derive(move || {
+                                file_list_resource
+                                    .get()
+                                    .map(|r| {
+                                        r.ok()
+                                            .map(|r| match r {
+                                                ServerProjectActionResponse::Ls(inner) => Some(inner.inner),
+                                                _ => None,
+                                            })
+                                            .flatten()
+                                    })
+                                    .flatten()
+                            });
+                            view! {
                                 <div class="w-64 md:w-80 flex-shrink-0 border-r border-white/10 overflow-y-auto">
                                     <ProjectFilesSidebar
                                         csrf_signal
@@ -172,20 +173,16 @@ pub fn ProjectFiles() -> impl IntoView {
                                         on_select_file=handle_select_file
                                         server_project_action=server_project_action
                                     />
-                                </div>
-                                <div class="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
-                                    <FileContentView
-                                        csrf_signal
-                                        selected_file=selected_file.into()
-                                        slug=slug
-                                    />
-                                </div>
-                            </div>
-                        }
-                    })
-                }}
-            </Suspense>
 
+                                </div>
+                            }
+                        })
+                    }}
+                </Suspense>
+                <div class="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
+                    <FileContentView csrf_signal selected_file=selected_file.into() slug=slug />
+                </div>
+            </div>
         </div>
     }
 }

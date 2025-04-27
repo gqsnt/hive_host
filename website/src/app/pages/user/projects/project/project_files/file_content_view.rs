@@ -10,6 +10,7 @@ use leptos::prelude::{ClassAttribute, Get, Resource, Signal, Transition};
 use leptos::prelude::{GetUntracked, OnAttribute};
 use leptos::prelude::{IntoMaybeErased, ServerFnError, Suspend};
 use leptos::{component, view, IntoView};
+use leptos::logging::log;
 use web_sys::MouseEvent;
 
 #[component]
@@ -18,10 +19,10 @@ pub fn FileContentView(
     slug: Signal<ProjectSlugStr>,
     csrf_signal:Signal<Option<String>>,
 ) -> impl IntoView {
-
     let file_content_resource = Resource::new(
         move || (selected_file.get(), slug.get()),
         |(file_path_opt, slug)| async move {
+            log!("Fetching file content for path: {:?}, slug:{}", file_path_opt, slug);
             match file_path_opt {
                 Some(file_path) => {
                     match crate::api::get_action_server_project_action_inner(
@@ -40,7 +41,7 @@ pub fn FileContentView(
                         _ => Err(ServerFnError::new("Invalid response type")),
                     }
                 }
-                _ => Err(ServerFnError::new("No file selected")),
+                _ => Err(ServerFnError::new("FileContentView: No file selected")),
             }
         },
     );

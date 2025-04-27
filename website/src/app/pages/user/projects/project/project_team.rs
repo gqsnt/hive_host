@@ -5,7 +5,7 @@ use crate::app::IntoView;
 use common::permission::Permission;
 
 use crate::app::components::csrf_field::CSRFField;
-use leptos::either::Either;
+use leptos::either::{Either, EitherOf3};
 use leptos::prelude::{signal, AddAnyAttr, Effect, Read, ServerFnError, Set, Signal};
 use leptos::prelude::CollectView;
 use leptos::prelude::ElementChild;
@@ -31,7 +31,7 @@ pub fn ProjectTeam() -> impl IntoView {
     let add_member = ServerAction::<server_fns::AddProjectTeamPermission>::new();
     let delete_member = ServerAction::<server_fns::DeleteProjectTeamMember>::new();
     
-    let team_res = Resource::new_blocking(
+    let team_res = Resource::new(
         move || {
             (
                 update_member.version().get(),
@@ -73,7 +73,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                     _ => {}
                                 };
                             });
-                            Either::Right(
+                            EitherOf3::A(
 
                                 view! {
                                     <div class="mt-6 flex flex-col gap-y-8">
@@ -208,7 +208,18 @@ pub fn ProjectTeam() -> impl IntoView {
                                 },
                             )
                         }
-                        _ => Either::Left(()),
+                        Some(Err(e)) => {
+                            EitherOf3::B(
+                                view! {
+                                    <p class="text-red-500">
+                                        {format!("Error fetching team: {}", e)}
+                                    </p>
+                                },
+                            )
+                        }
+                        None => {
+                            EitherOf3::C(view! { <p class="text-gray-400">"Loading team..."</p> })
+                        }
                     }
                 })}
             </Suspense>
