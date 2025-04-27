@@ -108,16 +108,11 @@ fn ProjectsRoutes() -> impl MatchNestedRoutes + Clone {
 
 #[component(transparent)]
 fn ProjectRoutes()-> impl MatchNestedRoutes + Clone {
-    // let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
-    // let project_resource = Resource::new(
-    //     move || project_slug_signal(),
-    //     move |project_slug| project::server_fns::get_project(project_slug.0),
-    // );
     view! {
         <ParentRoute path=path!(":project_slug") view=ProjectPage>
             <Route path=path!("") view=ProjectDashboard />
             <Route path=path!("settings") view=ProjectSettings />
-            <Route path=path!("files") view=ProjectFiles />
+            <Route path=path!("files/*path") view=ProjectFiles />
             <Route path=path!("team") view=ProjectTeam />
         </ParentRoute>
     }.into_inner()

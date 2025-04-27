@@ -290,19 +290,25 @@ pub async fn handle_server_project_action_file(
 }
 
 pub async fn ensure_path_in_project_path(
-    project_slug: ProjectUnixSlugStr,
-    user_path: &str,
+    project_slug: ProjectUnixSlugStr, 
+    project_path_: &str,
     is_file: bool,
     should_exist: bool,
 ) -> Result<PathBuf, (StatusCode, String)> {
     // 1) Canonicaliser la racine projet
+    let mut project_path_ = project_path_.to_string();
+    if !project_path_.starts_with("root/"){
+        return Err(ServerError::InvalidPath.into());
+    }
+    project_path_ = project_path_.replacen("root/", "./", 1);
+    
     let project_root = PathBuf::from(project_path(project_slug));
     let project_root = tokio::fs::canonicalize(&project_root)
         .await
         .map_err(ServerError::from)?;
 
     // 2) Rejeter tout chemin absolu ou contenant `..`
-    let rel = PathBuf::from(user_path);
+    let rel = PathBuf::from(project_path_);
     if rel.is_absolute()
         || rel
             .components()

@@ -23,7 +23,6 @@ pub fn ProjectTeam() -> impl IntoView {
     let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
     let slug = move ||
         project_slug_signal.read().0.clone(); 
-
     let update_member = ServerAction::<server_fns::UpdateProjectTeamPermission>::new();
     let add_member = ServerAction::<server_fns::AddProjectTeamPermission>::new();
     let delete_member = ServerAction::<server_fns::DeleteProjectTeamMember>::new();
@@ -37,7 +36,7 @@ pub fn ProjectTeam() -> impl IntoView {
                 slug()
             )
         },
-        move |(u, a, d, s)| {
+        move |(_, _, _, s)| {
             server_fns::get_project_team(s)
         },
     );

@@ -1,30 +1,64 @@
+use leptos::prelude::{Effect, IntoAnyAttribute};
+use leptos::prelude::AddAnyAttr;
 pub mod file_content_view;
 pub mod project_files_sidebar;
 
+use leptos_router::params::Params;
 use crate::api::get_action_server_project_action;
 use crate::app::pages::user::projects::project::project_files::file_content_view::FileContentView;
 use crate::app::pages::user::projects::project::project_files::project_files_sidebar::ProjectFilesSidebar;
-use crate::app::pages::user::projects::project::ProjectSlugSignal;
+use crate::app::pages::user::projects::project::{ ProjectSlugSignal};
 use crate::app::IntoView;
 
 use common::server_project_action::io_action::dir_action::DirAction;
 use common::server_project_action::ServerProjectActionResponse;
 use leptos::either::Either;
 
-use leptos::prelude::{ElementChild, Read, Suspend, Transition};
+use leptos::prelude::{ElementChild, Memo, Read, Suspend, Transition};
 
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
-use leptos::logging::log;
 use leptos::prelude::{
-    expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased, OnAttribute,
+    expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased,
 };
 use leptos::prelude::{Callback, Signal};
 use leptos::server::Resource;
-use leptos::{component, view};
+use leptos::{component, view, Params};
+use leptos_router::components::A;
+use leptos_router::hooks::{use_params};
+use leptos_router::params::ParamsError;
 use reactive_stores::Store;
+
+#[derive(Params, Clone, Debug, PartialEq)]
+pub struct ProjectFilesParams {
+    pub path: String,
+}
+
+pub type MemoProjectFilesParams = Memo<Result<ProjectFilesParams, ParamsError>>;
 
 #[component]
 pub fn ProjectFiles() -> impl IntoView {
+    let params: MemoProjectFilesParams = use_params::<ProjectFilesParams>();
+    let current_path =  Signal::derive(move || {
+        params.read()
+            .as_ref()
+            .ok()
+            .map(|p|{
+                let p = p.path.clone();
+                if p.is_empty(){
+                    return "root/".to_string();
+                }
+                let end_with_slash = p.ends_with("/");
+                if end_with_slash {
+                     p
+                }else{
+                    let mut p = p.clone();
+                    p.push('/');
+                     p
+                }
+            })
+            .unwrap_or_else(|| "root/".to_string())
+    });
+    
     let global_state:Store<GlobalState> = expect_context();
 
     let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
@@ -35,8 +69,7 @@ pub fn ProjectFiles() -> impl IntoView {
         global_state.csrf().get()
     });
     
-
-    let (current_path, set_current_path) = signal(".".to_string());
+    
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
 
     let server_project_action = get_action_server_project_action();
@@ -48,7 +81,7 @@ pub fn ProjectFiles() -> impl IntoView {
                 server_project_action.version().get(),
             )
         },
-        |(path, slug, _)|  {
+        |(path,slug, _)| {
             crate::api::get_action_server_project_action_inner(
                 slug,
                 DirAction::Ls { path }.into(),
@@ -58,25 +91,12 @@ pub fn ProjectFiles() -> impl IntoView {
         },
     );
 
-    let go_up_one_level = move |_| {
-        let current = current_path.get();
-        if current != "." {
-            if let Some(last_slash_idx) = current.rfind('/') {
-                if last_slash_idx == 1 {
-                    set_current_path(".".to_string());
-                } else {
-                    set_current_path(current[..last_slash_idx].to_string());
-                }
-            }
-        }
-    };
-
     let breadcrumbs = move || {
         let path = current_path.get();
-        let mut segments = vec![("Root".to_string(), ".".to_string())];
-        if path != "." {
-            let mut accumulated_path = String::from(".");
-            let relative_path = path.trim_start_matches("./");
+        let mut segments = vec![("Root".to_string(), "root/".to_string())];
+        if path != "root/" {
+            let mut accumulated_path = String::from("root");
+            let relative_path = path.trim_start_matches("root/");
             for segment in relative_path.split('/') {
                 if !segment.is_empty() {
                     accumulated_path.push('/');
@@ -87,21 +107,21 @@ pub fn ProjectFiles() -> impl IntoView {
         }
         segments
     };
+    Effect::new(move |_|{
+        let _ = current_path.get();
+        set_selected_file(None);
+    });
 
     let handle_select_file = Callback::new(move |file_path: String| {
         set_selected_file(Some(file_path));
     });
-
-    let handle_navigate_dir = Callback::new(move |dir_path: String| {
-        set_current_path(dir_path);
-        set_selected_file(None);
-    });
+    // 
+    // let handle_navigate_dir = Callback::new(move |dir_path: String| {
+    //     set_current_path(dir_path);
+    //     set_selected_file(None);
+    // });
     
     
-    let handle_on_go_up = Callback::new(move |_| {
-        go_up_one_level(());
-        set_selected_file(None);
-    });
 
     view! {
         <div class="flex flex-col h-full">
@@ -128,12 +148,14 @@ pub fn ProjectFiles() -> impl IntoView {
                                         } else {
                                             Either::Right(
                                                 view! {
-                                                    <button
-                                                        class="hover:text-white hover:underline whitespace-nowrap"
-                                                        on:click=move |_| set_current_path(target_path.clone())
+                                                    <A
+                                                        attr:class="hover:text-white hover:underline whitespace-nowrap"
+                                                        href=move || {
+                                                            format!("/user/projects/{}/files/{}", slug(), target_path)
+                                                        }
                                                     >
                                                         {name}
-                                                    </button>
+                                                    </A>
                                                 },
                                             )
                                         }}
@@ -151,7 +173,7 @@ pub fn ProjectFiles() -> impl IntoView {
                 }>
                     {move || {
                         Suspend::new(async move {
-                            let file_list = Signal::derive(move || {
+                            let (file_list, _) = signal(
                                 file_list_resource
                                     .get()
                                     .and_then(|r| {
@@ -160,18 +182,18 @@ pub fn ProjectFiles() -> impl IntoView {
                                                 ServerProjectActionResponse::Ls(inner) => Some(inner.inner),
                                                 _ => None,
                                             })
-                                    })
-                            });
+                                    }),
+                            );
 
                             view! {
                                 <div class="w-64 md:w-80 flex-shrink-0 border-r border-white/10 overflow-y-auto">
                                     <ProjectFilesSidebar
                                         csrf_signal
                                         file_list=file_list
-                                        current_path=current_path.into()
+                                        current_path=current_path
                                         slug=slug
-                                        on_go_up=handle_on_go_up
-                                        on_navigate_dir=handle_navigate_dir
+                                        // on_go_up=handle_on_go_up
+                                        // on_navigate_dir=handle_navigate_dir
                                         on_select_file=handle_select_file
                                         server_project_action=server_project_action
                                     />

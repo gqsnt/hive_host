@@ -46,7 +46,7 @@ impl ProjectSection {
         match self {
             ProjectSection::Dashboard => format!("/user/projects/{base}"),
             ProjectSection::Team => format!("/user/projects/{base}/team"),
-            ProjectSection::Files => format!("/user/projects/{base}/files"),
+            ProjectSection::Files => format!("/user/projects/{base}/files/root/"),
             ProjectSection::Settings => format!("/user/projects/{base}/settings"),
         }
     }

@@ -29,19 +29,6 @@ pub fn SignupPage() -> impl IntoView {
     });
 
     view! {
-        <Transition>
-            {move || Suspend::new(async move {
-                let csrf = csrf_resource.await;
-                match csrf {
-                    Ok(csrf) => {
-                        global_store.update(|inner| inner.csrf = Some(csrf));
-                    }
-                    Err(_) => {
-                        global_store.update(|inner| inner.csrf = None);
-                    }
-                }
-            })}
-        </Transition>
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
             <div class="sm:mx-auto sm:w-full sm:max-w-sm">
                 <img
@@ -56,7 +43,21 @@ pub fn SignupPage() -> impl IntoView {
 
             <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
                 <ActionForm action=action>
-                    <CSRFField />
+                    <Transition>
+                        {move || Suspend::new(async move {
+                            let csrf = csrf_resource.await;
+                            match csrf {
+                                Ok(csrf) => {
+                                    global_store.update(|inner| inner.csrf = Some(csrf));
+                                }
+                                Err(_) => {
+                                    global_store.update(|inner| inner.csrf = None);
+                                }
+                            }
+                            view! { <CSRFField /> }
+                        })}
+                    </Transition>
+
                     <div>
                         <label class="form-label">
                             Email address <div class="mt-2">

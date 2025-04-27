@@ -1,11 +1,12 @@
+use leptos::prelude::IntoAnyAttribute;
+use leptos::prelude::AddAnyAttr;
 use crate::api::ServerProjectActionFront;
 use common::server_project_action::io_action::dir_action::{DirAction, LsElement};
 use common::server_project_action::io_action::file_action::FileAction;
 use leptos::callback::Callback;
 use leptos::either::Either;
 use leptos::html::Input;
-use leptos::leptos_dom::log;
-use leptos::prelude::{signal, NodeRef, NodeRefAttribute};
+use leptos::prelude::{signal, NodeRef, NodeRefAttribute, ReadSignal};
 use leptos::prelude::{Callable, Get, IntoMaybeErased};
 use leptos::prelude::{
     ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Signal,
@@ -13,15 +14,19 @@ use leptos::prelude::{
 use leptos::prelude::CustomAttribute;
 use leptos::prelude::{ElementChild, Read, Show};
 use leptos::{component, view, IntoView};
+use leptos_router::components::A;
 use web_sys::SubmitEvent;
+
+
+pub type FileListSignal = ReadSignal<Option<Vec<LsElement>>>;
 
 #[component]
 pub fn ProjectFilesSidebar(
-    file_list: Signal<Option<Vec<LsElement>>>,
+    file_list: FileListSignal,
     current_path: Signal<String>,
     slug: Signal<String>,
-    on_go_up: Callback<()>,
-    on_navigate_dir: Callback<String>,
+    // on_go_up: Callback<()>,
+    // on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
     csrf_signal:Signal<Option<String>>
@@ -38,7 +43,7 @@ pub fn ProjectFilesSidebar(
         server_project_action.dispatch((
             slug(),
             DirAction::Create {
-                path: format!("{}/{}", current_path.get(), folder_name),
+                path: format!("{}{}", current_path.get(), folder_name),
             }
             .into(),
             None,
@@ -55,7 +60,7 @@ pub fn ProjectFilesSidebar(
         server_project_action.dispatch((
             slug(),
             FileAction::Create {
-                path: format!("{}/{}", current_path.get(), file_name),
+                path: format!("{}{}", current_path.get(), file_name),
             }
             .into(),
             None,
@@ -150,8 +155,8 @@ pub fn ProjectFilesSidebar(
                 slug=slug
                 current_path=current_path
                 file_list=file_list
-                on_go_up=on_go_up
-                on_navigate_dir=on_navigate_dir
+                // on_go_up=on_go_up
+                // on_navigate_dir=on_navigate_dir
                 on_select_file=on_select_file
                 server_project_action=server_project_action
                 csrf_signal
@@ -166,9 +171,9 @@ pub fn ProjectFilesSidebarList(
     csrf_signal: Signal<Option<String>>,
     slug: Signal<String>,
     current_path: Signal<String>,
-    file_list: Signal<Option<Vec<LsElement>>>,
-    on_go_up: Callback<()>,
-    on_navigate_dir: Callback<String>,
+    file_list: FileListSignal,
+    // on_go_up: Callback<()>,
+    // on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
 ) -> impl IntoView {
@@ -179,15 +184,28 @@ pub fn ProjectFilesSidebarList(
                 Some(file_list) => {
                     Either::Right({
                         let is_empty = file_list.is_empty();
+
                         view! {
-                            {(current_path.get() != ".")
+                            {(current_path.get() != "root/")
                                 .then(|| {
+                                    let prev_path = move |path: String| {
+                                        path.strip_suffix("/")
+                                            .unwrap_or_default()
+                                            .rsplit_once('/')
+                                            .map(|(prev, _)| prev.to_string())
+                                            .unwrap_or_else(|| current_path.get())
+                                            .to_string()
+                                    };
                                     view! {
                                         <div>
-                                            <button
-                                                class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
-                                                on:click=move |_| {
-                                                    on_go_up.try_run(());
+                                            <A
+                                                attr:class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
+                                                href=move || {
+                                                    format!(
+                                                        "/user/projects/{}/files/{}",
+                                                        slug.get(),
+                                                        prev_path(current_path.get()),
+                                                    )
                                                 }
                                             >
                                                 <svg
@@ -205,7 +223,7 @@ pub fn ProjectFilesSidebarList(
                                                     />
                                                 </svg>
                                                 <span>".."</span>
-                                            </button>
+                                            </A>
                                         </div>
                                     }
                                 })}
@@ -224,7 +242,6 @@ pub fn ProjectFilesSidebarList(
                                                     current_path=current_path
                                                     item=item.clone()
                                                     server_project_action=server_project_action
-                                                    on_navigate_dir=on_navigate_dir
                                                     on_select_file=on_select_file
                                                 />
                                             }
@@ -247,20 +264,18 @@ pub fn ProjectFilesSidebarItem(
     current_path: Signal<String>,
     item: LsElement,
     server_project_action: ServerProjectActionFront,
-    on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
 ) -> impl IntoView {
     let (is_renaming_item, set_is_renaming_item) = signal(false);
     let new_name_ref: NodeRef<Input> = NodeRef::new();
     let (item_name, _) = signal(item.name.clone());
-
+    let item_path = move ||  format!("{}{}", current_path.get(), item_name());
     let on_delete_item_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
-        let path = format!("{}/{}", current_path.get(), item_name());
         let action = if item.is_dir {
-            DirAction::Delete { path }.into()
+            DirAction::Delete { path:item_path() }.into()
         } else {
-            FileAction::Delete { path }.into()
+            FileAction::Delete { path:item_path() }.into()
         };
         server_project_action.dispatch((slug(), action, None, Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default())));
     };
@@ -274,13 +289,13 @@ pub fn ProjectFilesSidebarItem(
         }
         let action = if item.is_dir {
             DirAction::Rename {
-                path: format!("{}/{}", current_path.get(), old_name),
+                path: format!("{}{}", current_path.get(), old_name),
                 new_name,
             }
             .into()
         } else {
             FileAction::Rename {
-                path: format!("{}/{}", current_path.get(), old_name),
+                path: format!("{}{}", current_path.get(), old_name),
                 new_name,
             }
             .into()
@@ -348,76 +363,79 @@ pub fn ProjectFilesSidebarItem(
                     </svg>
                 </button>
             </form>
-            <button
-                class=move || {
-                    format!(
-                        "flex items-center gap-x-2 overflow-hidden flex-grow text-left hover:text-white {}",
-                        if is_renaming_item.get() { "hidden" } else { "" },
+            {match item.is_dir {
+                true => {
+                    Either::Left(
+                        view! {
+                            <A
+                                attr:class=move || {
+                                    format!(
+                                        "flex items-center gap-x-2 overflow-hidden flex-grow text-left hover:text-white {}",
+                                        if is_renaming_item.get() { "hidden" } else { "" },
+                                    )
+                                }
+                                href=move || {
+                                    format!("/user/projects/{}/files/{}", slug.get(), item_path())
+                                }
+                            >
+                                <span class="flex-shrink-0 w-5 h-5">
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke-width="1.5"
+                                        stroke="currentColor"
+                                        class="w-5 h-5 text-sky-400"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
+                                        />
+                                    </svg>
+                                </span>
+                                <span class="truncate flex-grow">{item_name()}</span>
+                            </A>
+                        },
                     )
                 }
-                on:click=move |_| {
-                    if item.is_dir {
-                        let next_path = if current_path.get() == "." {
-                            format!("./{}", item_name())
-                        } else {
-                            format!("{}/{}", current_path.get(), item_name())
-                        };
-                        on_navigate_dir.try_run(next_path);
-                    } else {
-                        let full_item_path = format!(
-                            "{}/{}",
-                            current_path.get().trim_end_matches('/'),
-                            item_name(),
-                        )
-                            .replace("././", "./");
-                        on_select_file.try_run(full_item_path);
-                    }
+                false => {
+                    Either::Right(
+                        view! {
+                            <button
+                                class=move || {
+                                    format!(
+                                        "flex items-center gap-x-2 overflow-hidden flex-grow text-left hover:text-white {}",
+                                        if is_renaming_item.get() { "hidden" } else { "" },
+                                    )
+                                }
+                                on:click=move |e| {
+                                    e.prevent_default();
+                                    on_select_file.try_run(item_path());
+                                }
+                            >
+                                <span class="flex-shrink-0 w-5 h-5">
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke-width="1.5"
+                                        stroke="currentColor"
+                                        class="w-5 h-5 text-gray-400"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                                        />
+                                    </svg>
+                                </span>
+                                <span class="truncate flex-grow">{item_name()}</span>
+                            </button>
+                        },
+                    )
                 }
-            >
-                // Icon container
-                <span class="flex-shrink-0 w-5 h-5">
-                    {if item.is_dir {
-                        Either::Left(
-                            view! {
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke-width="1.5"
-                                    stroke="currentColor"
-                                    class="w-5 h-5 text-sky-400"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-                                    />
-                                </svg>
-                            },
-                        )
-                    } else {
-                        Either::Right(
-                            view! {
-                                <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke-width="1.5"
-                                    stroke="currentColor"
-                                    class="w-5 h-5 text-gray-400"
-                                >
-                                    <path
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                                    />
-                                </svg>
-                            },
-                        )
-                    }}
-                </span>
-                <span class="truncate flex-grow">{item_name()}</span>
-            </button>
+            }}
 
             <div class=move || {
                 format!(

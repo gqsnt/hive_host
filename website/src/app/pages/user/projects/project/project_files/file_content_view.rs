@@ -4,7 +4,6 @@ use common::server_project_action::ServerProjectActionResponse;
 use common::ProjectSlugStr;
 use leptos::either::Either;
 use leptos::html::Textarea;
-use leptos::logging::log;
 use leptos::prelude::{signal, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, Read};
 use leptos::prelude::{ClassAttribute, Get, Resource, Signal, Transition};
 use leptos::prelude::{GetUntracked, OnAttribute};
