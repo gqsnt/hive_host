@@ -184,13 +184,14 @@ pub fn ProjectFiles() -> impl IntoView {
                                             })
                                     }),
                             );
-
-                            Effect::new(move |_|{
-                                if file_list.read().as_ref().is_none(){
+                            Effect::new(move |_| {
+                                if file_list.read().as_ref().is_none() {
                                     let navigate = use_navigate();
-                                    navigate(&format!("/user/projects/{}/files/root/", slug()), Default::default());
+                                    navigate(
+                                        &format!("/user/projects/{}/files/root/", slug()),
+                                        Default::default(),
+                                    );
                                 }
-
                             });
 
                             view! {

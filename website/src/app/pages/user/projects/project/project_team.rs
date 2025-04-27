@@ -62,9 +62,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                     Some(Ok(_)) => {
                                         set_add_member_result.set(String::from("Member added"))
                                     }
-                                    Some(Err(e)) => {
-                                        set_add_member_result.set(e.to_string())
-                                    }
+                                    Some(Err(e)) => set_add_member_result.set(e.to_string()),
                                     _ => {}
                                 };
                             });
