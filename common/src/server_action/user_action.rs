@@ -15,14 +15,6 @@ pub enum UserAction {
         user_slugs: Vec<UserSlug>,
         project_slug: ProjectSlug,
     },
-    AddSshKey {
-        user_slug: UserSlug,
-        ssh_key: String,
-    },
-    RemoveSshKey {
-        user_slug: UserSlug,
-        ssh_key: String,
-    },
     Delete {
         user_slug: UserSlug,
     },

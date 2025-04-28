@@ -1,5 +1,5 @@
 use common::permission::Permission;
-use common::{ProjectId, ProjectSlug, Slug, UserId, UserSlug};
+use common::{ProjectId, ProjectSlug, ProjectUnixSlugStr, Slug, UserId, UserSlug};
 use serde::{Deserialize, Serialize};
 use reactive_stores::Store;
 
@@ -22,6 +22,7 @@ pub struct User {
     pub email: String,
     pub role_type: RoleType,
     pub username: String,
+    pub slug : ProjectUnixSlugStr,
 }
 
 impl User {
@@ -45,6 +46,7 @@ impl Default for User {
             email: "guest@mail.com".to_string(),
             role_type: RoleType::default(),
             username: "guest".to_string(),
+            slug: "guest".to_string(),
         }
     }
 }
@@ -54,6 +56,7 @@ impl Default for User {
 pub struct Project {
     pub id: ProjectId,
     pub name: String,
+    pub slug :ProjectUnixSlugStr,
     pub is_active: bool,
 }
 

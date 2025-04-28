@@ -21,6 +21,7 @@ use secrecy::ExposeSecret;
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
+use crate::helper_client::HelperClient;
 
 pub async fn server_project_action_token(
     State(state): State<AppState>,
@@ -62,7 +63,7 @@ pub async fn server_project_action(
 }
 
 pub async fn handle_server_project_action(
-    _state: AppState,
+    state: AppState,
     project_slug: ProjectUnixSlugStr,
     action: ServerProjectAction,
     content: StringContent,
@@ -70,15 +71,16 @@ pub async fn handle_server_project_action(
     info!("Server Project action: {:?}", action);
     match action {
         ServerProjectAction::Io(io) => {
-            handle_server_project_action_io(project_slug, io, content).await
+            handle_server_project_action_io( project_slug, io, content).await
         }
         ServerProjectAction::Permission(permission) => {
-            handle_server_project_action_permission(project_slug, permission).await
+            handle_server_project_action_permission(state.helper_client, project_slug, permission).await
         }
     }
 }
 
 pub async fn handle_server_project_action_permission(
+    helper_client:HelperClient,
     project_slug: ProjectUnixSlugStr,
     action: PermissionAction,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
@@ -87,18 +89,18 @@ pub async fn handle_server_project_action_permission(
             user_slug,
             permission,
         } => {
-            add_user_to_project(user_slug.to_unix(), project_slug, permission)
+            add_user_to_project(helper_client, user_slug.to_unix(), project_slug, permission)
                 .await?;
         }
         PermissionAction::Revoke { user_slug } => {
-            remove_user_from_project(user_slug.to_unix(), project_slug)
+            remove_user_from_project(helper_client, user_slug.to_unix(), project_slug)
                 .await?;
         }
         PermissionAction::Update {
             user_slug,
             permission,
         } => {
-            update_user_in_project(user_slug.to_unix(), project_slug, permission)
+            update_user_in_project(helper_client, user_slug.to_unix(), project_slug, permission)
                 .await?;
         }
     }
@@ -269,7 +271,7 @@ pub async fn handle_server_project_action_file(
                 name,
                 content: String::from_utf8(buf).unwrap(),
                 size,
-                path: format!("./{}", path_copy.to_string_lossy()),
+                path: format!("root/{}", path_copy.to_string_lossy()),
                 last_modified,
             })));
         }

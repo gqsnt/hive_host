@@ -1,0 +1,24 @@
+[Unit]
+Description=HiveHost Privileged Server Helper Service
+Requires=hivehost_server_helper.socket
+After=hivehost_server_helper.socket
+
+[Service]
+# Run the service as root to perform privileged operations
+User=root
+Group=root
+
+# Path to the compiled helper binary
+ExecStart=/usr/local/bin/hivehost_server_helper
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+
+# Make /run/ accessible if the socket is there and not managed by systemd directly
+# ReadWritePaths=/run/
+
+[Install]
+WantedBy=multi-user.target
+# Also link the service to the socket
+Also=hivehost_server_helper.socket

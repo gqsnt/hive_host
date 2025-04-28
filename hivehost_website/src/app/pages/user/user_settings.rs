@@ -228,7 +228,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                                             >
                                                                                                                 "Delete"
                                                                                                             </button>
-                                                                                                            <div>{new_ssh_key_result}</div>
                                                                                                         </ActionForm>
 
                                                                                                     </div>
@@ -324,6 +323,8 @@ pub fn UserSettingsPage() -> impl IntoView {
                                     "Add SSH Key"
                                 </button>
                             </div>
+                            <div>{new_ssh_key_result}</div>
+
                         </ActionForm>
                     // End Right Side
                     </div>
@@ -440,14 +441,6 @@ pub mod server_fns {
         )
         .fetch_one(&pool)
         .await?;
-        let _ = request_server_action(
-            UserAction::RemoveSshKey {
-                user_slug: auth.current_user.unwrap_or_default().get_slug(),
-                ssh_key: record.public_key,
-            }
-            .into(),
-        )
-        .await;
         Ok(())
     }
 
@@ -491,14 +484,6 @@ pub mod server_fns {
         )
         .execute(&pool)
         .await?;
-        let _ = request_server_action(
-            UserAction::AddSshKey {
-                user_slug: auth.current_user.unwrap_or_default().get_slug(),
-                ssh_key: ssh_key_value,
-            }
-            .into(),
-        )
-        .await;
         Ok(())
     }
 

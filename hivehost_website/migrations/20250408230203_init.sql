@@ -7,7 +7,10 @@ create table if not exists users
     username text      not null,
     email    text      not null unique,
     password text      not null,
-    role     role_type not null
+    role     role_type not null,
+    slug     TEXT
+        GENERATED ALWAYS AS (username || id::TEXT)
+            STORED not null
 );
 
 
@@ -16,7 +19,10 @@ create table if not exists projects
 (
     id        bigserial primary key,
     name      text                  not null,
-    is_active boolean default false not null
+    is_active boolean default false not null,
+    slug      TEXT
+        GENERATED ALWAYS AS (name || id::TEXT)
+            STORED not null
 );
 
 

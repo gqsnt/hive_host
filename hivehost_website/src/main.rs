@@ -1,4 +1,4 @@
-use website::AppResult;
+use hivehost_website::AppResult;
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
@@ -18,13 +18,13 @@ async fn main() -> AppResult<()> {
     use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
-    use website::app::*;
-    use website::models::User;
-    use website::rate_limiter::ssr::RateLimiter;
-    use website::ssr::ServerVars;
-    use website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
-    use website::tasks::refresh_server_csrf::RefreshServerCsrf;
-    use website::tasks::ssr::TaskDirector;
+    use hivehost_website::app::*;
+    use hivehost_website::models::User;
+    use hivehost_website::rate_limiter::ssr::RateLimiter;
+    use hivehost_website::ssr::ServerVars;
+    use hivehost_website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
+    use hivehost_website::tasks::refresh_server_csrf::RefreshServerCsrf;
+    use hivehost_website::tasks::ssr::TaskDirector;
 
     dotenvy::dotenv().ok();
 

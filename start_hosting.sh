@@ -1,1 +1,1 @@
-cargo build --bin hosting && sudo ./target/debug/hosting
+cargo build --bin hivehost_hosting && sudo -u hivehost_server  ./target/debug/hivehost_hosting

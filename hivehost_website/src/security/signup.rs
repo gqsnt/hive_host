@@ -2,9 +2,7 @@
 use crate::models::User;
 use crate::{AppResult, BoolInput};
 use leptos::server;
-
-
-
+use common::UserSlug;
 
 #[server(Signup, "/api")]
 pub async fn signup(
@@ -96,7 +94,8 @@ pub async fn signup(
         id: user.id,
         email,
         role_type: RoleType::default(),
-        username,
+        username:username.clone(),
+        slug:UserSlug::new(user.id, username).to_unix(),
     };
     let user_slug = user.get_slug();
     crate::api::ssr::request_server_action(

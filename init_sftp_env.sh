@@ -9,6 +9,40 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+
+### 2. Create the dedicated service user and group (if they don't exist)
+SERVICE_USER="hivehost_server"
+SERVICE_GROUP="hivehost_server"
+SFTP_GROUP="sftp_users"
+
+
+if ! getent group "$SERVICE_GROUP" >/dev/null; then
+  echo "Creating group '$SERVICE_GROUP'..."
+  groupadd --system "$SERVICE_GROUP"
+else
+  echo "Group '$SERVICE_GROUP' already exists."
+fi
+
+if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
+  echo "Creating user '$SERVICE_USER'..."
+  # System user, primary group hivehost_server, no login shell, no home dir created by useradd
+  useradd --system --gid "$SERVICE_GROUP" --shell /usr/sbin/nologin --no-create-home "$SERVICE_USER"
+else
+  echo "User '$SERVICE_USER' already exists."
+fi
+
+### 3. Create the SFTP group (if it doesn't exist)
+if ! getent group "$SFTP_GROUP" >/dev/null; then
+  echo "Creating group '$SFTP_GROUP'..."
+  groupadd --system "$SFTP_GROUP"
+else
+  echo "Group '$SFTP_GROUP' already exists."
+fi
+
+
+
+
+
 ### 2. Créer le dossier principal sftp
 #   owned par root:root, chmod 755
 mkdir -p /sftp/users
@@ -27,25 +61,36 @@ chmod 711 /projects
 # mais on peut cd si on connaît un sous-répertoire.
 # tu peux mettre 700 si tu ne veux pas que même 'cd' soit possible.
 
-### 4. (Optionnel) Activer l'ACL sur /projects si ce n'est pas déjà monté avec ACL
-# Sur Ubuntu/Debian, on peut le faire en éditant /etc/fstab
-#   (ex: "/dev/sda1 /projects ext4 defaults,acl 0 2")
-# Puis : mount -o remount,acl /projects
-# Vérification :
-if ! mount | grep -q " on /projects " ; then
-  echo "Warning: /projects might not be a separate partition. ACL activation might need /etc/fstab config."
+### 6. Check/Activate ACL on /projects (if needed)
+#    (Assuming /projects is a mount point like ext4/xfs supporting ACLs)
+if ! mount | grep -q " on /projects .*acl"; then
+  echo "Warning: /projects filesystem might not have ACL enabled by default."
+  echo "Attempting to remount with ACL..."
+  # This might fail if /projects is not a separate mount or already has acl
+  mount -o remount,acl /projects || echo "Remount failed, check /etc/fstab or mount options."
 fi
 
-# Test si ACL fonctionne :
-setfacl -m u:root:rwx /projects 2>/dev/null || {
-  echo "ACL might not be enabled on /projects (setfacl command failed)."
-  echo "Please ensure the filesystem is mounted with 'acl' option."
-}
+# Test if ACL works by trying to set one (and immediately remove it)
+echo "Testing ACL functionality..."
+if setfacl -m "u:$SERVICE_USER:rwx" /projects >/dev/null 2>&1; then
+  echo "ACL test successful. Granting service user initial access."
+  # Grant the service user ability to manage files/ACLs *within* /projects
+  # It will create subdirs and set specific ACLs later via the helper.
+  setfacl -m "u:$SERVICE_USER:rwx" /projects
+  setfacl -d -m "u:$SERVICE_USER:rwx" /projects # Default for new items
+else
+  setfacl -m "u:root:rwx" /projects # Cleanup potential failed attempt
+  echo "Error: ACL might not be enabled or working correctly on /projects."
+  echo "Please ensure the filesystem for /projects is mounted with the 'acl' option."
+  # exit 1 # Optional: exit if ACLs are critical
+fi
 
 echo "✅ Initialization done."
-echo "Folders created and permissions set:
- - /sftp/users
- - /projects
-"
+echo "User '$SERVICE_USER', Group '$SFTP_GROUP' created (if not existing)."
+echo "Folders created and base permissions set:"
+echo " - /sftp/users (root:root 755)"
+echo " - /projects (root:root 711, +ACL for $SERVICE_USER)"
+echo "Ensure your main 'server' application runs as user '$SERVICE_USER'."
+echo "Configure SSHD for AuthorizedKeysCommand and Match Group $SFTP_GROUP."
 
 exit 0

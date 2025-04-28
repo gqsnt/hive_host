@@ -4,6 +4,7 @@ pub mod hosting_action;
 pub mod permission;
 pub mod server_action;
 pub mod server_project_action;
+pub mod server_helper;
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -56,7 +57,7 @@ impl StringContent {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Slug<I, U, S> {
     pub id: I,
     pub name: String,
@@ -75,6 +76,7 @@ pub enum SlugParseError {
     #[error("Empty name")]
     EmptyName,
 }
+
 
 impl<I, S, U> FromStr for Slug<I, S, U>
 where
@@ -103,6 +105,9 @@ where
         })
     }
 }
+
+
+
 
 impl<I, S, U> Slug<I, S, U>
 where

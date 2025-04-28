@@ -40,13 +40,13 @@ static TOKEN: LazyLock<String> =
 
 static DB: LazyLock<Pool> = LazyLock::new(|| {
     let mut cfg = deadpool_postgres::Config::new();
-    cfg.dbname = Some(dotenvy::var("DATABASE_NAME").expect("DATABASE_NAME must be set"));
-    cfg.user = Some(dotenvy::var("DATABASE_USER").expect("DATABASE_USER must be set"));
-    cfg.password = Some(dotenvy::var("DATABASE_PASSWORD").expect("DATABASE_PASSWORD must be set"));
-    cfg.host = Some(dotenvy::var("DATABASE_HOST").expect("DATABASE_HOST must be set"));
+    cfg.dbname = Some(dotenvy::var("DB_NAME").expect("DB_NAME must be set"));
+    cfg.user = Some(dotenvy::var("DB_USER").expect("DB_USER must be set"));
+    cfg.password = Some(dotenvy::var("DB_PASSWORD").expect("DB_PASSWORD must be set"));
+    cfg.host = Some(dotenvy::var("DB_HOST").expect("DB_HOST must be set"));
     cfg.port = Some(
-        dotenvy::var("DATABASE_PORT")
-            .expect("DATABASE_PORT must be set")
+        dotenvy::var("DB_PORT")
+            .expect("DB_PORT must be set")
             .parse()
             .unwrap(),
     );
@@ -153,7 +153,7 @@ pub enum HostingError {
 }
 
 pub fn main() -> HostingResult<()> {
-    dotenvy::dotenv().expect(".env must be set");
+    dotenvy::from_path(".env").expect("dotenvy must be set");
     LazyLock::force(&CACHE);
     LazyLock::force(&TOKEN);
     LazyLock::force(&DB);

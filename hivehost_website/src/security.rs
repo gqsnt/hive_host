@@ -35,7 +35,7 @@ pub mod ssr {
     use async_trait::async_trait;
     use axum_session_auth::Authentication;
     use axum_session_sqlx::SessionPgPool;
-    use common::UserId;
+    use common::{UserId, UserUnixSlugStr};
     use secrecy::SecretString;
     use sqlx::PgPool;
 
@@ -67,7 +67,7 @@ pub mod ssr {
         pub async fn get_from_id(id: UserId, pool: &PgPool) -> Option<Self> {
             let user = sqlx::query_as!(
                 SqlUserShort,
-                r#"SELECT id, email, role as "role: RoleType",username FROM users WHERE id = $1"#,
+                r#"SELECT id, email, role as "role: RoleType",username,slug FROM users WHERE id = $1"#,
                 id
             )
             .fetch_one(pool)
@@ -78,6 +78,7 @@ pub mod ssr {
                 email: user.email,
                 role_type: user.role,
                 username: user.username,
+                slug: user.slug,
             })
         }
 
@@ -87,7 +88,7 @@ pub mod ssr {
         ) -> AppResult<(Self, SecretString)> {
             let user = sqlx::query_as!(
                 SqlUserLong,
-                r#"SELECT id, email, password, role as "role: RoleType", username FROM users WHERE email = $1"#,
+                r#"SELECT id, email, password, role as "role: RoleType", username, slug FROM users WHERE email = $1"#,
                 email
             )
                 .fetch_one(pool)
@@ -98,6 +99,7 @@ pub mod ssr {
                     email: user.email,
                     role_type: user.role,
                     username: user.username,
+                    slug: user.slug
                 },
                 user.password,
             ))
@@ -111,6 +113,7 @@ pub mod ssr {
         pub password: SecretString,
         pub role: RoleType,
         pub username: String,
+        pub slug : UserUnixSlugStr,
     }
 
     #[derive(sqlx::FromRow, Clone)]
@@ -119,5 +122,6 @@ pub mod ssr {
         pub email: String,
         pub role: RoleType,
         pub username: String,
+        pub slug : UserUnixSlugStr,
     }
 }

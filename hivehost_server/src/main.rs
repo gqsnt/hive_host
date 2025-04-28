@@ -2,9 +2,9 @@ use axum::routing::post;
 use axum::Router;
 use moka::future::Cache;
 use secrecy::SecretString;
-use server::project_action::{server_project_action, server_project_action_token};
-use server::server_action::server_action;
-use server::{AppState, ServerResult};
+use hivehost_server::project_action::{server_project_action, server_project_action_token};
+use hivehost_server::server_action::server_action;
+use hivehost_server::{AppState, ServerResult};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -12,6 +12,7 @@ use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use hivehost_server::helper_client::start_helper_client;
 
 #[tokio::main]
 async fn main() -> ServerResult<()> {
@@ -22,11 +23,14 @@ async fn main() -> ServerResult<()> {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
-    dotenvy::dotenv().expect("Failed to load .env file");
+    dotenvy::from_path(".env").expect("Failed to load .env file");
     let token_action_auth = SecretString::from(dotenvy::var("TOKEN_AUTH")?);
+    let server_helper_socket_path = dotenvy::var("SERVER_HELPER_SOCKET_PATH")?;
     // build our application with a route
     let server_addr = dotenvy::var("SERVER_ADDR")?;
     let addr = SocketAddr::from_str(&server_addr)?;
+
+    let helper_client = start_helper_client(server_helper_socket_path);
 
     let app_state = AppState {
         server_project_action_cache: Arc::new(
@@ -35,6 +39,7 @@ async fn main() -> ServerResult<()> {
                 .build(),
         ),
         token_auth: token_action_auth,
+        helper_client,
     };
     let app = Router::<AppState>::new()
         .route("/server_project_action", post(server_project_action))

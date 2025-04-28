@@ -1,0 +1,15 @@
+[package]
+name = "hivehost_server_helper"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = {workspace = true}
+tracing = {workspace = true}
+tracing-subscriber = {workspace = true}
+thiserror = {workspace = true}
+dotenvy = { workspace = true }
+common= { path = "../common" }
+listenfd = { version = "1.0.2" }

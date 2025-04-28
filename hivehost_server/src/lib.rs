@@ -1,6 +1,7 @@
 pub mod cmd;
 pub mod project_action;
 pub mod server_action;
+pub mod helper_client;
 
 use axum::extract::FromRef;
 use axum::http::StatusCode;
@@ -11,6 +12,9 @@ use secrecy::SecretString;
 use std::path::StripPrefixError;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::mpsc;
+use common::server_helper::ServerHelperCommand;
+use crate::helper_client::{HelperClient, ResponseTx};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -24,6 +28,8 @@ pub enum ServerError {
     AddrParse(#[from] std::net::AddrParseError),
     #[error("StripPrefix error: {0}")]
     StripPrefixError(#[from] StripPrefixError),
+    #[error("Helper client error: {0}")]
+    HelperClientError(#[from] helper_client::HelperClientError),
     #[error("Command failed: {0}")]
     CommandFailed(String),
     #[error("Unauthorized")]
@@ -80,6 +86,7 @@ impl From<ProjectId> for ServerProjectId {
 pub struct AppState {
     pub token_auth: SecretString,
     pub server_project_action_cache: Arc<Cache<String, (ProjectUnixSlugStr, ServerProjectAction)>>,
+    pub helper_client: HelperClient,
 }
 
 #[macro_export]

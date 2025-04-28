@@ -1,0 +1,17 @@
+[Unit]
+Description=HiveHost Privileged Server Helper Socket
+
+[Socket]
+# Use ListenUnix for Unix domain sockets
+ListenStream=/run/hivehost_server_helper.sock
+# Socket is owned by root
+SocketUser=root
+# Socket group should be the group the main *client* service runs as
+SocketGroup=hivehost_server
+# Permissions: root can read/write, group members can write (client needs write)
+SocketMode=0660
+# Optional: Remove socket on shutdown
+RemoveOnStop=true
+
+[Install]
+WantedBy=sockets.target
