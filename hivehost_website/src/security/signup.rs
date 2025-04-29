@@ -2,7 +2,7 @@
 use crate::models::User;
 use crate::{AppResult, BoolInput};
 use leptos::server;
-use common::UserSlug;
+
 
 #[server(Signup, "/api")]
 pub async fn signup(
@@ -23,7 +23,7 @@ pub async fn signup(
     use tokio::runtime::Handle;
     use validator::{Validate, ValidateArgs, ValidationError};
     use crate::AppError;
-
+    use common::{Slug};
 
 
     pub fn unique_email(email: &str, context:&AsyncValidationContext) -> Result<(), ValidationError>{
@@ -62,7 +62,7 @@ pub async fn signup(
 
     let form = SignupForm {
         email: email.clone(),
-        username: username.clone(),
+        username: username.to_lowercase(),
         password_form: PasswordForm {
             password: password.clone(),
             password_confirmation: password_confirmation.clone(),
@@ -80,22 +80,23 @@ pub async fn signup(
     let password = secrecy::SecretString::from(password.as_str());
     let user = sqlx::query!(
         r#"INSERT INTO users (email, password, role, username) VALUES ($1, $2, $3, $4) returning id"#,
-        email,
+        form.email,
         password_auth::generate_hash(&password.expose_secret().as_bytes()),
         RoleType::default() as RoleType,
-        username,
+        form.username.clone(),
     )
         .fetch_one(&pool)
         .await.map_err(AppError::from)?;
     auth.login_user(user.id);
     auth.remember_user(remember);
     leptos_axum::redirect("/user");
+    let user_slug = Slug::new(user.id, form.username.clone());
     let user = User {
         id: user.id,
         email,
         role_type: RoleType::default(),
-        username:username.clone(),
-        slug:UserSlug::new(user.id, username).to_unix(),
+        username:form.username.clone(),
+        slug:user_slug.to_string(),
     };
     let user_slug = user.get_slug();
     crate::api::ssr::request_server_action(
@@ -105,6 +106,6 @@ pub async fn signup(
         .into(),
     )
     .await?;
-    create_project(user_slug, "Default".to_string()).await?;
+    create_project(user_slug, "default".to_string()).await?;
     Ok(user)
 }

@@ -35,7 +35,7 @@ pub mod ssr {
     use async_trait::async_trait;
     use axum_session_auth::Authentication;
     use axum_session_sqlx::SessionPgPool;
-    use common::{UserId, UserUnixSlugStr};
+    use common::{UserId, UserSlugStr};
     use secrecy::SecretString;
     use sqlx::PgPool;
 
@@ -113,7 +113,7 @@ pub mod ssr {
         pub password: SecretString,
         pub role: RoleType,
         pub username: String,
-        pub slug : UserUnixSlugStr,
+        pub slug : UserSlugStr,
     }
 
     #[derive(sqlx::FromRow, Clone)]
@@ -122,6 +122,6 @@ pub mod ssr {
         pub email: String,
         pub role: RoleType,
         pub username: String,
-        pub slug : UserUnixSlugStr,
+        pub slug : UserSlugStr,
     }
 }

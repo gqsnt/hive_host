@@ -93,12 +93,11 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                                                 each=move || projects.clone()
                                                 key=move |project| project.id
                                                 children=move |project| {
-                                                    let project_slug = project.get_slug().to_str();
                                                     view! {
                                                         <option
-                                                            value=project_slug.clone()
+                                                            value=project.slug.clone()
                                                             selected=move || {
-                                                                project_slug == project_id.get().unwrap_or_default()
+                                                                project.slug == project_id.get().unwrap_or_default()
                                                             }
                                                         >
                                                             {project.name}

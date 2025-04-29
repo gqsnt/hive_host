@@ -1,4 +1,4 @@
-use common::SlugParseError;
+use common::{ParseSlugError};
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
@@ -66,7 +66,7 @@ pub enum AppError {
     #[error("Invalid ProjectSlug")]
     InvalidProjectSlug,
     #[error("Invalid Slug {0}")]
-    ParseSlug(#[from] SlugParseError),
+    ParseSlug(#[from] ParseSlugError),
     #[error("Validation Error {0}")]
     ValidationError(#[from] ValidationError),
     #[error("Validation Errors {0}")]

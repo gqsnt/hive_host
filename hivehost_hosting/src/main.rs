@@ -1,6 +1,5 @@
 use async_compression::tokio::bufread::BrotliEncoder;
 use common::hosting_action::{HostingAction, HostingActionRequest, HostingActionResponse};
-use common::{ProjectSlug, ProjectUnixSlugStr};
 use dashmap::DashMap;
 use deadpool_postgres::tokio_postgres::NoTls;
 use deadpool_postgres::{tokio_postgres, GenericClient, Pool};
@@ -29,10 +28,11 @@ use tokio::net::TcpListener;
 use tokio::{runtime, task};
 use tracing::{error, info};
 use walkdir::WalkDir;
+use common::{ProjectSlugStr, Slug};
 
 const PROJECT_ROOT_PATH_PREFIX: &str = "/projects/";
 
-static CACHE: LazyLock<DashMap<ProjectUnixSlugStr, ProjectCache>> =
+static CACHE: LazyLock<DashMap<ProjectSlugStr, ProjectCache>> =
     LazyLock::new(DashMap::new);
 
 static TOKEN: LazyLock<String> =
@@ -95,7 +95,7 @@ pub struct FileInfo {
     pub full_path: String,
 }
 
-pub async fn cache_project_path(project_slug: ProjectUnixSlugStr) {
+pub async fn cache_project_path(project_slug: ProjectSlugStr) {
     let path = format!("{}{}", PROJECT_ROOT_PATH_PREFIX, project_slug);
     info!("cache path: {}", path);
     CACHE.remove(&project_slug);
@@ -178,8 +178,8 @@ async fn serve(handle: &runtime::Handle) -> HostingResult<()> {
     for row in row {
         let name = row.get::<_, String>("name");
         let id = row.get::<_, i64>("id");
-        let project_slug = ProjectSlug::new(id, name);
-        let unix_slug = project_slug.to_unix();
+        let project_slug = Slug::new(id, name);
+        let unix_slug = project_slug.to_string();
         println!("Project: {}", unix_slug);
         cache_project_path(unix_slug).await;
     }

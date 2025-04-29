@@ -80,11 +80,11 @@ pub mod ssr {
     use common::server_project_action::{
         ServerProjectAction, ServerProjectActionRequest, ServerProjectActionResponse,
     };
-    use common::ProjectSlug;
+    use common::Slug;
     use secrecy::ExposeSecret;
 
     pub async fn request_server_project_action_token(
-        project_slug: ProjectSlug,
+        project_slug: Slug,
         action: ServerProjectAction,
     ) -> AppResult<ServerProjectActionResponse> {
         let client = reqwest::Client::new();
@@ -111,14 +111,14 @@ pub mod ssr {
     }
 
     pub async fn request_hosting_action(
-        project_slug: ProjectSlug,
+        project_slug: Slug,
         action: HostingAction,
     ) -> AppResult<HostingActionResponse> {
         let client = reqwest::Client::new();
         let server_vars = crate::ssr::server_vars()?;
         let req = HostingActionRequest {
             action,
-            project_slug: project_slug.to_unix(),
+            project_slug: project_slug.to_string(),
         };
         Ok(client
             .post(format!("http://{}", server_vars.hosting_url))
@@ -131,7 +131,7 @@ pub mod ssr {
     }
 
     pub async fn request_server_project_action(
-        project_slug: ProjectSlug,
+        project_slug: Slug,
         action: ServerProjectAction,
     ) -> AppResult<ServerProjectActionResponse> {
         let client = reqwest::Client::new();

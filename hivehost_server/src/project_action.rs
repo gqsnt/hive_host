@@ -16,7 +16,7 @@ use common::server_project_action::{
     IsProjectServerAction, ServerProjectAction, ServerProjectActionRequest,
     ServerProjectActionResponse,
 };
-use common::{ProjectUnixSlugStr, StringContent};
+use common::{ProjectSlugStr, StringContent};
 use secrecy::ExposeSecret;
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
@@ -46,14 +46,14 @@ pub async fn server_project_action(
             if let Some(token) = request.token {
                 state
                     .server_project_action_cache
-                    .insert(token, (request.project_slug.to_unix(), request.action))
+                    .insert(token, (request.project_slug.to_string(), request.action))
                     .await;
             }
             Ok(Json(ServerProjectActionResponse::Ok))
         } else {
             handle_server_project_action(
                 state,
-                request.project_slug.to_unix(),
+                request.project_slug.to_string(),
                 request.action,
                 StringContent::default(),
             )
@@ -64,7 +64,7 @@ pub async fn server_project_action(
 
 pub async fn handle_server_project_action(
     state: AppState,
-    project_slug: ProjectUnixSlugStr,
+    project_slug: ProjectSlugStr,
     action: ServerProjectAction,
     content: StringContent,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
@@ -81,7 +81,7 @@ pub async fn handle_server_project_action(
 
 pub async fn handle_server_project_action_permission(
     helper_client:HelperClient,
-    project_slug: ProjectUnixSlugStr,
+    project_slug: ProjectSlugStr,
     action: PermissionAction,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action {
@@ -89,25 +89,25 @@ pub async fn handle_server_project_action_permission(
             user_slug,
             permission,
         } => {
-            add_user_to_project(helper_client, user_slug.to_unix(), project_slug, permission)
+            add_user_to_project(helper_client, user_slug.to_string(), project_slug, permission)
                 .await?;
         }
         PermissionAction::Revoke { user_slug } => {
-            remove_user_from_project(helper_client, user_slug.to_unix(), project_slug)
+            remove_user_from_project(helper_client, user_slug.to_string(), project_slug)
                 .await?;
         }
         PermissionAction::Update {
             user_slug,
             permission,
         } => {
-            update_user_in_project(helper_client, user_slug.to_unix(), project_slug, permission)
+            update_user_in_project(helper_client, user_slug.to_string(), project_slug, permission)
                 .await?;
         }
     }
     Ok(Json(ServerProjectActionResponse::Ok))
 }
 pub async fn handle_server_project_action_io(
-    project_slug: ProjectUnixSlugStr,
+    project_slug: ProjectSlugStr,
     action: IoAction,
     content: StringContent,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
@@ -120,7 +120,7 @@ pub async fn handle_server_project_action_io(
 }
 
 pub async fn handle_server_project_action_dir(
-    project_slug: ProjectUnixSlugStr,
+    project_slug: ProjectSlugStr,
     action: DirAction,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
     match action {
@@ -191,7 +191,7 @@ pub async fn handle_server_project_action_dir(
     Ok(Json(ServerProjectActionResponse::Ok))
 }
 pub async fn handle_server_project_action_file(
-    project_slug: ProjectUnixSlugStr,
+    project_slug: ProjectSlugStr,
     action: FileAction,
     content: StringContent,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
@@ -272,7 +272,7 @@ pub async fn handle_server_project_action_file(
                 content: String::from_utf8(buf).unwrap(),
                 size,
                 path: format!("root/{}", path_copy.to_string_lossy()),
-                last_modified,
+                last_modified,  
             })));
         }
         FileAction::Update { path } => {
@@ -292,7 +292,7 @@ pub async fn handle_server_project_action_file(
 }
 
 pub async fn ensure_path_in_project_path(
-    project_slug: ProjectUnixSlugStr, 
+    project_slug: ProjectSlugStr, 
     project_path_: &str,
     is_file: bool,
     should_exist: bool,

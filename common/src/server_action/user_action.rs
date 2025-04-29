@@ -1,22 +1,22 @@
 use crate::server_action::ServerAction;
-use crate::{impl_chain_from, ProjectSlug, UserSlug};
+use crate::{impl_chain_from, Slug};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum UserAction {
     Create {
-        user_slug: UserSlug,
+        user_slug: Slug,
     },
     AddProject {
-        user_slug: UserSlug,
-        project_slug: ProjectSlug,
+        user_slug: Slug,
+        project_slug: Slug,
     },
     RemoveProject {
-        user_slugs: Vec<UserSlug>,
-        project_slug: ProjectSlug,
+        user_slugs: Vec<Slug>,
+        project_slug: Slug,
     },
     Delete {
-        user_slug: UserSlug,
+        user_slug: Slug,
     },
 }
 

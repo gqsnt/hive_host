@@ -1,11 +1,11 @@
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, warn};
 use common::server_helper::{ServerHelperRequest, ServerHelperResponse, ServerHelperResponseStatus};
 use crate::command::execute_command;
 use crate::ServerHelperResult;
 
-#[instrument(skip(stream))]
+
 pub async fn handle_connection(stream: UnixStream) {
     info!("Handling new client connection");
     match process_stream(stream).await {
@@ -54,8 +54,7 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                         continue; // Continue loop after sending error
                     }
                 };
-
-                info!("Received request: {:?}", request);
+                
 
                 // Execute command
                 let response_status = match execute_command(request.command).await {
@@ -73,7 +72,10 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                 match write_half.write_all(response_json.as_bytes()).await {
                     Ok(_) => {
                         // Optional: Flush immediately if needed, though write_all often does enough buffering
-                        // if let Err(e) = write_half.flush().await { ... }
+                        if let Err(e) = write_half.flush().await { 
+                            error!("Failed to flush response to client: {}. Closing connection.", e);
+                            break Err(e.into()); // Exit loop with IO error
+                        }
                         info!("Response sent successfully: {:?}", response);
                     }
                     Err(e) => {

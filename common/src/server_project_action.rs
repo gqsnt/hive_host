@@ -4,13 +4,13 @@ pub mod permission;
 use crate::permission::Permission;
 use crate::server_project_action::io_action::dir_action::DirActionLsResponse;
 use crate::server_project_action::io_action::file_action::FileInfo;
-use crate::{ProjectSlug, UserSlug};
 use serde::{Deserialize, Serialize};
+use crate::Slug;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerProjectActionRequest {
     pub token: Option<String>,
-    pub project_slug: ProjectSlug,
+    pub project_slug: Slug,
     pub action: ServerProjectAction,
 }
 
@@ -54,8 +54,8 @@ pub enum ServerProjectActionResponse {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectActionCreate {
-    pub project_slug: ProjectSlug,
-    pub owner_slug: UserSlug,
+    pub project_slug: Slug,
+    pub owner_slug: Slug,
 }
 
 pub trait IsProjectServerAction {

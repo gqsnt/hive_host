@@ -228,10 +228,10 @@ pub mod server_fns {
          use crate::security::utils::ssr::get_auth_session_user_id;
         use crate::api::ssr::request_server_project_action;
         use common::server_project_action::permission::PermissionAction;
-        use common::{ProjectSlug, UserSlug};
         use crate::security::permission::ssr::handle_project_permission_request;
        use validator::ValidationError;
            use std::borrow::Cow;
+        use common::Slug;
     }}
 
     #[server]
@@ -262,8 +262,8 @@ pub mod server_fns {
                 )
                 .fetch_one(&pool)
                 .await?;
-                let user_slug = UserSlug::new(user_id, other_user.username);
-                let project_slug = ProjectSlug::new(project.id, project.name);
+                let user_slug = Slug::new(user_id, other_user.username);
+                let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     project_slug,
                     PermissionAction::Revoke { user_slug }.into(),
@@ -305,8 +305,8 @@ pub mod server_fns {
                 )
                 .fetch_one(&pool)
                 .await?;
-                let user_slug = UserSlug::new(user_id, other_user.username);
-                let project_slug = ProjectSlug::new(project.id, project.name);
+                let user_slug = Slug::new(user_id, other_user.username);
+                let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     project_slug,
                     PermissionAction::Update {
@@ -362,8 +362,8 @@ pub mod server_fns {
                 )
                 .fetch_one(&pool)
                 .await?;
-                let user_slug = UserSlug::new(other_user.id, other_user.username);
-                let project_slug = ProjectSlug::new(project.id, project.name);
+                let user_slug = Slug::new(other_user.id, other_user.username);
+                let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     project_slug,
                     PermissionAction::Grant {

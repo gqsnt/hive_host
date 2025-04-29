@@ -1,11 +1,10 @@
 use std::process::Stdio;
 use tokio::process::Command as TokioCommand;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, warn};
 use common::server_helper::ServerHelperCommand;
 use crate::{ServerHelperError, ServerHelperResult, USER_GROUP};
 
 
-#[instrument(skip(command), fields(command_type = std::any::type_name::<ServerHelperCommand>()))]
 pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult<()> {
     match command {
         ServerHelperCommand::CreateUser { user_slug, user_path, user_projects_path } => {
@@ -85,7 +84,6 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
     Ok(())
 }
 
-#[instrument]
 async fn run_external_command(program: &str, args: &[&str]) -> ServerHelperResult<String> {
     info!("Running: {} {}", program, args.join(" "));
     let output = TokioCommand::new(program)
@@ -109,7 +107,6 @@ async fn run_external_command(program: &str, args: &[&str]) -> ServerHelperResul
             program, stderr.trim()
         )));
     }
-
-    info!("Command successful: {} {}", program, args.join(" "));
+    
     Ok(stdout) // Return stdout if needed, otherwise just Ok(())
 }

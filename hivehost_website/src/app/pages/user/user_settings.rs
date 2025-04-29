@@ -389,12 +389,10 @@ fn SingleColMessageRow(
 pub mod server_fns {
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::utils::ssr::get_auth_session_user_id;
-        use crate::api::ssr::request_server_action;
         use crate::security::utils::ssr::verify_easy_hash;
         use crate::ssr::auth;
         use crate::ssr::pool;
         use crate::ssr::server_vars;
-        use common::server_action::user_action::UserAction;
         use secrecy::ExposeSecret;
         use crate::security::utils::PasswordForm;
     }}
@@ -432,7 +430,7 @@ pub mod server_fns {
             csrf,
         )?;
         let user_id = get_auth_session_user_id(&auth).unwrap();
-        let record = sqlx::query!(
+        let _ = sqlx::query!(
             r#"
         DELETE FROM user_ssh_keys WHERE id = $1 AND user_id = $2 returning public_key
         "#,

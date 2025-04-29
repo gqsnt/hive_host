@@ -1,7 +1,7 @@
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::app::IntoView;
-use common::{ProjectSlug, ProjectSlugStr};
+use common::{ProjectSlugStr};
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, Action, ElementChild, Signal};
 use leptos::prelude::{signal, ClassAttribute, OnAttribute};
@@ -9,7 +9,6 @@ use leptos::prelude::{CustomAttribute, Effect, Read};
 use leptos::prelude::{Get, GlobalAttributes, Show};
 use leptos::{component, view};
 use reactive_stores::Store;
-use std::str::FromStr;
 
 #[component]
 pub fn ProjectSettings() -> impl IntoView {
@@ -176,7 +175,7 @@ pub fn ProjectSettings() -> impl IntoView {
                                 href=move || {
                                     format!(
                                         "http://{}.{}/",
-                                        ProjectSlug::from_str(slug().as_str()).unwrap().to_unix(),
+                                        slug(),
                                         hosting_url(),
                                     )
                                 }
@@ -205,7 +204,7 @@ pub fn ProjectSettings() -> impl IntoView {
                             src=move || {
                                 format!(
                                     "http://{}.{}/?_cb={}",
-                                    ProjectSlug::from_str(slug().as_str()).unwrap().to_unix(),
+                                    slug(),
                                     hosting_url(),
                                     preview_version.get(),
                                 )
@@ -274,7 +273,7 @@ pub fn ProjectSettings() -> impl IntoView {
 }
 
 pub mod server_fns {
-    use common::ProjectSlugStr;
+    use common::{ProjectSlugStr};
     use leptos::server;
     use crate::AppResult;
 
@@ -283,7 +282,7 @@ pub mod server_fns {
         use crate::api::ssr::{request_server_action, request_hosting_action};
         use common::permission::Permission;
         use common::server_action::user_action::UserAction;
-
+        use common::Slug;
     }}
 
     #[server]
@@ -310,7 +309,7 @@ pub mod server_fns {
                 .await?;
                 let user_slugs = users
                     .into_iter()
-                    .map(|u| common::UserSlug::new(u.id, u.username))
+                    .map(|u| Slug::new(u.id, u.username))
                     .collect::<Vec<_>>();
                 let is_active = sqlx::query!(
                     "delete from projects where id = $1 returning is_active",

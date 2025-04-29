@@ -13,7 +13,6 @@ async fn main() -> ServerHelperResult<()> {
         .init();
     dotenvy::from_path("/home/canarit/projects/hive_host/.env").expect("Failed to load .env file");
     let mut listen_fds = ListenFd::from_env();
-    let server_helper_socket_path = dotenvy::var("SERVER_HELPER_SOCKET_PATH").expect("SERVER_HELPER_SOCKET_PATH not found");
     info!("HiveHost Helper Service starting...");
     let unix_listener_std = match listen_fds.take_unix_listener(0)? { // Use listen_fds result directly
         Some(listener) => {

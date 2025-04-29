@@ -1,6 +1,6 @@
 use crate::cmd::{
-    bind_project_to_user_chroot, ensure_user_in_sshd, ensure_user_removed_in_sshd, project_path,
-    remove_block, run_sudo_cmd, set_acl, ssh_key_path, ssh_path, user_path, user_project_path,
+     project_path,
+    user_path, user_project_path,
     user_projects_path,
 };
 use crate::ServerError;
@@ -11,7 +11,7 @@ use axum::Json;
 use common::permission::Permission;
 use common::server_action::user_action::UserAction;
 use common::server_action::{ServerAction, ServerActionResponse};
-use common::{ProjectUnixSlugStr, UserUnixSlugStr};
+use common::{ProjectSlugStr, UserSlugStr};
 use secrecy::ExposeSecret;
 use std::path::Path;
 use tokio::fs::OpenOptions;
@@ -37,18 +37,18 @@ pub async fn handle_server_action(
     match action {
         ServerAction::UserAction(user_action) => match user_action {
             UserAction::Create { user_slug } => {
-                create_user(state.helper_client, user_slug.to_unix()).await?;
+                create_user(state.helper_client, user_slug.to_string()).await?;
                 Ok(Json(ServerActionResponse::Ok))
             }
             UserAction::Delete { user_slug } => {
-                remove_user(state.helper_client, user_slug.to_unix()).await?;
+                remove_user(state.helper_client, user_slug.to_string()).await?;
                 Ok(Json(ServerActionResponse::Ok))
             }
             UserAction::AddProject {
                 user_slug,
                 project_slug,
             } => {
-                create_project(state.helper_client, user_slug.to_unix(), project_slug.to_unix()).await?;
+                create_project(state.helper_client, user_slug.to_string(), project_slug.to_string()).await?;
                 Ok(Json(ServerActionResponse::Ok))
             }
             UserAction::RemoveProject {
@@ -56,16 +56,16 @@ pub async fn handle_server_action(
                 project_slug,
             } => {
                 for user_slug in user_slugs {
-                    remove_user_from_project(state.helper_client.clone(), user_slug.to_unix(), project_slug.to_unix()).await?;
+                    remove_user_from_project(state.helper_client.clone(), user_slug.to_string(), project_slug.to_string()).await?;
                 }
-                remove_project(state.helper_client, project_slug.to_unix()).await?;
+                remove_project(state.helper_client, project_slug.to_string()).await?;
                 Ok(Json(ServerActionResponse::Ok))
             }
         },
     }
 }
 
-pub async fn create_user(helper_client:HelperClient, user_slug: UserUnixSlugStr) -> ServerResult<()> {
+pub async fn create_user(helper_client:HelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
     let user_path = user_path(user_slug.clone());
     let user_projects_path = user_projects_path(user_slug.clone());
     helper_client.execute(ServerHelperCommand::CreateUser {
@@ -78,8 +78,8 @@ pub async fn create_user(helper_client:HelperClient, user_slug: UserUnixSlugStr)
 
 pub async fn create_project(
     helper_client:HelperClient,
-    user_slug: UserUnixSlugStr,
-    project_slug: ProjectUnixSlugStr,
+    user_slug: UserSlugStr,
+    project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
     let project_path = project_path(project_slug.clone());
     helper_client.execute(ServerHelperCommand::CreateProjectDir {
@@ -109,8 +109,8 @@ pub async fn create_project(
 
 pub async fn add_user_to_project(
     helper_client:HelperClient,
-    user_slug: UserUnixSlugStr,
-    project_slug: ProjectUnixSlugStr,
+    user_slug: UserSlugStr,
+    project_slug: ProjectSlugStr,
     permission: Permission,
 ) -> ServerResult<()> {
     
@@ -131,13 +131,13 @@ pub async fn add_user_to_project(
 
 pub async fn update_user_in_project(
     helper_client:HelperClient,
-    user_slug: UserUnixSlugStr,
-    project_slug: ProjectUnixSlugStr,
+    user_slug: UserSlugStr,
+    project_slug: ProjectSlugStr,
     permission: Permission,
 ) -> ServerResult<()> {
     let is_read_only = permission < Permission::Write;
     helper_client.execute(ServerHelperCommand::SetAcl {
-        path: crate::cmd::project_path(project_slug.clone()),
+        path: project_path(project_slug.clone()),
         user_slug,
         is_read_only,
     }).await?;
@@ -146,8 +146,8 @@ pub async fn update_user_in_project(
 
 pub async fn remove_user_from_project(
     helper_client:HelperClient,
-    user_slug: UserUnixSlugStr,
-    project_slug: ProjectUnixSlugStr,
+    user_slug: UserSlugStr,
+    project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
     let proj_path = project_path(project_slug.clone());
     let user_project_path = user_project_path(user_slug.clone(), project_slug.clone());
@@ -163,7 +163,7 @@ pub async fn remove_user_from_project(
 }
 
 
-pub async fn remove_project(helper_client:HelperClient,project_slug: ProjectUnixSlugStr) -> ServerResult<()> {
+pub async fn remove_project(helper_client:HelperClient,project_slug: ProjectSlugStr) -> ServerResult<()> {
     let project_path = project_path(project_slug);
     helper_client.execute(ServerHelperCommand::DeleteProjectDir {
         project_path,
@@ -171,7 +171,7 @@ pub async fn remove_project(helper_client:HelperClient,project_slug: ProjectUnix
     Ok(())
 }
 
-pub async fn remove_user(helper_client:HelperClient,user_slug: UserUnixSlugStr) -> ServerResult<()> {
+pub async fn remove_user(helper_client:HelperClient,user_slug: UserSlugStr) -> ServerResult<()> {
     let user_projects_path = user_projects_path(user_slug.clone());
     let path = Path::new(&user_projects_path);
 

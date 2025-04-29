@@ -7,8 +7,6 @@ pub mod server_project_action;
 pub mod server_helper;
 
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
-use std::marker::PhantomData;
 use std::num::ParseIntError;
 use std::str::FromStr;
 use thiserror::Error;
@@ -34,15 +32,63 @@ macro_rules! impl_chain_from {
 
 pub type ProjectId = i64;
 
-pub type ProjectUnixSlugStr = String;
 pub type ProjectSlugStr = String;
-pub type ProjectSlug = Slug<ProjectId, ProjectSlugStr, ProjectUnixSlugStr>;
 
 pub type UserId = i64;
 
-pub type UserUnixSlugStr = String;
 pub type UserSlugStr = String;
-pub type UserSlug = Slug<UserId, UserSlugStr, UserUnixSlugStr>;
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Slug {
+    pub id: i64,
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+pub enum ParseSlugError {
+    #[error("Invalid slug format")]
+    InvalidFormat,
+    #[error("Invalid ID in slug")]
+    ParseIntError(String),
+}
+
+impl From<ParseIntError> for ParseSlugError {
+    fn from(err: ParseIntError) -> Self {
+        ParseSlugError::ParseIntError(err.to_string())
+    }
+}
+
+
+impl Slug {
+    pub fn new(id: i64, slug: String) -> Self {
+        Slug { id, slug }
+    }
+}
+
+impl std::fmt::Display for Slug {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}_{}", self.id, self.slug)
+    }
+}
+
+
+impl FromStr for Slug {
+    type Err = ParseSlugError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split('_').collect();
+        if parts.len() != 2 {
+            return Err(ParseSlugError::InvalidFormat);
+        }
+        let id = parts[0].parse::<i64>()?;
+        let slug = parts[1].to_string();
+        Ok(Slug { id, slug })
+    }
+}
+
+
+
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct StringContent {
@@ -54,81 +100,5 @@ impl StringContent {
         StringContent {
             inner: Some(content),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct Slug<I, U, S> {
-    pub id: I,
-    pub name: String,
-    #[serde(skip)]
-    _s: PhantomData<S>,
-    #[serde(skip)]
-    _u: PhantomData<U>,
-}
-
-#[derive(Debug, Error, Serialize, Deserialize, Clone)]
-pub enum SlugParseError {
-    #[error("Missing separator")]
-    MissingSeparator,
-    #[error("Invalid Id")]
-    InvalidId,
-    #[error("Empty name")]
-    EmptyName,
-}
-
-
-impl<I, S, U> FromStr for Slug<I, S, U>
-where
-    I: FromStr<Err = ParseIntError>,
-    S: From<String>,
-    U: From<String>,
-{
-    type Err = SlugParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let Some((name, id_str)) = s.split_once('-') else {
-            return Err(SlugParseError::MissingSeparator);
-        };
-
-        let id = id_str.parse::<I>().map_err(|_| SlugParseError::InvalidId)?;
-
-        if name.is_empty() {
-            return Err(SlugParseError::EmptyName);
-        }
-
-        Ok(Slug {
-            id,
-            name: name.to_string(),
-            _s: PhantomData,
-            _u: PhantomData,
-        })
-    }
-}
-
-
-
-
-impl<I, S, U> Slug<I, S, U>
-where
-    I: Display,
-    S: From<String>,
-    U: From<String>,
-{
-    pub fn new(id: I, name: String) -> Self {
-        Slug {
-            id,
-            name,
-            _s: PhantomData,
-            _u: PhantomData,
-        }
-    }
-
-    pub fn to_str(&self) -> S {
-        S::from(format!("{}-{}", self.name, self.id))
-    }
-
-    pub fn to_unix(&self) -> U {
-        U::from(format!("{}{}", self.name, self.id).to_lowercase())
     }
 }

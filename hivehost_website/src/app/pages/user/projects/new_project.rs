@@ -88,7 +88,7 @@ pub mod server_fns {
             Ok(project) => {
                 log!("Project created: {:?}", project);
                 leptos_axum::redirect(
-                    format!("/user/projects/{}", project.get_slug().to_str()).as_str(),
+                    format!("/user/projects/{}", project.get_slug()).as_str(),
                 );
             }
             Err(e) => {
@@ -101,20 +101,32 @@ pub mod server_fns {
 
     #[cfg(feature = "ssr")]
     pub mod ssr {
+        use crate::security::utils::SANITIZED_REGEX;
+        use validator::Validate;
         use crate::models::Project;
         use common::permission::Permission;
         use common::server_action::user_action::UserAction;
-        use common::{Slug, UserSlug};
+        use common::{Slug};
         use crate::AppResult;
 
+        #[derive(Debug, Clone, Validate)]
+        pub struct CreateProjectForm {
+            #[validate(length(min = 3, max = 20),regex(path=*SANITIZED_REGEX, message="Username must contain only letters (a-z, A-Z), number (0-9) and underscores (_)"))]
+            pub name: String,
+        }
+
         pub async fn create_project(
-            user_slug: UserSlug,
+            user_slug: Slug,
             name: String,
         ) -> AppResult<Project> {
             use crate::api::ssr::request_server_action;
             let pool = crate::ssr::pool()?;
+            let project_form = CreateProjectForm {
+                name: name.clone(),
+            };
+            project_form.validate()?;
             let project =
-                sqlx::query!("INSERT INTO projects (name) VALUES ($1) returning id", name)
+                sqlx::query!("INSERT INTO projects (name) VALUES ($1) returning id", project_form.name)
                     .fetch_one(&pool)
                     .await?;
             sqlx::query!(
@@ -128,7 +140,7 @@ pub mod server_fns {
             request_server_action(
                 UserAction::AddProject {
                     user_slug,
-                    project_slug: Slug::new(project.id, name.clone()),
+                    project_slug: Slug::new(project.id, project_form.name),
                 }
                 .into(),
             )

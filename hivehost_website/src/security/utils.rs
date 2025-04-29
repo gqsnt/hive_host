@@ -87,7 +87,7 @@ pub mod ssr {
     use crate::security::ssr::AppAuthSession;
     use crate::{AppError, AppResult};
     use blake2::{Blake2s256, Digest};
-    use common::{UserId, UserSlug};
+    use common::{Slug, UserId};
     use http::header::CONTENT_TYPE;
     use http::HeaderValue;
     use leptos::prelude::use_context;
@@ -107,7 +107,7 @@ pub mod ssr {
     pub fn get_auth_session_user_id(auth_session: &AppAuthSession) -> Option<UserId> {
         auth_session.current_user.as_ref().map(|u| u.id)
     }
-    pub fn get_auth_session_user_slug(auth_session: &AppAuthSession) -> Option<UserSlug> {
+    pub fn get_auth_session_user_slug(auth_session: &AppAuthSession) -> Option<Slug> {
         auth_session.current_user.as_ref().map(|u| u.get_slug())
     }
 

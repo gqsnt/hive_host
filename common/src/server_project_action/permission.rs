@@ -1,19 +1,19 @@
 use crate::permission::Permission;
 use crate::server_project_action::{IsProjectServerAction, ServerProjectAction};
-use crate::{impl_chain_from, UserSlug};
+use crate::{impl_chain_from,Slug};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PermissionAction {
     Grant {
-        user_slug: UserSlug,
+        user_slug: Slug,
         permission: Permission,
     },
     Revoke {
-        user_slug: UserSlug,
+        user_slug: Slug,
     },
     Update {
-        user_slug: UserSlug,
+        user_slug: Slug,
         permission: Permission,
     },
 }

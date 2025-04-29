@@ -38,7 +38,7 @@ pub mod ssr {
     use crate::ssr::{permissions, pool, Permissions};
     use crate::{AppError, AppResult};
     use common::permission::Permission;
-    use common::{ProjectId, ProjectSlug, ProjectSlugStr, UserId};
+    use common::{ProjectId, ProjectSlugStr, Slug, UserId};
     use leptos::logging::log;
     use sqlx::PgPool;
     use std::future::Future;
@@ -80,7 +80,7 @@ pub mod ssr {
         handler: F, // The closure containing specific logic
     ) -> AppResult<T>
     where
-        F: FnOnce(AppAuthSession, PgPool, ProjectSlug) -> Fut,
+        F: FnOnce(AppAuthSession, PgPool, Slug) -> Fut,
         Fut: Future<Output = AppResult<T>>,
     {
         let auth = crate::ssr::auth(false)?;
@@ -92,7 +92,7 @@ pub mod ssr {
                 csrf,
             )?;
         }
-        let project_id = ProjectSlug::from_str(project_slug_str.as_str())?.id;
+        let project_id = Slug::from_str(project_slug_str.as_str())?.id;
         ensure_permission(&auth, project_id, required_permission).await?;
         let pool = pool()?;
         let project = sqlx::query!(r#"SELECT id, name FROM projects WHERE id = $1"#, project_id)
@@ -100,7 +100,7 @@ pub mod ssr {
             .await
             .map_err(|_| AppError::UnauthorizedProjectAccess)?;
 
-        let full_project_slug = ProjectSlug::new(project.id, project.name);
+        let full_project_slug = Slug::new(project.id, project.name);
 
         handler(auth, pool, full_project_slug).await
     }

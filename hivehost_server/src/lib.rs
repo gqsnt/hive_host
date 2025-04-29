@@ -6,15 +6,13 @@ pub mod helper_client;
 use axum::extract::FromRef;
 use axum::http::StatusCode;
 use common::server_project_action::ServerProjectAction;
-use common::{ProjectId, ProjectUnixSlugStr, UserId};
+use common::{ProjectId, ProjectSlugStr, UserId};
 use moka::future::Cache;
 use secrecy::SecretString;
 use std::path::StripPrefixError;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::mpsc;
-use common::server_helper::ServerHelperCommand;
-use crate::helper_client::{HelperClient, ResponseTx};
+use crate::helper_client::{HelperClient};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -85,7 +83,7 @@ impl From<ProjectId> for ServerProjectId {
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub token_auth: SecretString,
-    pub server_project_action_cache: Arc<Cache<String, (ProjectUnixSlugStr, ServerProjectAction)>>,
+    pub server_project_action_cache: Arc<Cache<String, (ProjectSlugStr, ServerProjectAction)>>,
     pub helper_client: HelperClient,
 }
 
