@@ -1,29 +1,31 @@
-
 use crate::server_action::{add_user_to_project, remove_user_from_project, update_user_in_project};
 use crate::{ensure_authorization, AppState, ServerError};
 
+use crate::helper_client::HelperClient;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use chrono::{DateTime, Utc};
+use common::server_helper::ServerHelperCommand;
 use common::server_project_action::io_action::dir_action::{
     DirAction, DirActionLsResponse, LsElement,
 };
 use common::server_project_action::io_action::file_action::{FileAction, FileInfo};
 use common::server_project_action::io_action::IoAction;
 use common::server_project_action::permission::PermissionAction;
+use common::server_project_action::snapshot::SnapshotAction;
 use common::server_project_action::{
     IsProjectServerAction, ServerProjectAction, ServerProjectActionRequest,
     ServerProjectActionResponse,
 };
-use common::{get_project_dev_path,get_project_prod_path, get_project_snapshot_path, ProjectSlugStr, StringContent};
+use common::{
+    get_project_dev_path, get_project_prod_path, get_project_snapshot_path, ProjectSlugStr,
+    StringContent,
+};
 use secrecy::ExposeSecret;
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
-use common::server_helper::ServerHelperCommand;
-use common::server_project_action::snapshot::SnapshotAction;
-use crate::helper_client::HelperClient;
 
 pub async fn server_project_action_token(
     State(state): State<AppState>,
@@ -73,10 +75,11 @@ pub async fn handle_server_project_action(
     info!("Server Project action: {:?}", action);
     match action {
         ServerProjectAction::Io(io) => {
-            handle_server_project_action_io( project_slug, io, content).await
+            handle_server_project_action_io(project_slug, io, content).await
         }
         ServerProjectAction::Permission(permission) => {
-            handle_server_project_action_permission(state.helper_client, project_slug, permission).await
+            handle_server_project_action_permission(state.helper_client, project_slug, permission)
+                .await
         }
         ServerProjectAction::Snapshot(snapshot) => {
             handle_server_project_action_snapshot(state.helper_client, project_slug, snapshot).await
@@ -84,45 +87,52 @@ pub async fn handle_server_project_action(
     }
 }
 
-
-
-
 pub async fn handle_server_project_action_snapshot(
     helper_client: HelperClient,
-    project_slug:ProjectSlugStr,
-    action:SnapshotAction,
+    project_slug: ProjectSlugStr,
+    action: SnapshotAction,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
-    match action{
+    match action {
         SnapshotAction::Create { snapshot_name } => {
-             helper_client.execute(ServerHelperCommand::CreateSnapshot {
-                snapshot_path: get_project_snapshot_path(&snapshot_name),
-                path: get_project_dev_path(&project_slug),
-            }).await.map_err(ServerError::from)?;
+            helper_client
+                .execute(ServerHelperCommand::CreateSnapshot {
+                    snapshot_path: get_project_snapshot_path(&snapshot_name),
+                    path: get_project_dev_path(&project_slug),
+                })
+                .await
+                .map_err(ServerError::from)?;
         }
         SnapshotAction::Delete { snapshot_name } => {
-            helper_client.execute(ServerHelperCommand::DeleteSnapshot {
-                snapshot_path: get_project_snapshot_path(&snapshot_name),
-            }).await.map_err(ServerError::from)?;
+            helper_client
+                .execute(ServerHelperCommand::DeleteSnapshot {
+                    snapshot_path: get_project_snapshot_path(&snapshot_name),
+                })
+                .await
+                .map_err(ServerError::from)?;
         }
-        SnapshotAction::MountSnapshotProd {  snapshot_name } => {
-            helper_client.execute(ServerHelperCommand::MountSnapshot {
-                path: get_project_prod_path(&project_slug),
-                snapshot_name,
-            }).await.map_err(ServerError::from)?;
-            
-        },
-        SnapshotAction::UnmountProd  => {
-            helper_client.execute(ServerHelperCommand::UnmountProd {
-                path: get_project_prod_path(&project_slug),
-            }).await.map_err(ServerError::from)?;
+        SnapshotAction::MountSnapshotProd { snapshot_name } => {
+            helper_client
+                .execute(ServerHelperCommand::MountSnapshot {
+                    path: get_project_prod_path(&project_slug),
+                    snapshot_name,
+                })
+                .await
+                .map_err(ServerError::from)?;
+        }
+        SnapshotAction::UnmountProd => {
+            helper_client
+                .execute(ServerHelperCommand::UnmountProd {
+                    path: get_project_prod_path(&project_slug),
+                })
+                .await
+                .map_err(ServerError::from)?;
         }
     }
     Ok(Json(ServerProjectActionResponse::Ok))
 }
 
-
 pub async fn handle_server_project_action_permission(
-    helper_client:HelperClient,
+    helper_client: HelperClient,
     project_slug: ProjectSlugStr,
     action: PermissionAction,
 ) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
@@ -131,19 +141,28 @@ pub async fn handle_server_project_action_permission(
             user_slug,
             permission,
         } => {
-            add_user_to_project(helper_client, user_slug.to_string(), project_slug, permission)
-                .await?;
+            add_user_to_project(
+                helper_client,
+                user_slug.to_string(),
+                project_slug,
+                permission,
+            )
+            .await?;
         }
         PermissionAction::Revoke { user_slug } => {
-            remove_user_from_project(helper_client, user_slug.to_string(), project_slug)
-                .await?;
+            remove_user_from_project(helper_client, user_slug.to_string(), project_slug).await?;
         }
         PermissionAction::Update {
             user_slug,
             permission,
         } => {
-            update_user_in_project(helper_client, user_slug.to_string(), project_slug, permission)
-                .await?;
+            update_user_in_project(
+                helper_client,
+                user_slug.to_string(),
+                project_slug,
+                permission,
+            )
+            .await?;
         }
     }
     Ok(Json(ServerProjectActionResponse::Ok))
@@ -206,7 +225,7 @@ pub async fn handle_server_project_action_dir(
             // make a tar.gz of the project and send it to the client
             let project_path = get_project_dev_path(&project_slug.to_string());
             let tar_path = format!("/tmp/{project_slug}.tar.gz");
-            let tar_cmd = format!("tar -czf {tar_path} -C {project_path} ." );
+            let tar_cmd = format!("tar -czf {tar_path} -C {project_path} .");
             let output = tokio::process::Command::new("bash")
                 .arg("-c")
                 .arg(tar_cmd)
@@ -254,9 +273,8 @@ pub async fn handle_server_project_action_file(
         }
         FileAction::Rename { path, new_name } => {
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
-            let new_name =
-                ensure_path_in_project_path(project_slug.clone(), &new_name, true, false).await?;
-            tokio::fs::rename(path, new_name)
+            let new_path = path.parent().unwrap().join(new_name);
+            tokio::fs::rename(path, new_path)
                 .await
                 .map_err(ServerError::from)?;
         }
@@ -314,7 +332,7 @@ pub async fn handle_server_project_action_file(
                 content: String::from_utf8(buf).unwrap(),
                 size,
                 path: format!("root/{}", path_copy.to_string_lossy()),
-                last_modified,  
+                last_modified,
             })));
         }
         FileAction::Update { path } => {
@@ -334,18 +352,18 @@ pub async fn handle_server_project_action_file(
 }
 
 pub async fn ensure_path_in_project_path(
-    project_slug: ProjectSlugStr, 
+    project_slug: ProjectSlugStr,
     project_path_: &str,
     is_file: bool,
     should_exist: bool,
 ) -> Result<PathBuf, (StatusCode, String)> {
     // 1) Canonicaliser la racine projet
     let mut project_path_ = project_path_.to_string();
-    if !project_path_.starts_with("root/"){
+    if !project_path_.starts_with("root/") {
         return Err(ServerError::InvalidPath.into());
     }
     project_path_ = project_path_.replacen("root/", "./", 1);
-    
+
     let project_root = PathBuf::from(get_project_dev_path(&project_slug.to_string()));
     let project_root = tokio::fs::canonicalize(&project_root)
         .await
@@ -389,9 +407,7 @@ pub async fn ensure_path_in_project_path(
         Ok(canon)
     } else {
         // 3B) Création de la cible → vérifier uniquement le parent
-        let parent = full_path
-            .parent()
-            .ok_or(ServerError::PathHasNoParent)?;
+        let parent = full_path.parent().ok_or(ServerError::PathHasNoParent)?;
         let parent_canon = tokio::fs::canonicalize(parent)
             .await
             .map_err(ServerError::from)?;

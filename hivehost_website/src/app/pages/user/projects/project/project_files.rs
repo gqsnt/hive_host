@@ -1,14 +1,14 @@
-use leptos::prelude::{Effect, IntoAnyAttribute};
 use leptos::prelude::AddAnyAttr;
+use leptos::prelude::{Effect, IntoAnyAttribute};
 pub mod file_content_view;
 pub mod project_files_sidebar;
 
-use leptos_router::params::Params;
 use crate::api::get_action_server_project_action;
 use crate::app::pages::user::projects::project::project_files::file_content_view::FileContentView;
 use crate::app::pages::user::projects::project::project_files::project_files_sidebar::ProjectFilesSidebar;
-use crate::app::pages::user::projects::project::{ ProjectSlugSignal};
+use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::IntoView;
+use leptos_router::params::Params;
 
 use common::server_project_action::io_action::dir_action::DirAction;
 use common::server_project_action::ServerProjectActionResponse;
@@ -17,9 +17,8 @@ use leptos::either::Either;
 use leptos::prelude::{ElementChild, Memo, Read, Suspend, Transition};
 
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
-use leptos::prelude::{
-    expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased,
-};
+use leptos::logging::log;
+use leptos::prelude::{expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased};
 use leptos::prelude::{Callback, Signal};
 use leptos::server::Resource;
 use leptos::{component, view, Params};
@@ -38,38 +37,45 @@ pub type MemoProjectFilesParams = Memo<Result<ProjectFilesParams, ParamsError>>;
 #[component]
 pub fn ProjectFiles() -> impl IntoView {
     let params: MemoProjectFilesParams = use_params::<ProjectFilesParams>();
-    let current_path =  Signal::derive(move || {
-        params.read()
+    let current_path = Signal::derive(move || {
+        params
+            .read()
             .as_ref()
             .ok()
-            .map(|p|{
+            .map(|p| {
                 let p = p.path.clone();
-                if p.is_empty(){
+                if p.is_empty() {
                     return "root/".to_string();
                 }
                 let end_with_slash = p.ends_with("/");
                 if end_with_slash {
-                     p
-                }else{
+                    p
+                } else {
                     let mut p = p.clone();
                     p.push('/');
-                     p
+                    p
                 }
             })
             .unwrap_or_else(|| "root/".to_string())
     });
-    
-    let global_state:Store<GlobalState> = expect_context();
 
-    let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
-    let slug = Signal::derive(move ||
-        project_slug_signal.read().0.clone());
+    let global_state: Store<GlobalState> = expect_context();
 
-    let csrf_signal =  Signal::derive(move || {
-        global_state.csrf().get()
+    let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
+    let permission_signal = Signal::derive(move || {
+        global_state
+            .project()
+            .get()
+            .map(|p| p.1)
+            .unwrap_or_default()
     });
-    
-    
+
+    log!("Perm slug signal: {:?}", permission_signal.get());
+
+    let slug = Signal::derive(move || project_slug_signal.read().0.clone());
+
+    let csrf_signal = Signal::derive(move || global_state.csrf().get());
+
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
 
     let server_project_action = get_action_server_project_action();
@@ -81,7 +87,7 @@ pub fn ProjectFiles() -> impl IntoView {
                 server_project_action.version().get(),
             )
         },
-        |(path,slug, _)| {
+        |(path, slug, _)| {
             crate::api::get_action_server_project_action_inner(
                 slug,
                 DirAction::Ls { path }.into(),
@@ -107,7 +113,7 @@ pub fn ProjectFiles() -> impl IntoView {
         }
         segments
     };
-    Effect::new(move |_|{
+    Effect::new(move |_| {
         let _ = current_path.get();
         set_selected_file(None);
     });
@@ -115,13 +121,11 @@ pub fn ProjectFiles() -> impl IntoView {
     let handle_select_file = Callback::new(move |file_path: String| {
         set_selected_file(Some(file_path));
     });
-    // 
+    //
     // let handle_navigate_dir = Callback::new(move |dir_path: String| {
     //     set_current_path(dir_path);
     //     set_selected_file(None);
     // });
-    
-    
 
     view! {
         <div class="flex flex-col h-full">
@@ -205,6 +209,7 @@ pub fn ProjectFiles() -> impl IntoView {
                                         // on_navigate_dir=handle_navigate_dir
                                         on_select_file=handle_select_file
                                         server_project_action=server_project_action
+                                        permission_signal=permission_signal
                                     />
 
                                 </div>
@@ -213,7 +218,12 @@ pub fn ProjectFiles() -> impl IntoView {
                     }}
                 </Transition>
                 <div class="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
-                    <FileContentView csrf_signal selected_file=selected_file.into() slug=slug />
+                    <FileContentView
+                        csrf_signal
+                        selected_file=selected_file.into()
+                        slug=slug
+                        permission_signal=permission_signal
+                    />
                 </div>
             </div>
         </div>

@@ -5,6 +5,7 @@ use crate::app::IntoView;
 use common::permission::Permission;
 
 use crate::app::components::csrf_field::CSRFField;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use leptos::either::EitherOf3;
 use leptos::logging::log;
 use leptos::prelude::CollectView;
@@ -16,29 +17,36 @@ use leptos::prelude::{
 };
 use leptos::prelude::{signal, AddAnyAttr, Effect, Read, Set, Signal, Transition};
 use leptos::{component, view};
+use reactive_stores::Store;
 use strum::IntoEnumIterator;
 
 #[component]
 pub fn ProjectTeam() -> impl IntoView {
-    let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
-    let slug = move ||
-        project_slug_signal.read().0.clone(); 
+    let global_state: Store<GlobalState> = expect_context();
+    let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
+    let slug = move || project_slug_signal.read().0.clone();
     let update_member = ServerAction::<server_fns::UpdateProjectTeamPermission>::new();
     let add_member = ServerAction::<server_fns::AddProjectTeamPermission>::new();
     let delete_member = ServerAction::<server_fns::DeleteProjectTeamMember>::new();
-    
+
+    let permission_signal = Signal::derive(move || {
+        global_state
+            .project()
+            .get()
+            .map(|p| p.1)
+            .unwrap_or_default()
+    });
+
     let team_res = Resource::new(
         move || {
             (
                 update_member.version().get(),
                 add_member.version().get(),
                 delete_member.version().get(),
-                slug()
+                slug(),
             )
         },
-        move |(_, _, _, s)| {
-            server_fns::get_project_team(s)
-        },
+        move |(_, _, _, s)| server_fns::get_project_team(s),
     );
 
     view! {
@@ -51,7 +59,7 @@ pub fn ProjectTeam() -> impl IntoView {
             }>
                 {move || Suspend::new(async move {
                     match team_res.get() {
-                        Some(Ok(project_response)) => {
+                        Some(Ok(user_permissions)) => {
                             let (add_member_result, set_add_member_result) = signal(
                                 " ".to_string(),
                             );
@@ -80,7 +88,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                             </thead>
                                             <tbody class="divide-y divide-gray-800">
                                                 <For
-                                                    each=move || project_response.user_permissions.clone()
+                                                    each=move || user_permissions.clone()
                                                     key=|p| p.user_id
                                                     let(perm)
                                                 >
@@ -88,7 +96,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                         <td class="table-td">{perm.username.clone()}</td>
                                                         <td class="px-4 py-3">
                                                             <Show
-                                                                when=move || project_response.is_owner
+                                                                when=move || permission_signal().is_owner()
                                                                 fallback=move || {
                                                                     view! {
                                                                         <span class="text-gray-500">
@@ -125,7 +133,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                             </Show>
                                                         </td>
                                                         <td class="px-4 py-3">
-                                                            <Show when=move || project_response.is_owner>
+                                                            <Show when=move || permission_signal().is_owner()>
                                                                 <ActionForm action=delete_member on:submit=move |_| {}>
                                                                     <input type="hidden" name="project_slug" value=slug() />
                                                                     <input type="hidden" name="user_id" value=perm.user_id />
@@ -142,7 +150,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                             </tbody>
                                         </table>
 
-                                        <Show when=move || project_response.is_owner>
+                                        <Show when=move || permission_signal().is_owner()>
                                             <div class="pt-6 section-border">
                                                 <h3 class="section-title">"Add Member"</h3>
                                                 <ActionForm action=add_member>
@@ -218,20 +226,20 @@ pub fn ProjectTeam() -> impl IntoView {
 }
 
 pub mod server_fns {
+    use crate::AppResult;
     use common::permission::Permission;
     use common::{ProjectId, ProjectSlugStr, UserId};
     use leptos::server;
     use serde::{Deserialize, Serialize};
-    use crate::AppResult;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
-         use crate::security::utils::ssr::get_auth_session_user_id;
         use crate::api::ssr::request_server_project_action;
         use common::server_project_action::permission::PermissionAction;
         use crate::security::permission::ssr::handle_project_permission_request;
        use validator::ValidationError;
            use std::borrow::Cow;
         use common::Slug;
+        use crate::ssr::permissions;
     }}
 
     #[server]
@@ -254,25 +262,25 @@ pub mod server_fns {
                     user_id,
                     project_slug.id
                 )
-                    .execute(&pool)
-                    .await?;
+                .execute(&pool)
+                .await?;
                 let project = sqlx::query!(
                     r#"SELECT id, name FROM projects WHERE id = $1"#,
                     project_slug.id
                 )
-                    .fetch_one(&pool)
-                    .await?;
+                .fetch_one(&pool)
+                .await?;
                 let user_slug = Slug::new(user_id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     project_slug,
                     PermissionAction::Revoke { user_slug }.into(),
                 )
-                    .await?;
+                .await?;
                 Ok(())
             },
         )
-            .await
+        .await
     }
 
     #[server]
@@ -303,8 +311,8 @@ pub mod server_fns {
                     r#"SELECT id, name FROM projects WHERE id = $1"#,
                     project_slug.id
                 )
-                    .fetch_one(&pool)
-                    .await?;
+                .fetch_one(&pool)
+                .await?;
                 let user_slug = Slug::new(user_id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
@@ -313,18 +321,14 @@ pub mod server_fns {
                         user_slug,
                         permission,
                     }
-                        .into(),
+                    .into(),
                 )
-                    .await?;
+                .await?;
                 Ok(())
             },
         )
-            .await
+        .await
     }
-
-
-
-
 
     #[server]
     pub async fn add_project_team_permission(
@@ -343,10 +347,12 @@ pub mod server_fns {
                         .fetch_one(&pool)
                         .await;
                 let other_user = match other_user {
-                    Ok(r) => {r}
-                    Err(_) =>  return Err(ValidationError::new(
-                        "user_not_found",
-                    ).with_message(Cow::from("User not found")).into())
+                    Ok(r) => r,
+                    Err(_) => {
+                        return Err(ValidationError::new("user_not_found")
+                            .with_message(Cow::from("User not found"))
+                            .into())
+                    }
                 };
                 sqlx::query!(
                 r#"INSERT INTO permissions (user_id, project_id, permission) VALUES ($1, $2, $3)"#,
@@ -360,8 +366,12 @@ pub mod server_fns {
                     r#"SELECT id, name FROM projects WHERE id = $1"#,
                     project_slug.id
                 )
-                    .fetch_one(&pool)
-                    .await?;
+                .fetch_one(&pool)
+                .await?;
+                let cache_permissions = permissions()?;
+                let _ = cache_permissions
+                    .remove(&(other_user.id, project_slug.id))
+                    .await;
                 let user_slug = Slug::new(other_user.id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
@@ -370,24 +380,24 @@ pub mod server_fns {
                         user_slug,
                         permission,
                     }
-                        .into(),
+                    .into(),
                 )
-                    .await?;
+                .await?;
                 Ok(())
             },
         )
-            .await
+        .await
     }
 
     #[server]
     pub async fn get_project_team(
         project_slug: ProjectSlugStr,
-    ) -> AppResult<ProjectTeamResponse> {
+    ) -> AppResult<Vec<UserPermissionPage>> {
         handle_project_permission_request(
             project_slug,
             Permission::Read,
             None,
-            |auth, pool, project_slug| async move {
+            |_, pool, project_slug| async move {
                 let user_permissions = sqlx::query_as!(
                 UserPermissionPage,
                 r#"
@@ -397,16 +407,8 @@ pub mod server_fns {
                     WHERE project_id = $1"#,
                 project_slug.id
             ).fetch_all(&pool).await?;
-                let user_id = get_auth_session_user_id(&auth).unwrap();
-                let is_owner = user_permissions
-                    .iter()
-                    .any(|p| p.user_id == user_id && p.permission == Permission::Owner);
 
-                Ok(ProjectTeamResponse {
-                    project_id:project_slug.id,
-                    is_owner,
-                    user_permissions,
-                })
+                Ok(user_permissions)
             }
         )
             .await
@@ -414,7 +416,6 @@ pub mod server_fns {
 
     #[derive(Clone, Deserialize, Debug, Serialize, Default)]
     pub struct ProjectTeamResponse {
-        pub is_owner: bool,
         pub project_id: ProjectId,
         pub user_permissions: Vec<UserPermissionPage>,
     }

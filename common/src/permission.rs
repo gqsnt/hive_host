@@ -2,9 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use strum_macros::EnumIter;
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default, EnumIter,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, EnumIter)]
 #[cfg_attr(feature = "website-ssr", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "website-ssr",
@@ -18,6 +16,40 @@ pub enum Permission {
 }
 
 impl Permission {
+    pub fn can_edit(&self) -> bool {
+        match self {
+            Permission::Read => false,
+            Permission::Write => true,
+            Permission::Owner => true,
+        }
+    }
+
+    pub fn has_permission(&self, permission: &Permission) -> bool {
+        match self {
+            Permission::Read => *permission == Permission::Read,
+            Permission::Write => {
+                *permission == Permission::Write || *permission == Permission::Read
+            }
+            Permission::Owner => true,
+        }
+    }
+
+    pub fn is_owner(&self) -> bool {
+        match self {
+            Permission::Read => false,
+            Permission::Write => false,
+            Permission::Owner => true,
+        }
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        match self {
+            Permission::Read => true,
+            Permission::Write => false,
+            Permission::Owner => false,
+        }
+    }
+
     pub fn label(&self) -> &'static str {
         match self {
             Permission::Read => "Read",

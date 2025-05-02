@@ -1,22 +1,20 @@
-use leptos::prelude::IntoAnyAttribute;
-use leptos::prelude::AddAnyAttr;
 use crate::api::ServerProjectActionFront;
+use common::permission::Permission;
 use common::server_project_action::io_action::dir_action::{DirAction, LsElement};
 use common::server_project_action::io_action::file_action::FileAction;
 use leptos::callback::Callback;
 use leptos::either::Either;
 use leptos::html::Input;
+use leptos::prelude::AddAnyAttr;
+use leptos::prelude::CustomAttribute;
+use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::{signal, NodeRef, NodeRefAttribute, ReadSignal};
 use leptos::prelude::{Callable, Get, IntoMaybeErased};
-use leptos::prelude::{
-    ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Signal,
-};
-use leptos::prelude::CustomAttribute;
+use leptos::prelude::{ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Signal};
 use leptos::prelude::{ElementChild, Read, Show};
 use leptos::{component, view, IntoView};
 use leptos_router::components::A;
 use web_sys::SubmitEvent;
-
 
 pub type FileListSignal = ReadSignal<Option<Vec<LsElement>>>;
 
@@ -29,7 +27,8 @@ pub fn ProjectFilesSidebar(
     // on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
-    csrf_signal:Signal<Option<String>>
+    csrf_signal: Signal<Option<String>>,
+    permission_signal: Signal<Permission>,
 ) -> impl IntoView {
     let folder_name_ref: NodeRef<Input> = NodeRef::new();
     let file_name_ref: NodeRef<Input> = NodeRef::new();
@@ -47,7 +46,13 @@ pub fn ProjectFilesSidebar(
             }
             .into(),
             None,
-            Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default()),
+            Some(
+                csrf_signal
+                    .read()
+                    .as_ref()
+                    .map(|csrf| csrf.clone())
+                    .unwrap_or_default(),
+            ),
         ));
     };
 
@@ -64,7 +69,13 @@ pub fn ProjectFilesSidebar(
             }
             .into(),
             None,
-            Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default()),
+            Some(
+                csrf_signal
+                    .read()
+                    .as_ref()
+                    .map(|csrf| csrf.clone())
+                    .unwrap_or_default(),
+            ),
         ));
     };
 
@@ -72,7 +83,10 @@ pub fn ProjectFilesSidebar(
         <div class="p-4 h-full flex flex-col">
 
             // Create Folder Section
-            <div class="mb-2 flex-shrink-0">
+            <div
+                class="mb-2 flex-shrink-0"
+                class=("hidden", move || !permission_signal().can_edit())
+            >
                 <form on:submit=on_folder_create_submit class="flex items-center gap-x-2">
                     <input
                         type="text"
@@ -101,9 +115,15 @@ pub fn ProjectFilesSidebar(
                 </form>
             </div>
 
-            <hr class="border-white/10 my-3 flex-shrink-0" />
+            <hr
+                class="border-white/10 my-3 flex-shrink-0"
+                class=("hidden", move || !permission_signal().can_edit())
+            />
 
-            <div class="mb-4 flex-shrink-0">
+            <div
+                class="mb-4 flex-shrink-0"
+                class=("hidden", move || !permission_signal().can_edit())
+            >
                 <form on:submit=on_file_create_submit class="space-y-2">
                     // File Input (for upload)
                     // <div>
@@ -149,7 +169,10 @@ pub fn ProjectFilesSidebar(
                 </form>
             </div>
 
-            <hr class="border-white/10 my-3 flex-shrink-0" />
+            <hr
+                class="border-white/10 my-3 flex-shrink-0"
+                class=("hidden", move || !permission_signal().can_edit())
+            />
 
             <ProjectFilesSidebarList
                 slug=slug
@@ -160,6 +183,7 @@ pub fn ProjectFilesSidebar(
                 on_select_file=on_select_file
                 server_project_action=server_project_action
                 csrf_signal
+                permission_signal=permission_signal
             />
 
         </div>
@@ -176,6 +200,7 @@ pub fn ProjectFilesSidebarList(
     // on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
+    permission_signal: Signal<Permission>,
 ) -> impl IntoView {
     view! {
         <div class="flex-grow overflow-y-auto -mr-4 pr-4">
@@ -243,6 +268,7 @@ pub fn ProjectFilesSidebarList(
                                                     item=item.clone()
                                                     server_project_action=server_project_action
                                                     on_select_file=on_select_file
+                                                    permission_signal=permission_signal
                                                 />
                                             }
                                         })
@@ -265,19 +291,31 @@ pub fn ProjectFilesSidebarItem(
     item: LsElement,
     server_project_action: ServerProjectActionFront,
     on_select_file: Callback<String>,
+    permission_signal: Signal<Permission>,
 ) -> impl IntoView {
     let (is_renaming_item, set_is_renaming_item) = signal(false);
     let new_name_ref: NodeRef<Input> = NodeRef::new();
     let (item_name, _) = signal(item.name.clone());
-    let item_path = move ||  format!("{}{}", current_path.get(), item_name());
+    let item_path = move || format!("{}{}", current_path.get(), item_name());
     let on_delete_item_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         let action = if item.is_dir {
-            DirAction::Delete { path:item_path() }.into()
+            DirAction::Delete { path: item_path() }.into()
         } else {
-            FileAction::Delete { path:item_path() }.into()
+            FileAction::Delete { path: item_path() }.into()
         };
-        server_project_action.dispatch((slug(), action, None, Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default())));
+        server_project_action.dispatch((
+            slug(),
+            action,
+            None,
+            Some(
+                csrf_signal
+                    .read()
+                    .as_ref()
+                    .map(|csrf| csrf.clone())
+                    .unwrap_or_default(),
+            ),
+        ));
     };
 
     let on_rename_item_submit = move |ev: SubmitEvent| {
@@ -300,7 +338,18 @@ pub fn ProjectFilesSidebarItem(
             }
             .into()
         };
-        server_project_action.dispatch((slug(), action, None, Some(csrf_signal.read().as_ref().map(|csrf|csrf.clone()).unwrap_or_default())));
+        server_project_action.dispatch((
+            slug(),
+            action,
+            None,
+            Some(
+                csrf_signal
+                    .read()
+                    .as_ref()
+                    .map(|csrf| csrf.clone())
+                    .unwrap_or_default(),
+            ),
+        ));
         set_is_renaming_item(false)
     };
 
@@ -308,12 +357,8 @@ pub fn ProjectFilesSidebarItem(
         <li class="group flex items-center justify-between gap-x-1 px-2 py-1.5 text-sm rounded-md text-gray-300 hover:bg-gray-700 hover:text-white">
             <form
                 on:submit=on_rename_item_submit
-                class=move || {
-                    format!(
-                        "flex items-center gap-x-2 flex-grow {}",
-                        if !is_renaming_item.get() { "hidden" } else { "" },
-                    )
-                }
+                class="flex items-center gap-x-2 flex-grow "
+                class=("hidden", move || !is_renaming_item.get() || !permission_signal().can_edit())
             >
                 <input
                     type="text"
@@ -403,12 +448,8 @@ pub fn ProjectFilesSidebarItem(
                     Either::Right(
                         view! {
                             <button
-                                class=move || {
-                                    format!(
-                                        "flex items-center gap-x-2 overflow-hidden flex-grow text-left hover:text-white {}",
-                                        if is_renaming_item.get() { "hidden" } else { "" },
-                                    )
-                                }
+                                class="flex items-center gap-x-2 overflow-hidden flex-grow text-left hover:text-white"
+                                class=("hidden", move || is_renaming_item.get())
                                 on:click=move |e| {
                                     e.prevent_default();
                                     on_select_file.try_run(item_path());
@@ -437,12 +478,10 @@ pub fn ProjectFilesSidebarItem(
                 }
             }}
 
-            <div class=move || {
-                format!(
-                    "flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-x-1 {}",
-                    if is_renaming_item.get() { "hidden" } else { "" },
-                )
-            }>
+            <div
+                class="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-x-1"
+                class=("hidden", move || is_renaming_item.get() || !permission_signal().can_edit())
+            >
                 <button
                     type="button"
                     class="p-0.5 text-gray-400 hover:text-white"

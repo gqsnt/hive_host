@@ -1,4 +1,5 @@
 use crate::models::{Project, User};
+use common::permission::Permission;
 use common::Slug;
 use reactive_stores::Store;
 
@@ -11,6 +12,6 @@ pub mod user;
 pub struct GlobalState {
     pub csrf: Option<String>,
     pub user: Option<(Slug, User)>,
-    pub project: Option<(Slug, Project)>,
+    pub project: Option<(Slug, Permission, Project)>,
     pub hosting_url: Option<String>,
 }

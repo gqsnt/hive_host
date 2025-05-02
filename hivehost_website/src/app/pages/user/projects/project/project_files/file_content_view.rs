@@ -1,4 +1,5 @@
 use crate::api::get_action_server_project_action;
+use common::permission::Permission;
 use common::server_project_action::io_action::file_action::FileAction;
 use common::server_project_action::ServerProjectActionResponse;
 use common::ProjectSlugStr;
@@ -15,7 +16,8 @@ use web_sys::MouseEvent;
 pub fn FileContentView(
     selected_file: Signal<Option<String>>,
     slug: Signal<ProjectSlugStr>,
-    csrf_signal:Signal<Option<String>>,
+    csrf_signal: Signal<Option<String>>,
+    permission_signal: Signal<Permission>,
 ) -> impl IntoView {
     let file_content_resource = Resource::new(
         move || (selected_file.get(), slug.get()),
@@ -142,6 +144,7 @@ pub fn FileContentView(
                                                                 on:click=on_click_update
                                                                 // Adjusted padding/text size
                                                                 class="btn btn-primary px-3 py-1 text-sm"
+                                                                class=("hidden", move || !permission_signal().can_edit())
                                                                 disabled=move || server_project_action.pending().get()
                                                             >
                                                                 Save Changes

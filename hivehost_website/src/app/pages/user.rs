@@ -73,20 +73,20 @@ pub type UserSignal = Signal<Option<User>>;
 
 #[component]
 pub fn UserPage() -> impl IntoView {
-    let global_store:Store<GlobalState>=  expect_context();
+    let global_store: Store<GlobalState> = expect_context();
     let logout = ServerAction::<Logout>::new();
-    let user_resource= OnceResource::new(get_user());
-    let csrf_resource= OnceResource::new(generate_csrf());
-    
+    let user_resource = OnceResource::new(get_user());
+    let csrf_resource = OnceResource::new(generate_csrf());
+
     let (mobile_sidebar_open, set_mobile_sidebar_open) = signal(false);
     let location = use_location();
-    let (current_page, set_current_page) = signal(UserPageType::from(location.pathname.get().as_str()));
+    let (current_page, set_current_page) =
+        signal(UserPageType::from(location.pathname.get().as_str()));
 
     Effect::new(move |_| {
         let path = location.pathname.get();
         set_current_page(UserPageType::from(path.as_str()));
     });
-
 
     view! {
         // Add h-full if body/html are h-full
@@ -131,9 +131,9 @@ pub fn UserPage() -> impl IntoView {
                     aria-hidden="true"
                     on:click=move |_| set_mobile_sidebar_open(false)
                 ></div>
-            
+
                 <div class="fixed inset-0 flex">
-            
+
                     <div
                         class="relative mr-16 flex w-full max-w-xs flex-1 transform transition ease-in-out duration-300"
                         class:translate-x-0=move || mobile_sidebar_open.get()
@@ -155,7 +155,7 @@ pub fn UserPage() -> impl IntoView {
                                 </svg>
                             </button>
                         </div>
-        
+
                         <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-950 px-6 pb-4 ring-1 ring-white/10">
                             <div class="flex h-16 shrink-0 items-center">
                                  <A href="/">
@@ -170,7 +170,7 @@ pub fn UserPage() -> impl IntoView {
                                             <NavItem page=UserPageType::Projects current_page=current_page/>
                                         </ul>
                                     </li>
-        
+
                                     <div class="mt-auto -mx-2 space-y-1">
                                         <li>
                                             <A
@@ -217,7 +217,7 @@ pub fn UserPage() -> impl IntoView {
                     </div>
                 </div>
             </div>
-        
+
             <div class="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
                 <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-950 px-6 pb-4">
                     <div class="flex h-16 shrink-0 items-center">
@@ -277,7 +277,7 @@ pub fn UserPage() -> impl IntoView {
                     </nav>
                 </div>
             </div>
-            
+
             <div class="lg:pl-72 h-full">
                 <div class="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-700 bg-gray-950 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:hidden">
                     <button
@@ -325,17 +325,9 @@ fn NavItem(
                 }
             >
                 <svg
-                    class=move || {
-                        format!(
-                            "sidebar-link-svg {}",
-                            if current_page() == page {
-                                "sidebar-link-svg-active"
-                            } else {
-                                "sidebar-link-svg-inactive"
-                            },
-                        )
-                    }
-
+                    class="sidebar-link-svg"
+                    class=("sidebar-link-svg-active", move || current_page() == page)
+                    class=("sidebar-link-svg-inactive", move || current_page() != page)
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke-width="1.5"

@@ -1,29 +1,42 @@
+use crate::app::components::csrf_field::CSRFField;
+use crate::app::pages::user::projects::project::project_snapshots::server_fns::{
+    CreateProjectSnapshot, DeleteProjectSnapshot, SetActiveProjectSnapshot,
+    UnsetActiveProjectSnapshot,
+};
+use crate::app::pages::user::projects::project::ProjectSlugSignal;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::IntoView;
 use leptos::either::{Either, EitherOf3};
 use leptos::html::{Input, Textarea};
 use leptos::prelude::*;
 use reactive_stores::Store;
 use time::format_description::well_known::Rfc3339;
-use crate::app::components::csrf_field::CSRFField;
-use crate::app::pages::user::projects::project::ProjectSlugSignal;
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
-use crate::app::IntoView;
 use web_sys::SubmitEvent;
-use crate::app::pages::user::projects::project::project_snapshots::server_fns::{CreateProjectSnapshot, DeleteProjectSnapshot, SetActiveProjectSnapshot, UnsetActiveProjectSnapshot};
 
 #[component]
 pub fn ProjectSnapshots(
-    set_active_snapshot_action:ServerAction<SetActiveProjectSnapshot>,
+    set_active_snapshot_action: ServerAction<SetActiveProjectSnapshot>,
     unset_active_snapshot_action: ServerAction<UnsetActiveProjectSnapshot>,
 ) -> impl IntoView {
     let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
 
+    let permission_signal = Signal::derive(move || {
+        global_state
+            .project()
+            .get()
+            .map(|p| p.1)
+            .unwrap_or_default()
+    });
+
     let slug_signal = Signal::derive(move || project_slug_signal.get().0);
     let csrf_signal = Signal::derive(move || global_state.csrf().get());
     let active_snapshot_id_signal = Signal::derive(move || {
-        global_state.project().get().and_then(|p| p.1.active_snapshot_id)
+        global_state
+            .project()
+            .get()
+            .and_then(|p| p.2.active_snapshot_id)
     });
-
 
     // --- Actions ---
     let create_snapshot_action = ServerAction::<CreateProjectSnapshot>::new();
@@ -31,14 +44,16 @@ pub fn ProjectSnapshots(
 
     // --- Resource for Snapshots List ---
     let snapshots_resource = Resource::new(
-        move || (
-            slug_signal.get(),
-            create_snapshot_action.version().get(),
-            delete_snapshot_action.version().get(),
-            set_active_snapshot_action.version().get(),
-            unset_active_snapshot_action.version().get(),
-        ),
-        move |(slug, _, _, _,_)| async move { server_fns::get_project_snapshots(slug).await },
+        move || {
+            (
+                slug_signal.get(),
+                create_snapshot_action.version().get(),
+                delete_snapshot_action.version().get(),
+                set_active_snapshot_action.version().get(),
+                unset_active_snapshot_action.version().get(),
+            )
+        },
+        move |(slug, _, _, _, _)| async move { server_fns::get_project_snapshots(slug).await },
     );
 
     // --- Form State ---
@@ -58,9 +73,13 @@ pub fn ProjectSnapshots(
                 Ok(_) => {
                     set_create_feedback.set("Snapshot created successfully.".to_string());
                     // Clear form fields after successful creation
-                    if let Some(input) = snapshot_name_ref.get() { input.set_value(""); }
-                    if let Some(textarea) = snapshot_description_ref.get() { textarea.set_value(""); }
-                },
+                    if let Some(input) = snapshot_name_ref.get() {
+                        input.set_value("");
+                    }
+                    if let Some(textarea) = snapshot_description_ref.get() {
+                        textarea.set_value("");
+                    }
+                }
                 Err(e) => set_create_feedback.set(format!("Error creating snapshot: {e}")),
             }
         }
@@ -81,18 +100,22 @@ pub fn ProjectSnapshots(
         if let Some(result) = set_active_snapshot_action.value().get() {
             match result {
                 Ok(_) => set_set_active_feedback.set("Snapshot set as active.".to_string()),
-                Err(e) => set_set_active_feedback.set(format!("Error setting active snapshot: {e}")),
+                Err(e) => {
+                    set_set_active_feedback.set(format!("Error setting active snapshot: {e}"))
+                }
             }
         } else {
             set_set_active_feedback.set("".to_string()); // Clear on potential refetch
         }
     });
-    
+
     Effect::new(move |_| {
         if let Some(result) = unset_active_snapshot_action.value().get() {
             match result {
                 Ok(_) => set_unset_active_feedback.set("Active snapshot unset.".to_string()),
-                Err(e) => set_unset_active_feedback.set(format!("Error unsetting active snapshot: {e}")),
+                Err(e) => {
+                    set_unset_active_feedback.set(format!("Error unsetting active snapshot: {e}"))
+                }
             }
         } else {
             set_unset_active_feedback.set("".to_string()); // Clear on potential refetch
@@ -112,7 +135,7 @@ pub fn ProjectSnapshots(
             return;
         }
         set_create_feedback.set("Creating...".to_string()); // Indicate processing
-        create_snapshot_action.dispatch(server_fns::CreateProjectSnapshot {
+        create_snapshot_action.dispatch(CreateProjectSnapshot {
             csrf,
             project_slug: slug,
             name,
@@ -120,22 +143,25 @@ pub fn ProjectSnapshots(
         });
     };
 
-    let on_delete_submit = move |ev: SubmitEvent, snapshot_name:String| {
+    let on_delete_submit = move |ev: SubmitEvent, snapshot_name: String| {
         let confirmed = if let Some(window) = web_sys::window() {
-            window.confirm_with_message(&format!("Are you sure you want to delete snapshot '{snapshot_name}'?")).unwrap_or(false)
-        }else{
+            window
+                .confirm_with_message(&format!(
+                    "Are you sure you want to delete snapshot '{snapshot_name}'?"
+                ))
+                .unwrap_or(false)
+        } else {
             false
         };
         if !confirmed {
             ev.prevent_default();
         }
     };
-    
 
     view! {
         <div class="space-y-10">
             // --- Create Snapshot Section ---
-            <div class="section-border">
+            <div class="section-border" class=("hidden", move || !permission_signal().is_owner())>
                 <h2 class="section-title">"Create New Snapshot"</h2>
                 <p class="section-desc">"Create a snapshot of the current project state."</p>
                 <form on:submit=on_create_submit class="mt-6 space-y-4">
@@ -279,7 +305,10 @@ pub fn ProjectSnapshots(
                                                                                         {created_at_formatted}
                                                                                     </td>
                                                                                     <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
-                                                                                        <div class="flex justify-end items-center space-x-2">
+                                                                                        <div
+                                                                                            class="flex justify-end items-center space-x-2"
+                                                                                            class=("hidden", move || !permission_signal().is_owner())
+                                                                                        >
                                                                                             // Set Active Button
                                                                                             {move || match is_active_signal() {
                                                                                                 true => {
@@ -377,13 +406,11 @@ pub fn ProjectSnapshots(
 
 // --- Server Functions ---
 pub mod server_fns {
+    use leptos::server;
 
-    use leptos::{server};
-
-    use common::{ProjectSlugStr};
-    use crate::{AppResult};
-    use crate::models::{ProjectSnapshot};
-
+    use crate::models::ProjectSnapshot;
+    use crate::AppResult;
+    use common::ProjectSlugStr;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::permission::ssr::handle_project_permission_request;
@@ -401,7 +428,7 @@ pub mod server_fns {
         handle_project_permission_request(
             project_slug,
             Permission::Read, // Reading snapshots requires read permission
-            None, // No CSRF needed for read
+            None,             // No CSRF needed for read
             |_, pool, project_slug_obj| async move {
                 // Fetch snapshots ordered by creation date, newest first
                 Ok(sqlx::query_as!(
@@ -412,11 +439,11 @@ pub mod server_fns {
                      ORDER BY created_at DESC", // Enforce limit
                     project_slug_obj.id
                 )
-                    .fetch_all(&pool)
-                    .await?)
+                .fetch_all(&pool)
+                .await?)
             },
         )
-            .await
+        .await
     }
 
     #[server]
@@ -468,37 +495,34 @@ pub mod server_fns {
         )
             .await
     }
-    
-    
+
     #[cfg(feature = "ssr")]
-    pub mod ssr{
-        use common::Slug;
+    pub mod ssr {
         use crate::{AppError, AppResult};
+        use common::Slug;
 
         pub async fn ensure_not_max_snapshots(
             pool: &sqlx::PgPool,
-            project_slug:Slug,
+            project_slug: Slug,
             max_snapshots: i64,
         ) -> AppResult<()> {
             // Check if the project has more than 20 snapshots
             let count_result = sqlx::query!(
-            "SELECT COUNT(*) as count FROM projects_snapshots WHERE project_id = $1",
-            project_slug.id
-        )
-                .fetch_one(pool)
-                .await?;
+                "SELECT COUNT(*) as count FROM projects_snapshots WHERE project_id = $1",
+                project_slug.id
+            )
+            .fetch_one(pool)
+            .await?;
 
             let count: i64 = count_result.count.unwrap_or(0);
-            if count > max_snapshots{
+            if count > max_snapshots {
                 Err(AppError::ToMuchSnapshots)
-            }else{
+            } else {
                 Ok(())
             }
         }
-
     }
-    
-    
+
     #[server]
     pub async fn unset_active_project_snapshot(
         csrf: String,
@@ -510,31 +534,33 @@ pub mod server_fns {
             Some(csrf),
             |_, pool, project_slug| async move {
                 let active_snapshot = sqlx::query!(
-                     "SELECT active_snapshot_id FROM projects WHERE id = $1",
-                     project_slug.id
-                 )
-                    .fetch_one(&pool)
-                    .await?;
+                    "SELECT active_snapshot_id FROM projects WHERE id = $1",
+                    project_slug.id
+                )
+                .fetch_one(&pool)
+                .await?;
                 if active_snapshot.active_snapshot_id.is_none() {
                     return Err(AppError::NoActiveSnapshot);
                 }
                 sqlx::query!(
-                     "UPDATE projects SET active_snapshot_id = NULL WHERE id = $1",
-                     project_slug.id
-                 )
-                    .execute(&pool)
-                    .await?;
+                    "UPDATE projects SET active_snapshot_id = NULL WHERE id = $1",
+                    project_slug.id
+                )
+                .execute(&pool)
+                .await?;
 
-                request_server_project_action(project_slug.clone(), SnapshotAction::UnmountProd.into()).await?;
+                request_server_project_action(
+                    project_slug.clone(),
+                    SnapshotAction::UnmountProd.into(),
+                )
+                .await?;
                 request_hosting_action(project_slug, HostingAction::StopServingProject).await?;
 
                 Ok(())
             },
         )
-            .await
+        .await
     }
-    
-    
 
     #[server]
     pub async fn delete_project_snapshot(
@@ -572,7 +598,6 @@ pub mod server_fns {
         )
             .await
     }
-
 
     #[server]
     pub async fn set_active_project_snapshot(
@@ -628,5 +653,4 @@ pub mod server_fns {
         )
             .await
     }
-
 }

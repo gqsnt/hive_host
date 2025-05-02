@@ -1,7 +1,7 @@
+use crate::AppResult;
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
 use common::ProjectSlugStr;
 use leptos::server;
-use crate::AppResult;
 
 pub fn token_url(server_url: &str, token: &str) -> String {
     format!("http://{server_url}/token/{token}")
@@ -27,7 +27,7 @@ pub async fn request_server_project_action_front(
             }
         },
     )
-        .await
+    .await
 }
 
 #[cfg(feature = "ssr")]
@@ -111,17 +111,17 @@ pub mod ssr {
     ) -> AppResult<()> {
         let permissions = permissions()?;
         if let Some(user_id) = get_auth_session_user_id(auth_session) {
-            let has_permission = permissions
+            let has_cached_permission = permissions
                 .get(&(user_id, project_id))
                 .await
-                .map(|v| permission_type <= v)
+                .map(|v| v.has_permission(&permission_type))
                 .unwrap_or_default();
-            if has_permission {
+            if has_cached_permission {
                 Ok(())
-            } else if let Some(permission) =
+            } else if let Some(db_permission) =
                 request_project_permission(permissions, user_id, project_id).await?
             {
-                if permission_type <= permission {
+                if db_permission.has_permission(&permission_type) {
                     log!(
                         "Permission granted. for user_id: {}, project_id: {}",
                         user_id,

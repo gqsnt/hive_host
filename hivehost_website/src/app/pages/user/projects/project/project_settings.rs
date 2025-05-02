@@ -1,7 +1,7 @@
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::app::IntoView;
-use common::{ProjectSlugStr};
+use common::ProjectSlugStr;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, Action, ElementChild, Signal};
 use leptos::prelude::{signal, ClassAttribute, OnAttribute};
@@ -12,13 +12,17 @@ use reactive_stores::Store;
 
 #[component]
 pub fn ProjectSettings() -> impl IntoView {
-    let global_state:Store<GlobalState> = expect_context();
-    let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
+    let global_state: Store<GlobalState> = expect_context();
+    let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
     let slug = move ||
         project_slug_signal.get().0;
 
     let is_active = Signal::derive(move ||
-        global_state.project().get().and_then(|inner| inner.1.active_snapshot_id).is_some());
+        global_state.project().get().and_then(|inner| inner.2.active_snapshot_id).is_some());
+
+    let permission_signal = Signal::derive(move || {
+        global_state.project().get().map(|p| p.1).unwrap_or_default()
+    });
 
     let hosting_url = move ||
         global_state.hosting_url().get().unwrap_or_default();
@@ -27,7 +31,7 @@ pub fn ProjectSettings() -> impl IntoView {
         global_state.csrf().get().unwrap_or_default()
     };
 
-    
+
     let (preview_version, set_preview_version) = signal(0u32);
 
     let refresh_preview = move || {
@@ -43,7 +47,7 @@ pub fn ProjectSettings() -> impl IntoView {
     let on_delete_project = move |_| {
         let project_slug = slug();
         let confirmed = web_sys::window()
-            .map(|window|{
+            .map(|window| {
                 window
                     .confirm_with_message(
                         &format!(
@@ -58,7 +62,7 @@ pub fn ProjectSettings() -> impl IntoView {
         }
         delete_project_action.dispatch((project_slug, csrf()));
     };
-    let (delete_project_action_result,set_delete_project_action_result ) = signal("".to_string());
+    let (delete_project_action_result, set_delete_project_action_result) = signal("".to_string());
     Effect::new(move |_| {
         let result = delete_project_action.value().get();
         if let Some(Ok(_)) = result {
@@ -67,8 +71,6 @@ pub fn ProjectSettings() -> impl IntoView {
             set_delete_project_action_result(format!("Error: {e}"));
         }
     });
-    
-    
 
 
     view! {
@@ -162,7 +164,7 @@ pub fn ProjectSettings() -> impl IntoView {
 
             // --- Danger Zone ---
             // Subtle red border hint
-            <div class=" pb-6">
+            <div class="pb-6" class=("hidden", move || !permission_signal().is_owner())>
                 // Red title
                 <h2 class="section-title text-red-400">"Danger Zone"</h2>
                 <p class="section-desc">"These actions are permanent and cannot be undone."</p>
@@ -192,9 +194,9 @@ pub fn ProjectSettings() -> impl IntoView {
 }
 
 pub mod server_fns {
-    use common::{ProjectSlugStr};
-    use leptos::server;
     use crate::AppResult;
+    use common::ProjectSlugStr;
+    use leptos::server;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::api::ssr::request_server_project_action;
@@ -249,7 +251,7 @@ pub mod server_fns {
                     request_hosting_action(project_slug.clone(), common::hosting_action::HostingAction::StopServingProject).await?;
                 }
                 for snapshot in snapshot_names {
-                    request_server_project_action(project_slug.clone(), SnapshotAction::Delete{snapshot_name:snapshot.snapshot_name}.into()).await?;
+                    request_server_project_action(project_slug.clone(), SnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
                 }
 
 

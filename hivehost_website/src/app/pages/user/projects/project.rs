@@ -1,11 +1,13 @@
-use leptos::prelude::{expect_context, OnceResource, Read, ServerAction, Signal, Transition, Update};
+use leptos::prelude::{
+    expect_context, OnceResource, Read, ServerAction, Signal, Transition, Update,
+};
 use leptos::prelude::{AddAnyAttr, Suspend};
 use std::fmt::Display;
 pub mod project_dashboard;
 pub mod project_files;
 pub mod project_settings;
-pub mod project_team;
 pub mod project_snapshots;
+pub mod project_team;
 
 use leptos::context::provide_context;
 use leptos::prelude::{
@@ -14,9 +16,12 @@ use leptos::prelude::{
 use leptos::{component, view, IntoView, Params};
 use leptos_router::hooks::{use_location, use_params};
 
-use crate::app::pages::user::projects::project::server_fns::get_project;
-use crate::app::pages::{GlobalState};
 use crate::app::get_hosting_url;
+use crate::app::pages::user::projects::project::project_snapshots::server_fns::{
+    SetActiveProjectSnapshot, UnsetActiveProjectSnapshot,
+};
+use crate::app::pages::user::projects::project::server_fns::get_project;
+use crate::app::pages::GlobalState;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
@@ -27,7 +32,6 @@ use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
-use crate::app::pages::user::projects::project::project_snapshots::server_fns::{SetActiveProjectSnapshot, UnsetActiveProjectSnapshot};
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectParams {
@@ -92,25 +96,21 @@ impl Display for ProjectSection {
     }
 }
 
-
-#[derive(Clone, Debug, PartialEq,Eq, Serialize,Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectSlugSignal(pub String);
-
-
-
 
 #[component]
 pub fn ProjectPage(
-    set_active_snapshot_action:ServerAction<SetActiveProjectSnapshot>,
+    set_active_snapshot_action: ServerAction<SetActiveProjectSnapshot>,
     unset_active_snapshot_action: ServerAction<UnsetActiveProjectSnapshot>,
-    
 ) -> impl IntoView {
     let params: MemoProjectParams = use_params::<ProjectParams>();
-    let project_slug =  move || {
-        params.read()
+    let project_slug = move || {
+        params
+            .read()
             .as_ref()
             .ok()
-            .map(|p|p.project_slug.clone())
+            .map(|p| p.project_slug.clone())
             .unwrap_or_default()
     };
     let project_slug_signal = Signal::derive(move || {
@@ -121,25 +121,22 @@ pub fn ProjectPage(
             .expect("Project slug not found")
     });
     provide_context(project_slug_signal);
-    
-    let global_state:Store<GlobalState> = expect_context();
+
+    let global_state: Store<GlobalState> = expect_context();
     let project_resource = Resource::new(
         move || {
             (
                 set_active_snapshot_action.version().get(),
-            unset_active_snapshot_action.version().get(),
+                unset_active_snapshot_action.version().get(),
                 project_slug(),
             )
         },
-        |(_,_, slug)| {
-            get_project(slug)
-        },
+        |(_, _, slug)| get_project(slug),
     );
-    
-    let hosting_url_resource= OnceResource::new(get_hosting_url());
-    
-    
-    let get_project_section = move |location:String| {
+
+    let hosting_url_resource = OnceResource::new(get_hosting_url());
+
+    let get_project_section = move |location: String| {
         let split = location.split("/").collect::<Vec<_>>();
         // find projets string and return next next
         let mut found_1 = false;
@@ -192,10 +189,10 @@ pub fn ProjectPage(
                 {move || Suspend::new(async move {
                     let project = project_resource.await;
                     match project {
-                        Ok(project) => {
+                        Ok((permission, project)) => {
                             global_state
                                 .update(|inner| {
-                                    inner.project = Some((project.get_slug(), project));
+                                    inner.project = Some((project.get_slug(), permission, project));
                                 });
                         }
                         Err(_) => {
@@ -246,31 +243,38 @@ fn SectionNav(
 
 pub mod server_fns {
     use crate::models::Project;
+    use crate::AppResult;
+    use common::permission::Permission;
     use common::ProjectSlugStr;
     use leptos::server;
-    use crate::AppResult;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
-        use common::permission::Permission;
+        use crate::security::utils::ssr::get_auth_session_user_id;
     }}
 
     #[server]
-    pub async fn get_project(
-        project_slug: ProjectSlugStr,
-    ) -> AppResult<Project> {
+    pub async fn get_project(project_slug: ProjectSlugStr) -> AppResult<(Permission, Project)> {
         crate::security::permission::ssr::handle_project_permission_request(
             project_slug,
             Permission::Read,
             None,
-            |_, pool, project_slug| async move {
-                let project = sqlx::query_as!(
-                        Project,
-                        "SELECT id,name,active_snapshot_id, slug FROM projects WHERE id = $1",
+            |auth, pool, project_slug| async move {
+                let user_id = get_auth_session_user_id(&auth).unwrap();
+                let record = sqlx::query!(
+                        r#"SELECT id,name,active_snapshot_id, slug, permissions.permission as "permission: Permission" FROM projects inner join permissions on projects.id = permissions.project_id and user_id = $1  WHERE id = $2"#,
+                        user_id,
                         project_slug.id
                     )
                     .fetch_one(&pool)
                     .await?;
-                Ok(project)
+                let project = Project {
+                    id: record.id,
+                    name: record.name,
+                    slug: record.slug,
+                    active_snapshot_id: record.active_snapshot_id,
+                };
+
+                Ok((record.permission,project))
             },
         )
             .await
