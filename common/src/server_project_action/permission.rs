@@ -1,6 +1,6 @@
 use crate::permission::Permission;
 use crate::server_project_action::{IsProjectServerAction, ServerProjectAction};
-use crate::{impl_chain_from,Slug};
+use crate::{impl_chain_from, Slug};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

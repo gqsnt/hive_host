@@ -1,16 +1,16 @@
-use leptos::prelude::{Get};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::AppResult;
+use leptos::prelude::Get;
 use leptos::prelude::{expect_context, Signal};
 use leptos::{component, server, view, IntoView};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
-use crate::AppResult;
 
 pub type CsrfSignal = Signal<Option<CsrfValue>>;
 
 #[component]
 pub fn CSRFField() -> impl IntoView {
-    let global_state:Store<GlobalState> = expect_context();
+    let global_state: Store<GlobalState> = expect_context();
     view! {
         <input
             type="hidden"
@@ -19,8 +19,6 @@ pub fn CSRFField() -> impl IntoView {
         />
     }
 }
-
-
 
 #[server]
 pub async fn generate_csrf() -> AppResult<String> {
@@ -35,8 +33,5 @@ pub async fn generate_csrf() -> AppResult<String> {
     ))
 }
 
-
-
 #[derive(Default, Deserialize, Clone, Debug, Serialize)]
 pub struct CsrfValue(pub String);
-

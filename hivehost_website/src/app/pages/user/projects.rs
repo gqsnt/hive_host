@@ -24,9 +24,8 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
         move || create_project_action.version().get(),
         move |_| server_fns::get_projects(),
     );
-    
 
-    let get_project_slug = move |path:String| {
+    let get_project_slug = move |path: String| {
         let split = path.split("/").collect::<Vec<_>>();
         let mut found = false;
         for s in split.iter() {
@@ -131,8 +130,8 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
 
 pub mod server_fns {
     use crate::models::Project;
-    use leptos::server;
     use crate::AppResult;
+    use leptos::server;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
             use crate::security::utils::ssr::get_auth_session_user_id;

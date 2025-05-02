@@ -9,22 +9,27 @@ use crate::app::pages::user::projects::new_project::{server_fns::CreateProject, 
 use crate::app::pages::user::projects::project::project_dashboard::ProjectDashboard;
 use crate::app::pages::user::projects::project::project_files::ProjectFiles;
 use crate::app::pages::user::projects::project::project_settings::ProjectSettings;
+use crate::app::pages::user::projects::project::project_snapshots::server_fns::{
+    SetActiveProjectSnapshot, UnsetActiveProjectSnapshot,
+};
+use crate::app::pages::user::projects::project::project_snapshots::ProjectSnapshots;
 use crate::app::pages::user::projects::project::project_team::ProjectTeam;
-use crate::app::pages::user::projects::project::{ProjectPage};
-use crate::app::pages::user::projects::{ProjectsPage};
+use crate::app::pages::user::projects::project::ProjectPage;
+use crate::app::pages::user::projects::ProjectsPage;
 use crate::app::pages::user::user_settings::UserSettingsPage;
 use crate::app::pages::user::UserPage;
+use crate::app::pages::GlobalState;
+use crate::AppResult;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::*;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::components::ParentRoute;
-use leptos_router::{components::{Route, Router, Routes}, path};
+use leptos_router::{
+    components::{Route, Router, Routes},
+    path,
+};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
-use crate::app::pages::GlobalState;
-use crate::app::pages::user::projects::project::project_snapshots::ProjectSnapshots;
-use crate::app::pages::user::projects::project::project_snapshots::server_fns::{SetActiveProjectSnapshot, UnsetActiveProjectSnapshot};
-use crate::AppResult;
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
@@ -49,7 +54,7 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
     #[cfg(feature = "ssr")]
     crate::security::utils::ssr::set_headers();
-    
+
     provide_context(Store::new(GlobalState::default()));
 
     // Provides context that manages stylesheets, titles, meta tags, etc.
@@ -110,7 +115,7 @@ fn ProjectsRoutes() -> impl MatchNestedRoutes + Clone {
 }
 
 #[component(transparent)]
-fn ProjectRoutes()-> impl MatchNestedRoutes + Clone {
+fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     let set_active_snapshot_action = ServerAction::<SetActiveProjectSnapshot>::new();
     let unset_active_snapshot_action = ServerAction::<UnsetActiveProjectSnapshot>::new();
 
@@ -134,8 +139,8 @@ fn ProjectRoutes()-> impl MatchNestedRoutes + Clone {
                 }
             />
         </ParentRoute>
-    }.into_inner()
-    
+    }
+    .into_inner()
 }
 
 #[server]
@@ -145,12 +150,11 @@ pub async fn get_server_url() -> AppResult<String> {
     Ok(server_vars.server_url.to_string())
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HostingUrl(pub String);
 
 #[server]
-pub async fn get_hosting_url() -> AppResult<String>{
+pub async fn get_hosting_url() -> AppResult<String> {
     use crate::ssr::server_vars;
     let server_vars = server_vars()?;
     Ok(server_vars.hosting_url.to_string())

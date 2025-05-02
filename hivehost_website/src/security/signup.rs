@@ -1,7 +1,5 @@
-
 use crate::{AppResult, BoolInput};
 use leptos::server;
-
 
 #[server(Signup, "/api")]
 pub async fn signup(
@@ -12,56 +10,54 @@ pub async fn signup(
     password_confirmation: String,
     remember: Option<BoolInput>,
 ) -> AppResult<()> {
+    use crate::app::pages::user::projects::new_project::server_fns::ssr::create_project;
     use crate::models::RoleType;
-    use leptos::logging::log;
     use crate::models::User;
     use crate::security::utils::ssr::verify_easy_hash;
+    use crate::security::utils::ssr::AsyncValidationContext;
+    use crate::security::utils::ssr::PasswordForm;
+    use crate::security::utils::ssr::SANITIZED_REGEX;
+    use crate::AppError;
     use common::server_action::user_action::UserAction;
-    use crate::app::pages::user::projects::new_project::server_fns::ssr::create_project;
+    use common::Slug;
+    use leptos::logging::log;
     use secrecy::ExposeSecret;
     use tokio::runtime::Handle;
     use validator::{Validate, ValidateArgs, ValidationError};
-    use crate::security::utils::ssr::AsyncValidationContext;
-    use crate::security::utils::ssr::SANITIZED_REGEX;
-    use crate::security::utils::ssr::PasswordForm;
-    use crate::AppError;
-    use common::{Slug};
 
-
-
-    pub fn unique_email(email: &str, context:&AsyncValidationContext) -> Result<(), ValidationError>{
+    pub fn unique_email(
+        email: &str,
+        context: &AsyncValidationContext,
+    ) -> Result<(), ValidationError> {
         tokio::task::block_in_place(|| {
             let AsyncValidationContext { pg_pool, handle } = context;
             let result = handle.block_on(User::exist(email, pg_pool));
-            match result{
+            match result {
                 Ok(exist) => {
                     if exist {
-                         Err(ValidationError::new("Email already taken"))
-                    }else{
+                        Err(ValidationError::new("Email already taken"))
+                    } else {
                         Ok(())
                     }
                 }
                 Err(e) => {
                     log!("Error checking email uniqueness: {:?}", e);
-                     Err(ValidationError::new("Database error"))
+                    Err(ValidationError::new("Database error"))
                 }
             }
         })
     }
 
-
-
     #[derive(Debug, Clone, Validate)]
     #[validate(context =AsyncValidationContext)]
     pub struct SignupForm {
-        #[validate(email, custom(function="unique_email", use_context))]
+        #[validate(email, custom(function = "unique_email", use_context))]
         pub email: String,
         #[validate(length(min = 3, max = 20),regex(path=*SANITIZED_REGEX, message="Username must contain only letters (a-z, A-Z), number (0-9) and underscores (_)"))]
         pub username: String,
         #[validate(nested)]
         pub password_form: PasswordForm,
     }
-
 
     let auth = crate::ssr::auth(true)?;
     let server_vars = crate::ssr::server_vars()?;
@@ -84,9 +80,7 @@ pub async fn signup(
         pg_pool: pool.clone(),
         handle: Handle::current(),
     };
-    form.validate_with_args(
-        &context
-    )?;
+    form.validate_with_args(&context)?;
 
     let remember = remember.unwrap_or_default().into();
     let password = secrecy::SecretString::from(password.as_str());

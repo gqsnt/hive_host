@@ -1,3 +1,6 @@
+use common::server_helper::{
+    ServerHelperCommand, ServerHelperRequest, ServerHelperResponse, ServerHelperResponseStatus,
+};
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
@@ -5,11 +8,8 @@ use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::UnixStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::sleep;
-use tracing::{debug, error, instrument};
 use tracing::log::info;
-use common::server_helper::{ServerHelperCommand, ServerHelperRequest, ServerHelperResponse, ServerHelperResponseStatus};
-
-
+use tracing::{debug, error, instrument};
 
 #[derive(Error, Debug)]
 pub enum HelperClientError {
@@ -45,7 +45,6 @@ pub(crate) type CommandTx = mpsc::Sender<(ServerHelperCommand, ResponseTx)>;
 // Type alias for the command channel receiver
 pub(crate) type CommandRx = mpsc::Receiver<(ServerHelperCommand, ResponseTx)>;
 
-
 const RECONNECT_DELAY_MS: u64 = 500;
 const MAX_RECONNECT_DELAY_MS: u64 = 8000; // Approx 8 seconds
 
@@ -75,7 +74,6 @@ impl HelperClient {
     }
 }
 
-
 pub struct HelperClientActor {
     socket_path: String,
     receiver: CommandRx,
@@ -96,7 +94,10 @@ impl HelperClientActor {
 
     /// Runs the actor's main loop.
     pub async fn run(mut self) {
-        info!("HelperClientActor started. Connecting to {}", self.socket_path);
+        info!(
+            "HelperClientActor started. Connecting to {}",
+            self.socket_path
+        );
 
         loop {
             // Wait for a command OR check connection status periodically?
@@ -119,7 +120,12 @@ impl HelperClientActor {
 
     /// Ensures a valid connection exists, attempting to reconnect if necessary.
     /// Returns mutable references to the reader and writer if successful.
-    async fn ensure_connection(&mut self) -> HelperClientResult<(&mut BufReader<OwnedReadHalf>, &mut BufWriter<OwnedWriteHalf>)> {
+    async fn ensure_connection(
+        &mut self,
+    ) -> HelperClientResult<(
+        &mut BufReader<OwnedReadHalf>,
+        &mut BufWriter<OwnedWriteHalf>,
+    )> {
         if self.writer.is_none() || self.reader.is_none() {
             debug!("No active connection, attempting to connect...");
             self.connect_with_retry().await?;
@@ -133,7 +139,7 @@ impl HelperClientActor {
         // This unwrap is safe because connect_with_retry ensures they are Some
         Ok((self.reader.as_mut().unwrap(), self.writer.as_mut().unwrap()))
     }
-    
+
     async fn connect_with_retry(&mut self) -> HelperClientResult<()> {
         let mut delay = RECONNECT_DELAY_MS;
         loop {
@@ -148,7 +154,10 @@ impl HelperClientActor {
                     return Ok(());
                 }
                 Err(e) => {
-                    error!("Failed to connect to helper socket: {}. Retrying in {}ms...", e, delay);
+                    error!(
+                        "Failed to connect to helper socket: {}. Retrying in {}ms...",
+                        e, delay
+                    );
                     self.disconnect(); // Clear any partial state
                     sleep(Duration::from_millis(delay)).await;
                     delay = (delay * 2).min(MAX_RECONNECT_DELAY_MS); // Exponential backoff
@@ -169,16 +178,16 @@ impl HelperClientActor {
     /// Processes a single command, handling connection and communication.
     async fn process_command(&mut self, command: ServerHelperCommand) -> HelperClientResult<()> {
         let request = ServerHelperRequest { command };
-        let request_json = serde_json::to_string(&request)
-            .map_err(HelperClientError::SerializationError)? + "\n"; // Add newline delimiter
+        let request_json =
+            serde_json::to_string(&request).map_err(HelperClientError::SerializationError)? + "\n"; // Add newline delimiter
 
         // Loop to handle potential write errors and trigger reconnect
         let response_line = loop {
             match self.ensure_connection().await {
                 Ok((reader, writer)) => {
                     // Attempt to write
-                    
-                    match writer.write_all(request_json.as_bytes()).await{
+
+                    match writer.write_all(request_json.as_bytes()).await {
                         Ok(_) => {
                             writer.flush().await.unwrap();
                         }
@@ -195,14 +204,19 @@ impl HelperClientActor {
                         Ok(0) => {
                             error!("Helper socket closed connection unexpectedly during read.");
                             self.disconnect();
-                            return Err(HelperClientError::InternalError("Connection closed by peer".to_string()));
+                            return Err(HelperClientError::InternalError(
+                                "Connection closed by peer".to_string(),
+                            ));
                         }
                         Ok(_) => {
                             // Successfully read a line, break the loop
                             break line;
                         }
                         Err(e) => {
-                            error!("Read error from helper socket: {}. Triggering reconnect.", e);
+                            error!(
+                                "Read error from helper socket: {}. Triggering reconnect.",
+                                e
+                            );
                             self.disconnect();
                             // Check if it's a recoverable error before returning; if not, return
                             // For now, assume most IO errors mean the connection is dead.
@@ -218,14 +232,16 @@ impl HelperClientActor {
             }
         }; // End loop
 
-
         // Deserialize response
-        let response: ServerHelperResponse = serde_json::from_str(response_line.trim())
-            .map_err(|e| {
-                error!("Failed to deserialize response: {}. Raw: '{}'", e, response_line.trim());
+        let response: ServerHelperResponse =
+            serde_json::from_str(response_line.trim()).map_err(|e| {
+                error!(
+                    "Failed to deserialize response: {}. Raw: '{}'",
+                    e,
+                    response_line.trim()
+                );
                 HelperClientError::DeserializationError(e)
             })?;
-        
 
         // Check response status
         match response.status {
@@ -244,6 +260,3 @@ pub fn start_helper_client(socket_path: String) -> HelperClient {
 
     HelperClient::new(command_tx) // Return the client handle
 }
-
-
-

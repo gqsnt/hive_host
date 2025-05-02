@@ -1,10 +1,11 @@
 use axum::routing::post;
 use axum::Router;
-use moka::future::Cache;
-use secrecy::SecretString;
+use hivehost_server::helper_client::start_helper_client;
 use hivehost_server::project_action::{server_project_action, server_project_action_token};
 use hivehost_server::server_action::server_action;
 use hivehost_server::{AppState, ServerResult};
+use moka::future::Cache;
+use secrecy::SecretString;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -12,7 +13,6 @@ use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use hivehost_server::helper_client::start_helper_client;
 
 #[tokio::main]
 async fn main() -> ServerResult<()> {

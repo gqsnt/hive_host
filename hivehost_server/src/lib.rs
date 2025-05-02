@@ -1,7 +1,8 @@
+pub mod helper_client;
 pub mod project_action;
 pub mod server_action;
-pub mod helper_client;
 
+use crate::helper_client::HelperClient;
 use axum::extract::FromRef;
 use axum::http::StatusCode;
 use common::server_project_action::ServerProjectAction;
@@ -11,7 +12,6 @@ use secrecy::SecretString;
 use std::path::StripPrefixError;
 use std::sync::Arc;
 use thiserror::Error;
-use crate::helper_client::{HelperClient};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 

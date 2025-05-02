@@ -2,14 +2,11 @@ use leptos::control_flow::For;
 use leptos::either::Either;
 
 use crate::app::components::csrf_field::CSRFField;
-use leptos::prelude::{ElementChild};
+use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, AddAnyAttr, Effect, Set};
-use leptos::prelude::{
-    ActionForm, ClassAttribute, Get, Resource, ServerAction
-    , Signal, Suspense,
-};
+use leptos::prelude::{ActionForm, ClassAttribute, Get, Resource, ServerAction, Signal, Suspense};
 use leptos::text_prop::TextProp;
 use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
@@ -19,8 +16,7 @@ pub fn UserSettingsPage() -> impl IntoView {
     let delete_ssh_action = ServerAction::<server_fns::DeleteSshKey>::new();
     let add_ssh_action = ServerAction::<server_fns::AddSshKey>::new();
     let update_password_action = ServerAction::<server_fns::UpdatePassword>::new();
-    
-    
+
     let ssh_keys_resource = Resource::new(
         move || {
             (
@@ -31,13 +27,10 @@ pub fn UserSettingsPage() -> impl IntoView {
         |_| server_fns::get_ssh_keys(),
     );
 
-
-
-
     let (new_ssh_key_result, set_new_ssh_key_result) = signal(" ".to_string());
     let (password_change_result, set_password_change_result) = signal(" ".to_string());
-    
-    Effect::new(move |_|{
+
+    Effect::new(move |_| {
         update_password_action.version().get();
         match update_password_action.value().get() {
             Some(Ok(_)) => set_password_change_result.set(String::from("Password changed")),
@@ -45,7 +38,7 @@ pub fn UserSettingsPage() -> impl IntoView {
             _ => (),
         };
     });
-    
+
     Effect::new(move |_| {
         add_ssh_action.version().get();
         match add_ssh_action.value().get() {
@@ -55,7 +48,6 @@ pub fn UserSettingsPage() -> impl IntoView {
         };
     });
 
-   
     view! {
         // --- Profile Section (Empty as requested) ---
         <div class="h-full">
@@ -389,7 +381,6 @@ fn SingleColMessageRow(
     }
 }
 
-
 pub mod server_fns {
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::utils::ssr::get_auth_session_user_id;
@@ -405,17 +396,16 @@ pub mod server_fns {
     }}
 
     use crate::models::SshKeyInfo;
-    use leptos::server;
     use crate::AppResult;
-
+    use leptos::server;
 
     #[cfg(feature = "ssr")]
-    mod ssr{
+    mod ssr {
         use serde::{Deserialize, Serialize};
         use validator::Validate;
         #[derive(Validate, Debug, Serialize, Deserialize)]
         pub struct AddSshKeyForm {
-            #[validate(length(min = 1,max=20))]
+            #[validate(length(min = 1, max = 20))]
             pub ssh_key_name: String,
             #[validate(length(min = 1, message = "SSH key value is required"))]
             pub ssh_key_value: String,
@@ -426,7 +416,6 @@ pub mod server_fns {
             #[validate(length(min = 1, message = "Git SSH key value cannot be empty"))]
             pub git_ssh_key_value: String,
         }
-
     }
 
     #[server]
@@ -468,9 +457,6 @@ pub mod server_fns {
         Ok(())
     }
 
-    
-
-    
     #[server]
     pub async fn add_ssh_key(
         csrf: String,
@@ -538,7 +524,7 @@ pub mod server_fns {
         .await?;
         let password = secrecy::SecretString::from(old_password.as_str());
         password_auth::verify_password(password.expose_secret().as_bytes(), &result.password)
-                .map_err(|_| crate::AppError::InvalidCredentials)?;
+            .map_err(|_| crate::AppError::InvalidCredentials)?;
 
         // update password
         sqlx::query!(

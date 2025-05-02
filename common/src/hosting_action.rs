@@ -1,4 +1,4 @@
-use crate::{ProjectSlugStr};
+use crate::ProjectSlugStr;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

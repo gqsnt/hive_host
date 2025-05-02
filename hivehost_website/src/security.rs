@@ -1,6 +1,6 @@
-use leptos::server;
-use crate::AppResult;
 use crate::models::User;
+use crate::AppResult;
+use leptos::server;
 
 pub mod login;
 pub mod permission;
@@ -8,7 +8,7 @@ pub mod signup;
 pub mod utils;
 
 #[server]
-pub async fn logout() -> AppResult<()>{
+pub async fn logout() -> AppResult<()> {
     let auth = crate::ssr::auth(false)?;
     auth.logout_user();
     leptos_axum::redirect("/");
@@ -21,7 +21,7 @@ pub async fn get_user() -> AppResult<User> {
     let auth = crate::ssr::auth(true)?;
     if let Some(user) = auth.current_user {
         Ok(user)
-    }else{
+    } else {
         leptos_axum::redirect("/login");
         Err(AppError::UnauthorizedAuthAccess)
     }
@@ -80,21 +80,13 @@ pub mod ssr {
                 slug: user.slug,
             })
         }
-        
-        pub async fn exist(
-            email: &str,
-            pool: &PgPool,
-        ) -> AppResult<bool> {
-            let user = sqlx::query!(
-                r#"SELECT  email FROM users WHERE email = $1"#,
-                email
-            )
+
+        pub async fn exist(email: &str, pool: &PgPool) -> AppResult<bool> {
+            let user = sqlx::query!(r#"SELECT  email FROM users WHERE email = $1"#, email)
                 .fetch_optional(pool)
                 .await?;
             Ok(user.is_some())
         }
-        
-        
 
         pub async fn get_id_password(
             email: &str,
@@ -104,17 +96,17 @@ pub mod ssr {
                 r#"SELECT  id, email, password FROM users WHERE email = $1"#,
                 email
             )
-                .fetch_one(pool)
-                .await?;
+            .fetch_one(pool)
+            .await?;
             Ok((user.id, SecretString::from(user.password)))
         }
     }
-    
+
     #[derive(sqlx::FromRow, Clone)]
     pub struct SqlUserShort {
         pub id: UserId,
         pub role: RoleType,
         pub username: String,
-        slug : UserSlugStr,
+        slug: UserSlugStr,
     }
 }

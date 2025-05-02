@@ -1,8 +1,7 @@
 use leptos::prelude::*;
 
-
 #[component]
-pub fn FormSelectIcon() -> impl IntoView{
+pub fn FormSelectIcon() -> impl IntoView {
     view! {
         <svg
             class="select-icon"
@@ -15,6 +14,3 @@ pub fn FormSelectIcon() -> impl IntoView{
         </svg>
     }
 }
-
-
-

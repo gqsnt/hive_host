@@ -1,5 +1,6 @@
 use async_compression::tokio::bufread::BrotliEncoder;
 use common::hosting_action::{HostingAction, HostingActionRequest, HostingActionResponse};
+use common::{get_project_prod_path, ProjectSlugStr, Slug, PROD_ROOT_PATH_PREFIX};
 use dashmap::DashMap;
 use deadpool_postgres::tokio_postgres::NoTls;
 use deadpool_postgres::{tokio_postgres, GenericClient, Pool};
@@ -30,11 +31,8 @@ use tracing::{debug, error, info};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use walkdir::WalkDir;
-use common::{get_project_prod_path, ProjectSlugStr, Slug, PROD_ROOT_PATH_PREFIX};
 
-
-static CACHE: LazyLock<DashMap<ProjectSlugStr, ProjectCache>> =
-    LazyLock::new(DashMap::new);
+static CACHE: LazyLock<DashMap<ProjectSlugStr, ProjectCache>> = LazyLock::new(DashMap::new);
 
 static TOKEN: LazyLock<String> =
     LazyLock::new(|| dotenvy::var("TOKEN_AUTH").expect("HOSTING_URL must be set"));
@@ -181,7 +179,8 @@ async fn serve(handle: &runtime::Handle) -> HostingResult<()> {
     let socket = create_socket(addr)?;
 
     let db = DB.get().await.expect("DB must exist");
-    let query = "SELECT id,name, active_snapshot_id FROM projects where active_snapshot_id is not null";
+    let query =
+        "SELECT id,name, active_snapshot_id FROM projects where active_snapshot_id is not null";
     let statement = db.prepare_cached(query).await?;
     let row = db.query(&statement, &[]).await?;
     info!("Found {} projects", row.len());
@@ -285,7 +284,7 @@ async fn handle_request(
                     return internal_error_response();
                 }
             };
-    
+
             let full_path = file_info.full_path.clone();
             let path_clone = path.to_string();
             task::spawn(async move {
@@ -317,7 +316,6 @@ async fn handle_request(
             (false, buffer) // Return uncompressed body for this request
         }
     };
-
 
     let mut response = Response::builder()
         .status(StatusCode::OK)

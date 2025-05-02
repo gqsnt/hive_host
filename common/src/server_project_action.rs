@@ -5,8 +5,8 @@ pub mod snapshot;
 use crate::permission::Permission;
 use crate::server_project_action::io_action::dir_action::DirActionLsResponse;
 use crate::server_project_action::io_action::file_action::FileInfo;
-use serde::{Deserialize, Serialize};
 use crate::Slug;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerProjectActionRequest {
@@ -27,7 +27,7 @@ impl IsProjectServerAction for ServerProjectAction {
         match self {
             ServerProjectAction::Io(action) => action.with_token(),
             ServerProjectAction::Permission(action) => action.with_token(),
-            ServerProjectAction::Snapshot(action) => action.with_token(), 
+            ServerProjectAction::Snapshot(action) => action.with_token(),
         }
     }
 

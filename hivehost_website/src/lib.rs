@@ -1,4 +1,4 @@
-use common::{ParseSlugError};
+use common::ParseSlugError;
 use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
@@ -29,9 +29,6 @@ pub fn hydrate() {
 pub type AppResult<T> = Result<T, AppError>;
 pub type ServerFnResult<T> = Result<T, AppError>;
 
-
-
-
 #[derive(Debug, Error, Deserialize, Serialize, Clone)]
 pub enum AppError {
     #[cfg(feature = "ssr")]
@@ -48,7 +45,7 @@ pub enum AppError {
     DotEnv(String),
     #[cfg(feature = "ssr")]
     #[error("Session error: {0}")]
-    SessionError(String ),
+    SessionError(String),
     #[cfg(feature = "ssr")]
     #[error("AddrParse error: {0}")]
     AddrParse(String),
@@ -122,15 +119,12 @@ impl_from_to_string!(AppError::RequestError, reqwest::Error);
 #[cfg(feature = "ssr")]
 impl_from_to_string!(AppError::SqlxError, sqlx::Error);
 
-
-
-impl FromServerFnError for AppError{
+impl FromServerFnError for AppError {
     type Encoder = JsonEncoding;
     fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
         value.into()
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct BoolInput(pub bool);

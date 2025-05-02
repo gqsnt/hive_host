@@ -11,7 +11,7 @@ leptos = { version = "0.8.0-rc3", features = ["nightly", "delegation"] }
 leptos_router = { version = "0.8.0-rc3", features = ["nightly"] }
 leptos_axum = { version = "0.8.0-rc3", optional = true }
 leptos_meta = { version = "0.8.0-rc3" }
-reactive_stores = {version = "0.2.0-rc3"}
+reactive_stores = { version = "0.2.0-rc3" }
 http = { workspace = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 axum = { workspace = true, features = ["macros"], optional = true }
@@ -24,7 +24,7 @@ blake2 = { version = "0.10.6", optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"], optional = true }
 
 reqwest = { version = "0.12.15", features = ["rustls-tls", "json"], optional = true }
-common = { path = "../common",features = ["website-to-server", "website-to-hosting"] }
+common = { path = "../common", features = ["website-to-server", "website-to-hosting"] }
 
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, features = ["fs", "compression-full"], optional = true }
@@ -48,9 +48,9 @@ uuid = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 strum_macros = { workspace = true }
 validator = { version = "0.20.0", features = ["derive"], optional = true }
-regex = {workspace = true, optional = true} # maybe swtich to ssr common has regex too
+regex = { workspace = true, optional = true } # maybe swtich to ssr common has regex too
 cfg-if = "1.0.0"
-time = { version = "0.3.41" , features = ["serde", "formatting"]}
+time = { version = "0.3.41", features = ["serde", "formatting"] }
 
 [features]
 hydrate = [

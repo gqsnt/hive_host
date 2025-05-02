@@ -13,8 +13,8 @@ use reactive_stores::Store;
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
-        let global_store:Store<GlobalState>=  expect_context();
-    let csrf_resource= OnceResource::new(generate_csrf());
+    let global_store: Store<GlobalState> = expect_context();
+    let csrf_resource = OnceResource::new(generate_csrf());
     let action = ServerAction::<Login>::new();
 
     let (login_result, set_login_result) = signal(" ".to_string());

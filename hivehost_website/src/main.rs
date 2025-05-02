@@ -8,6 +8,13 @@ async fn main() -> AppResult<()> {
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
     use axum_session_sqlx::SessionPgPool;
     use common::UserId;
+    use hivehost_website::app::*;
+    use hivehost_website::models::User;
+    use hivehost_website::rate_limiter::ssr::RateLimiter;
+    use hivehost_website::ssr::ServerVars;
+    use hivehost_website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
+    use hivehost_website::tasks::refresh_server_csrf::RefreshServerCsrf;
+    use hivehost_website::tasks::ssr::TaskDirector;
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
@@ -18,13 +25,6 @@ async fn main() -> AppResult<()> {
     use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
-    use hivehost_website::app::*;
-    use hivehost_website::models::User;
-    use hivehost_website::rate_limiter::ssr::RateLimiter;
-    use hivehost_website::ssr::ServerVars;
-    use hivehost_website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
-    use hivehost_website::tasks::refresh_server_csrf::RefreshServerCsrf;
-    use hivehost_website::tasks::ssr::TaskDirector;
 
     dotenvy::dotenv().ok();
 

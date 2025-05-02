@@ -12,8 +12,8 @@ use reactive_stores::Store;
 
 #[component]
 pub fn SignupPage() -> impl IntoView {
-    let global_store:Store<GlobalState>=  expect_context();
-    let csrf_resource= OnceResource::new(generate_csrf());
+    let global_store: Store<GlobalState> = expect_context();
+    let csrf_resource = OnceResource::new(generate_csrf());
 
     let action = ServerAction::<Signup>::new();
     let (signup_result, set_signup_result) = signal(" ".to_string());
@@ -21,9 +21,7 @@ pub fn SignupPage() -> impl IntoView {
         action.version().get();
         match action.value().get() {
             Some(Ok(_)) => set_signup_result.set(String::from("Signup Successful")),
-            Some(Err(e)) => {
-                set_signup_result.set(e.to_string())
-            },
+            Some(Err(e)) => set_signup_result.set(e.to_string()),
             _ => (),
         };
     });

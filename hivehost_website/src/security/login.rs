@@ -1,7 +1,5 @@
-
 use crate::{AppResult, BoolInput};
 use leptos::server;
-
 
 #[server(Login, "/api")]
 pub async fn login(
@@ -12,8 +10,8 @@ pub async fn login(
 ) -> AppResult<()> {
     use crate::models::User;
     use crate::security::utils::ssr::verify_easy_hash;
-    use secrecy::ExposeSecret;
     use crate::AppError;
+    use secrecy::ExposeSecret;
 
     let auth = crate::ssr::auth(true)?;
     let server_vars = crate::ssr::server_vars()?;

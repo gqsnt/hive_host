@@ -3,10 +3,8 @@ use std::sync::LazyLock;
 pub mod command;
 pub mod handler;
 
-
-pub static BTRFS_DEVICE: LazyLock<String> = LazyLock::new(|| {
-    dotenvy::var("BTRFS_DEVICE").unwrap_or_else(|_| "/dev/sda".to_string())
-});
+pub static BTRFS_DEVICE: LazyLock<String> =
+    LazyLock::new(|| dotenvy::var("BTRFS_DEVICE").unwrap_or_else(|_| "/dev/sda".to_string()));
 
 pub type ServerHelperResult<T> = Result<T, ServerHelperError>;
 
@@ -19,4 +17,3 @@ pub enum ServerHelperError {
     #[error("Failed to execute command: {0}")]
     Other(String),
 }
-

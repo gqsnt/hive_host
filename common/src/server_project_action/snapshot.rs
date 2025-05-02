@@ -1,19 +1,13 @@
+use crate::impl_chain_from;
 use crate::permission::Permission;
 use crate::server_project_action::{IsProjectServerAction, ServerProjectAction};
-use crate::{impl_chain_from};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum SnapshotAction {
-    Create {
-        snapshot_name: String,
-    },
-    Delete {
-        snapshot_name: String,
-    },
-    MountSnapshotProd {
-        snapshot_name: String,
-    },
+    Create { snapshot_name: String },
+    Delete { snapshot_name: String },
+    MountSnapshotProd { snapshot_name: String },
     UnmountProd,
 }
 

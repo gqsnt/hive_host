@@ -3,7 +3,7 @@ use crate::security::permission::{request_server_project_action_front, token_url
 use crate::AppResult;
 use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
 use common::{ProjectSlugStr, StringContent};
-use leptos::prelude::{Action};
+use leptos::prelude::Action;
 
 #[cfg(not(feature = "ssr"))]
 pub fn fetch_api(
@@ -158,10 +158,7 @@ pub mod ssr {
         let client = reqwest::Client::new();
         let server_vars = crate::ssr::server_vars()?;
         Ok(client
-            .post(format!(
-                "http://{}/server_action",
-                server_vars.server_url
-            ))
+            .post(format!("http://{}/server_action", server_vars.server_url))
             .json(&action)
             .bearer_auth(server_vars.token_action_auth.expose_secret())
             .send()
@@ -191,13 +188,8 @@ pub fn get_action_server_project_action() -> ServerProjectActionFront {
         )| {
             let (project_slug, action, string_content, csrf) = input.clone();
             async move {
-                get_action_server_project_action_inner(
-                    project_slug,
-                    action,
-                    string_content,
-                    csrf,
-                )
-                .await
+                get_action_server_project_action_inner(project_slug, action, string_content, csrf)
+                    .await
             }
         },
     )

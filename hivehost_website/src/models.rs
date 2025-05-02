@@ -1,7 +1,7 @@
 use common::permission::Permission;
 use common::{ProjectId, ProjectSlugStr, Slug, UserId, UserSlugStr};
-use serde::{Deserialize, Serialize};
 use reactive_stores::Store;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::Type))]
@@ -20,7 +20,7 @@ pub struct User {
     pub id: UserId,
     pub role_type: RoleType,
     pub username: String,
-    pub slug : UserSlugStr,
+    pub slug: UserSlugStr,
 }
 
 impl User {
@@ -53,7 +53,7 @@ impl Default for User {
 pub struct Project {
     pub id: ProjectId,
     pub name: String,
-    pub slug :ProjectSlugStr,
+    pub slug: ProjectSlugStr,
     pub active_snapshot_id: Option<i64>,
 }
 
@@ -64,12 +64,9 @@ pub struct ProjectSnapshot {
     pub project_id: ProjectId,
     pub name: String,
     pub snapshot_name: String,
-    pub description :Option<String>,
+    pub description: Option<String>,
     pub created_at: time::PrimitiveDateTime,
 }
-
-
-
 
 impl Project {
     pub fn get_slug(&self) -> Slug {

@@ -1,11 +1,5 @@
-
-
-
-
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use std::borrow::Cow;
-    use std::sync::LazyLock;
     use crate::security::ssr::AppAuthSession;
     use crate::{AppError, AppResult};
     use blake2::{Blake2s256, Digest};
@@ -16,13 +10,13 @@ pub mod ssr {
     use regex::Regex;
     use secrecy::{ExposeSecret, SecretString};
     use sqlx::PgPool;
+    use std::borrow::Cow;
+    use std::sync::LazyLock;
     use tokio::runtime::Handle;
     use uuid::Uuid;
     use validator::{Validate, ValidationError};
 
-
-
-    pub fn validate_password_strength(value:&str) -> Result<(), ValidationError>{
+    pub fn validate_password_strength(value: &str) -> Result<(), ValidationError> {
         let mut has_lowercase = false;
         let mut has_uppercase = false;
         let mut has_digit = false;
@@ -33,7 +27,8 @@ pub mod ssr {
                 has_lowercase = true;
             } else if c.is_uppercase() {
                 has_uppercase = true;
-            } else if c.is_ascii_digit() { // Use is_ascii_digit for clarity with typical password rules
+            } else if c.is_ascii_digit() {
+                // Use is_ascii_digit for clarity with typical password rules
                 has_digit = true;
             } else {
                 // Consider what characters you count as "symbols".
@@ -48,43 +43,27 @@ pub mod ssr {
 
         if !has_lowercase {
             // Provide a specific error code/message if desired
-            password_strength_errors.push(
-                String::from("lowercase letter")
-            );
+            password_strength_errors.push(String::from("lowercase letter"));
         }
         if !has_uppercase {
-            password_strength_errors.push(
-                String::from("uppercase letter")
-            );
+            password_strength_errors.push(String::from("uppercase letter"));
         }
         if !has_digit {
-            password_strength_errors.push(
-                String::from("digit")
-            );
+            password_strength_errors.push(String::from("digit"));
         }
         if !has_symbol {
-            password_strength_errors.push(
-                String::from("symbol")
-            );
+            password_strength_errors.push(String::from("symbol"));
         }
         if !password_strength_errors.is_empty() {
             let error_message = format!(
                 "Password must contain at least one {}.",
                 password_strength_errors.join(", ")
             );
-            Err(ValidationError::new(
-                "password_strength",
-            ).with_message(Cow::from(error_message)))
-        }else{
+            Err(ValidationError::new("password_strength").with_message(Cow::from(error_message)))
+        } else {
             Ok(())
         }
     }
-
-
-
-
-
-
 
     #[derive(Debug, Clone, Validate)]
     pub struct PasswordForm {
@@ -97,16 +76,13 @@ pub mod ssr {
         pub password_confirmation: String,
     }
 
-
-    pub static SANITIZED_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[a-zA-Z0-9_]+$").unwrap());
+    pub static SANITIZED_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"[a-zA-Z0-9_]+$").unwrap());
 
     pub struct AsyncValidationContext {
         pub pg_pool: PgPool,
-        pub handle:Handle,
+        pub handle: Handle,
     }
-
-
-
 
     pub fn get_auth_session_user_id(auth_session: &AppAuthSession) -> Option<UserId> {
         auth_session.current_user.as_ref().map(|u| u.id)

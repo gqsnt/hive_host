@@ -1,23 +1,24 @@
+use crate::command::execute_command;
+use crate::ServerHelperResult;
+use common::server_helper::{
+    ServerHelperRequest, ServerHelperResponse, ServerHelperResponseStatus,
+};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tracing::{debug, error, info, warn};
-use common::server_helper::{ServerHelperRequest, ServerHelperResponse, ServerHelperResponseStatus};
-use crate::command::execute_command;
-use crate::ServerHelperResult;
-
 
 pub async fn handle_connection(stream: UnixStream) {
     info!("Handling new client connection");
     match process_stream(stream).await {
         Ok(_) => info!("Client connection handled successfully"),
-        Err(e) => error!("Error processing client connection: {:?}", e), 
+        Err(e) => error!("Error processing client connection: {:?}", e),
     }
 }
 
 async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
     let (read_half, mut write_half) = tokio::io::split(stream);
     let mut reader = BufReader::new(read_half);
-    
+
     let mut line = String::new();
 
     loop {
@@ -42,18 +43,25 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                     Ok(req) => req,
                     Err(e) => {
                         error!("Failed to deserialize request: {e}. Raw: '{trimmed_line}'");
-                        let response = ServerHelperResponse { status: ServerHelperResponseStatus::Error(format!("Bad request: {e}")) };
+                        let response = ServerHelperResponse {
+                            status: ServerHelperResponseStatus::Error(format!("Bad request: {e}")),
+                        };
                         let response_json = serde_json::to_string(&response)? + "\n";
                         // Try to send error back before potentially closing
-                        if write_half.write_all(response_json.as_bytes()).await.is_err() {
-                            warn!("Failed to send deserialization error response to client (connection likely closed).");
+                        if write_half
+                            .write_all(response_json.as_bytes())
+                            .await
+                            .is_err()
+                        {
+                            warn!(
+                                "Failed to send deserialization error response to client (connection likely closed)."
+                            );
                         }
                         // Maybe close connection on bad request? Or just continue loop?
                         // Let's continue for now, maybe client sends another request.
                         continue; // Continue loop after sending error
                     }
                 };
-                
 
                 // Execute command
                 let response_status = match execute_command(request.command).await {
@@ -65,19 +73,27 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                 };
 
                 // Serialize and send response
-                let response = ServerHelperResponse { status: response_status };
+                let response = ServerHelperResponse {
+                    status: response_status,
+                };
                 let response_json = serde_json::to_string(&response)? + "\n"; // Add newline delimiter
 
                 match write_half.write_all(response_json.as_bytes()).await {
                     Ok(_) => {
                         // Optional: Flush immediately if needed, though write_all often does enough buffering
-                        if let Err(e) = write_half.flush().await { 
-                            error!("Failed to flush response to client: {}. Closing connection.", e);
+                        if let Err(e) = write_half.flush().await {
+                            error!(
+                                "Failed to flush response to client: {}. Closing connection.",
+                                e
+                            );
                             break Err(e.into()); // Exit loop with IO error
                         }
                     }
                     Err(e) => {
-                        error!("Failed to write response to client: {}. Closing connection.", e);
+                        error!(
+                            "Failed to write response to client: {}. Closing connection.",
+                            e
+                        );
                         // Error writing response likely means client disconnected or pipe broken
                         break Err(e.into()); // Exit loop with IO error
                     }
@@ -85,9 +101,12 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
             }
             Err(e) => {
                 // Error reading from the socket
-                error!("Error reading from client connection: {}. Closing connection.", e);
+                error!(
+                    "Error reading from client connection: {}. Closing connection.",
+                    e
+                );
                 break Err(e.into()); // Exit loop with IO error
             }
         }
-    } 
+    }
 }
