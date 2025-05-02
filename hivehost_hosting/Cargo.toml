@@ -15,7 +15,7 @@ hyper = { workspace = true, features = ["server", "nightly", "http1"] }
 hyper-util = { version = "0.1.11", features = ["full"] }
 http-body-util = "0.1.3"
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true , features = ["env-filter"]}
 thiserror = { workspace = true }
 dotenvy = { workspace = true }
 http = "1.3.1"
@@ -23,9 +23,8 @@ walkdir = "2.5.0"
 dashmap = { workspace = true }
 mime_guess = "2.0.5"
 socket2 = { version = "0.5.9", features = ["all"] }
-quick_cache = { workspace = true }
+quick_cache = { version = "0.6.13" }
 deadpool-postgres = "0.14.1"
 async-compression = { version = "0.4.23", features = ["all"] }
-common = { path = "../common" }
+common = { path = "../common", features = ["website-to-hosting"] }
 serde_json = { workspace = true }
-

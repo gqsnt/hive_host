@@ -1,11 +1,13 @@
-use std::process::Stdio;
-use tokio::process::Command as TokioCommand;
-use tracing::{error, info, warn};
+
+use tracing::{ info};
+use common::command::run_external_command;
+use common::{get_project_dev_path, get_project_prod_path, SERVICE_USER, USER_GROUP};
 use common::server_helper::ServerHelperCommand;
-use crate::{ServerHelperError, ServerHelperResult, USER_GROUP};
+use crate::{ServerHelperResult, BTRFS_DEVICE};
 
 
 pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult<()> {
+    info!("Executing command: {:?}", command);
     match command {
         ServerHelperCommand::CreateUser { user_slug, user_path, user_projects_path } => {
             // 1. Create user
@@ -20,28 +22,51 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
 
             run_external_command("chown", &["root:root", &user_path]).await?;
             run_external_command("chmod", &["755", &user_path]).await?;
-
             run_external_command("mkdir", &["-p", &user_projects_path]).await?;
-            //    Ownership root:root, mode 755 is fine for this mount parent
             run_external_command("chown", &["root:root", &user_projects_path]).await?;
             run_external_command("chmod", &["755", &user_projects_path]).await?;
         }
         ServerHelperCommand::DeleteUser { user_slug} => {
             run_external_command("userdel", &["--remove", &user_slug]).await?;
         }
-        ServerHelperCommand::CreateProjectDir { project_path, service_user } => {
-            // 1. Create the directory
-            run_external_command("mkdir", &["-p", &project_path]).await?;
-            run_external_command("chown", &["root:root", &project_path]).await?;
-            run_external_command("chmod", &["700", &project_path]).await?; // Start restrictive
+        ServerHelperCommand::CreateProject { project_slug: project_slug_str, service_user } => {
+            let dev_path = get_project_dev_path(&project_slug_str);
+            let prod_path = get_project_prod_path(&project_slug_str);
 
-            // 2. Grant service user access via ACL
-            let acl_entry = format!("u:{}:rwx", service_user);
-            run_external_command("setfacl", &["-m", &acl_entry, &project_path]).await?;
-            run_external_command("setfacl", &["-d", "-m", &acl_entry, &project_path]).await?;
+
+
+            // 1. Create the main project Btrfs subvolume
+            run_external_command("btrfs", &["subvolume", "create", &dev_path]).await?;
+            run_external_command("chown", &["root:root", &dev_path]).await?;
+            run_external_command("chmod", &["770", &dev_path]).await?; // Start restrictive
+
+            
+            let user_acl_rwx_entry = format!("u:{service_user}:rwX");
+            let service_acl_rwx_entry = format!("u:{SERVICE_USER}:rwX");
+
+            run_external_command("setfacl", &["-m", &user_acl_rwx_entry, &dev_path]).await?;
+            run_external_command("setfacl", &["-d", "-m", &user_acl_rwx_entry, &dev_path]).await?;
+            run_external_command("setfacl", &["-m", &service_acl_rwx_entry, &dev_path]).await?;
+            run_external_command("setfacl", &["-d", "-m", &service_acl_rwx_entry, &dev_path]).await?;
+
+
+            run_external_command("mkdir", &["-p", &prod_path]).await?;
+            run_external_command("chown", &["root:root", &prod_path]).await?;
+            run_external_command("chmod", &["755", &prod_path]).await?;
+
+            run_external_command("mkdir", &["-p", &dev_path]).await?;
+            run_external_command("chown", &["root:root", &dev_path]).await?;
+            run_external_command("chmod", &["770", &dev_path]).await?;
+            run_external_command("setfacl", &["-m", &user_acl_rwx_entry, &dev_path]).await?;
+            run_external_command("setfacl", &["-d", "-m", &user_acl_rwx_entry, &dev_path]).await?;
+            run_external_command("setfacl", &["-m", &service_acl_rwx_entry, &dev_path]).await?;
+            run_external_command("setfacl", &["-d", "-m", &service_acl_rwx_entry, &dev_path]).await?;
         }
-        ServerHelperCommand::DeleteProjectDir { project_path } => {
-            run_external_command("rm", &["-rf", &project_path]).await?;
+        ServerHelperCommand::DeleteProject { project_slug: project_slug_str } => {
+            let project_path = get_project_dev_path(&project_slug_str);
+            let prod_path = get_project_prod_path(&project_slug_str);
+            run_external_command("rm", &["-rf", &prod_path]).await?;
+            run_external_command("btrfs", &["subvolume", "delete", &project_path]).await?;
         }
         ServerHelperCommand::SetAcl { path, user_slug, is_read_only } => {
             let perms= if is_read_only {
@@ -49,64 +74,47 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
             } else {
                 "rwX"
             };
-            let acl_entry = format!("u:{}:{}", user_slug, perms);
-            run_external_command("setfacl", &["-m", &acl_entry, &path]).await?;
+            let acl_entry = format!("u:{user_slug}:{perms}");
+            run_external_command("setfacl", &["-R", "-m", &acl_entry, &path]).await?;
             run_external_command("setfacl", &["-d", "-m", &acl_entry, &path]).await?;
         }
         ServerHelperCommand::RemoveAcl { path, user_slug } => {
-            let acl_spec = format!("u:{}", user_slug);
+            let acl_spec = format!("u:{user_slug}");
             run_external_command("setfacl", &["-x", &acl_spec, &path]).await?;
             run_external_command("setfacl", &["-d", "-x", &acl_spec, &path]).await?;
         }
-        ServerHelperCommand::BindMount { source_path, target_path } => {
+        ServerHelperCommand::BindMountUserProject { source_path, target_path } => {
             run_external_command("mkdir", &["-p", &target_path]).await?;
+            run_external_command("chown", &["root:root", &target_path]).await?;
+            run_external_command("chmod", &["755", &target_path]).await?;
             run_external_command("mount", &["--bind", &source_path, &target_path]).await?;
         }
-        ServerHelperCommand::Unmount { target_path } => {
+        ServerHelperCommand::UnmountUserProject { target_path } => {
             // Check if it's actually mounted before trying to unmount?
             // `findmnt -n -o TARGET --target "$target_path"`
-            match run_external_command("umount", &[&target_path]).await {
-                Ok(_) => info!("Unmounted {}", target_path),
-                Err(e) => {
-                    // umount often fails if not mounted, which might be ok
-                    warn!("Failed to unmount {} (maybe not mounted?): {}", target_path, e);
-                    // Decide if this should be a hard error or just a warning
-                    // For idempotency, maybe just warn.
-                    // return Err(anyhow!("Failed to unmount: {}", e));
-                }
-            };
+            run_external_command("umount", &[&target_path]).await?;
             // Attempt to remove the empty mount point directory after unmounting
-            if let Err(e) = tokio::fs::remove_dir(&target_path).await {
-                warn!("Failed to remove mount point dir {}: {}", target_path, e);
-            }
+            tokio::fs::remove_dir(&target_path).await?;
+        }
+        ServerHelperCommand::CreateSnapshot { path, snapshot_path } => {
+            run_external_command("btrfs", &[
+                "subvolume",
+                "snapshot",
+                "-r", // Read-only flag
+                &path,
+                &snapshot_path
+            ]).await?;
+        }
+        ServerHelperCommand::DeleteSnapshot {snapshot_path } => {
+            run_external_command("btrfs", &["subvolume", "delete", &snapshot_path]).await?;
+        }
+        ServerHelperCommand::MountSnapshot { path,  snapshot_name } => {
+            run_external_command("mount", &["-o",&format!("subvol={snapshot_name},ro"),BTRFS_DEVICE.as_str(), &path]).await?;
+        }
+        ServerHelperCommand::UnmountProd { path } => {
+            run_external_command("umount", &[&path]).await?;
         }
     }
     Ok(())
 }
 
-async fn run_external_command(program: &str, args: &[&str]) -> ServerHelperResult<String> {
-    info!("Running: {} {}", program, args.join(" "));
-    let output = TokioCommand::new(program)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output() // Use output() to get status and stdio
-        .await?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if !output.status.success() {
-        error!(
-            "Command '{} {}' failed with status: {}. Stderr: {}",
-            program, args.join(" "), output.status, stderr.trim()
-        );
-        return Err(ServerHelperError::Other(format!(
-            "Command failed: {}. Stderr: {}",
-            program, stderr.trim()
-        )));
-    }
-    
-    Ok(stdout) // Return stdout if needed, otherwise just Ok(())
-}

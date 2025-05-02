@@ -1,5 +1,6 @@
 pub mod io_action;
 pub mod permission;
+pub mod snapshot;
 
 use crate::permission::Permission;
 use crate::server_project_action::io_action::dir_action::DirActionLsResponse;
@@ -18,6 +19,7 @@ pub struct ServerProjectActionRequest {
 pub enum ServerProjectAction {
     Io(io_action::IoAction),
     Permission(permission::PermissionAction),
+    Snapshot(snapshot::SnapshotAction),
 }
 
 impl IsProjectServerAction for ServerProjectAction {
@@ -25,6 +27,7 @@ impl IsProjectServerAction for ServerProjectAction {
         match self {
             ServerProjectAction::Io(action) => action.with_token(),
             ServerProjectAction::Permission(action) => action.with_token(),
+            ServerProjectAction::Snapshot(action) => action.with_token(), 
         }
     }
 
@@ -32,6 +35,7 @@ impl IsProjectServerAction for ServerProjectAction {
         match self {
             ServerProjectAction::Io(action) => action.permission(),
             ServerProjectAction::Permission(action) => action.permission(),
+            ServerProjectAction::Snapshot(action) => action.permission(),
         }
     }
 
@@ -39,6 +43,7 @@ impl IsProjectServerAction for ServerProjectAction {
         match self {
             ServerProjectAction::Io(action) => action.require_csrf(),
             ServerProjectAction::Permission(action) => action.require_csrf(),
+            ServerProjectAction::Snapshot(action) => action.require_csrf(),
         }
     }
 }

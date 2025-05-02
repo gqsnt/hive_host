@@ -26,11 +26,12 @@ use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt as _, BufReader};
 use tokio::net::TcpListener;
 use tokio::{runtime, task};
-use tracing::{error, info};
+use tracing::{debug, error, info};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use walkdir::WalkDir;
-use common::{ProjectSlugStr, Slug};
+use common::{get_project_prod_path, ProjectSlugStr, Slug, PROD_ROOT_PATH_PREFIX};
 
-const PROJECT_ROOT_PATH_PREFIX: &str = "/projects/";
 
 static CACHE: LazyLock<DashMap<ProjectSlugStr, ProjectCache>> =
     LazyLock::new(DashMap::new);
@@ -96,9 +97,11 @@ pub struct FileInfo {
 }
 
 pub async fn cache_project_path(project_slug: ProjectSlugStr) {
-    let path = format!("{}{}", PROJECT_ROOT_PATH_PREFIX, project_slug);
-    info!("cache path: {}", path);
+    info!("Serving/Caching Project: {}", project_slug);
+    let path = get_project_prod_path(&project_slug);
+
     CACHE.remove(&project_slug);
+    let full_root_path = format!("{PROD_ROOT_PATH_PREFIX}/");
     let entry = CACHE.entry(project_slug).or_default();
     WalkDir::new(path)
         .into_iter()
@@ -109,11 +112,11 @@ pub async fn cache_project_path(project_slug: ProjectSlugStr) {
                 .first_or_text_plain()
                 .to_string();
             let full_path = dir_entry.path().to_string_lossy().to_string();
-            let path = full_path.strip_prefix(PROJECT_ROOT_PATH_PREFIX).unwrap();
+            let path = full_path.strip_prefix(&full_root_path).unwrap();
 
             let path_split = path.split('/').collect::<Vec<_>>();
             let path = format!("/{}", path_split[1..].join("/"));
-            info!("Caching file: {} -> {}", path, full_path);
+            debug!("Caching file: {} -> {}", path, full_path);
             entry.paths.entry(path).or_insert(FileInfo {
                 mime_type,
                 full_path,
@@ -153,6 +156,13 @@ pub enum HostingError {
 }
 
 pub fn main() -> HostingResult<()> {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| format!("{}=debug", env!("CARGO_CRATE_NAME")).into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
     dotenvy::from_path(".env").expect("dotenvy must be set");
     LazyLock::force(&CACHE);
     LazyLock::force(&TOKEN);
@@ -171,16 +181,15 @@ async fn serve(handle: &runtime::Handle) -> HostingResult<()> {
     let socket = create_socket(addr)?;
 
     let db = DB.get().await.expect("DB must exist");
-    let query = "SELECT id,name, is_active FROM projects where is_active = true";
+    let query = "SELECT id,name, active_snapshot_id FROM projects where active_snapshot_id is not null";
     let statement = db.prepare_cached(query).await?;
     let row = db.query(&statement, &[]).await?;
-    println!("Found {} projects", row.len());
+    info!("Found {} projects", row.len());
     for row in row {
         let name = row.get::<_, String>("name");
         let id = row.get::<_, i64>("id");
         let project_slug = Slug::new(id, name);
         let unix_slug = project_slug.to_string();
-        println!("Project: {}", unix_slug);
         cache_project_path(unix_slug).await;
     }
 

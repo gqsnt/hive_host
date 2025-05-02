@@ -1,10 +1,11 @@
-use leptos::prelude::{expect_context, OnceResource, Read, Signal, Transition, Update};
+use leptos::prelude::{expect_context, OnceResource, Read, ServerAction, Signal, Transition, Update};
 use leptos::prelude::{AddAnyAttr, Suspend};
 use std::fmt::Display;
 pub mod project_dashboard;
 pub mod project_files;
 pub mod project_settings;
 pub mod project_team;
+pub mod project_snapshots;
 
 use leptos::context::provide_context;
 use leptos::prelude::{
@@ -19,12 +20,14 @@ use crate::app::get_hosting_url;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
+use leptos::server::Resource;
 use leptos_router::components::{Outlet, A};
 use leptos_router::params::{Params, ParamsError};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+use crate::app::pages::user::projects::project::project_snapshots::server_fns::{SetActiveProjectSnapshot, UnsetActiveProjectSnapshot};
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectParams {
@@ -39,6 +42,7 @@ pub enum ProjectSection {
     Dashboard,
     Team,
     Files,
+    Snapshots,
     Settings,
 }
 impl ProjectSection {
@@ -46,6 +50,7 @@ impl ProjectSection {
         match self {
             ProjectSection::Dashboard => format!("/user/projects/{base}"),
             ProjectSection::Team => format!("/user/projects/{base}/team"),
+            ProjectSection::Snapshots => format!("/user/projects/{base}/snapshots"),
             ProjectSection::Files => format!("/user/projects/{base}/files/root/"),
             ProjectSection::Settings => format!("/user/projects/{base}/settings"),
         }
@@ -57,6 +62,7 @@ impl ProjectSection {
             ProjectSection::Team => "Team",
             ProjectSection::Files => "Files",
             ProjectSection::Settings => "Settings",
+            ProjectSection::Snapshots => "Snapshots",
         }
     }
 }
@@ -67,6 +73,7 @@ impl From<&str> for ProjectSection {
             "team" => ProjectSection::Team,
             "files" => ProjectSection::Files,
             "settings" => ProjectSection::Settings,
+            "snapshots" => ProjectSection::Snapshots,
             _ => ProjectSection::Dashboard,
         }
     }
@@ -79,8 +86,9 @@ impl Display for ProjectSection {
             ProjectSection::Team => "team".to_string(),
             ProjectSection::Files => "files".to_string(),
             ProjectSection::Settings => "settings".to_string(),
+            ProjectSection::Snapshots => "snapshots".to_string(),
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
 
@@ -92,7 +100,11 @@ pub struct ProjectSlugSignal(pub String);
 
 
 #[component]
-pub fn ProjectPage() -> impl IntoView {
+pub fn ProjectPage(
+    set_active_snapshot_action:ServerAction<SetActiveProjectSnapshot>,
+    unset_active_snapshot_action: ServerAction<UnsetActiveProjectSnapshot>,
+    
+) -> impl IntoView {
     let params: MemoProjectParams = use_params::<ProjectParams>();
     let project_slug =  move || {
         params.read()
@@ -111,7 +123,19 @@ pub fn ProjectPage() -> impl IntoView {
     provide_context(project_slug_signal);
     
     let global_state:Store<GlobalState> = expect_context();
-    let project_resource= OnceResource::new(get_project(project_slug()));
+    let project_resource = Resource::new(
+        move || {
+            (
+                set_active_snapshot_action.version().get(),
+            unset_active_snapshot_action.version().get(),
+                project_slug(),
+            )
+        },
+        |(_,_, slug)| {
+            get_project(slug)
+        },
+    );
+    
     let hosting_url_resource= OnceResource::new(get_hosting_url());
     
     
@@ -234,23 +258,21 @@ pub mod server_fns {
     pub async fn get_project(
         project_slug: ProjectSlugStr,
     ) -> AppResult<Project> {
-        Ok(
-            crate::security::permission::ssr::handle_project_permission_request(
-                project_slug,
-                Permission::Read,
-                None,
-                |_, pool, project_slug| async move {
-                    let project = sqlx::query_as!(
+        crate::security::permission::ssr::handle_project_permission_request(
+            project_slug,
+            Permission::Read,
+            None,
+            |_, pool, project_slug| async move {
+                let project = sqlx::query_as!(
                         Project,
-                        "SELECT * FROM projects WHERE id = $1",
+                        "SELECT id,name,active_snapshot_id, slug FROM projects WHERE id = $1",
                         project_slug.id
                     )
                     .fetch_one(&pool)
                     .await?;
-                    Ok(project)
-                },
-            )
-            .await?,
+                Ok(project)
+            },
         )
+            .await
     }
 }

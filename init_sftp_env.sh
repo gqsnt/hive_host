@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ce script doit s’exécuter en root ou via sudo.
-
-### 1. Vérifier si on est root
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Please run as root (or use sudo). Exiting."
-  exit 1
-fi
-
 
 ### 2. Create the dedicated service user and group (if they don't exist)
 SERVICE_USER="hivehost_server"
 SERVICE_GROUP="hivehost_server"
 SFTP_GROUP="sftp_users"
+BTRFS_MOUNT_POINT="/hivehost/dev"
+PROD_MOUNT_BASE="/hivehost/prod"
+USERS_BASE="/hivehost/users"
+HIVEHOST_BASE="/hivehost"
 
+if [ "$(id -u)" -ne 0 ]; then
+  echo "ERROR: Please run this script as root (or use sudo). Exiting."
+  exit 1
+fi
 
+### 2. Create Service User/Group (Idempotent)
 if ! getent group "$SERVICE_GROUP" >/dev/null; then
   echo "Creating group '$SERVICE_GROUP'..."
   groupadd --system "$SERVICE_GROUP"
@@ -25,13 +26,12 @@ fi
 
 if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
   echo "Creating user '$SERVICE_USER'..."
-  # System user, primary group hivehost_server, no login shell, no home dir created by useradd
   useradd --system --gid "$SERVICE_GROUP" --shell /usr/sbin/nologin --no-create-home "$SERVICE_USER"
 else
   echo "User '$SERVICE_USER' already exists."
 fi
 
-### 3. Create the SFTP group (if it doesn't exist)
+### 3. Create SFTP Group (Idempotent)
 if ! getent group "$SFTP_GROUP" >/dev/null; then
   echo "Creating group '$SFTP_GROUP'..."
   groupadd --system "$SFTP_GROUP"
@@ -39,58 +39,64 @@ else
   echo "Group '$SFTP_GROUP' already exists."
 fi
 
+echo "Creating base directories..."
+mkdir -p "$HIVEHOST_BASE"
+chown root:root "$HIVEHOST_BASE"
+chmod 755 "$HIVEHOST_BASE" # Or 711 if you prefer
 
+mkdir -p "$BTRFS_MOUNT_POINT"
+chown root:root "$BTRFS_MOUNT_POINT"
+chmod 711 "$BTRFS_MOUNT_POINT" # Restrict listing
 
+mkdir -p "$PROD_MOUNT_BASE"
+chown root:root "$PROD_MOUNT_BASE"
+chmod 755 "$PROD_MOUNT_BASE"
 
+mkdir -p "$USERS_BASE"
+chown root:root "$USERS_BASE"
+chmod 755 "$USERS_BASE" # SFTP Chroot base
 
-### 2. Créer le dossier principal sftp
-#   owned par root:root, chmod 755
-mkdir -p /sftp/users
-chown root:root /sftp
-chown root:root /sftp/users
-chmod 755 /sftp
-chmod 755 /sftp/users
-
-### 3. Créer le dossier /projects
-#   owned par root:root, chmod 711 (ou 700) pour cacher lister
-#   selon tes préférences
-mkdir -p /projects
-chown root:root /projects
-chmod 711 /projects
-# 711 => x pour tous => on ne peut pas faire 'ls /projects' si on n'a pas 'r',
-# mais on peut cd si on connaît un sous-répertoire.
-# tu peux mettre 700 si tu ne veux pas que même 'cd' soit possible.
-
-### 6. Check/Activate ACL on /projects (if needed)
-#    (Assuming /projects is a mount point like ext4/xfs supporting ACLs)
-if ! mount | grep -q " on /projects .*acl"; then
-  echo "Warning: /projects filesystem might not have ACL enabled by default."
-  echo "Attempting to remount with ACL..."
-  # This might fail if /projects is not a separate mount or already has acl
-  mount -o remount,acl /projects || echo "Remount failed, check /etc/fstab or mount options."
+### 5. Check/Verify ACLs on BTRFS_MOUNT_POINT
+echo "Checking ACL support on '$BTRFS_MOUNT_POINT'..."
+# Ensure the BTRFS filesystem itself is mounted with ACL support in /etc/fstab!
+# Example fstab: UUID=... /hivehost/dev btrfs defaults,acl 0 0
+if ! mount | grep -q " on $BTRFS_MOUNT_POINT .*acl"; then
+  echo "WARNING: Filesystem at '$BTRFS_MOUNT_POINT' might not be mounted with ACL support."
+  echo "Please ensure 'acl' option is present in /etc/fstab for this mount point."
+  # Attempting a remount might work temporarily but isn't persistent
+  # mount -o remount,acl "$BTRFS_MOUNT_POINT" || echo "Remount attempt failed."
 fi
 
-# Test if ACL works by trying to set one (and immediately remove it)
-echo "Testing ACL functionality..."
-if setfacl -m "u:$SERVICE_USER:rwx" /projects >/dev/null 2>&1; then
-  echo "ACL test successful. Granting service user initial access."
-  # Grant the service user ability to manage files/ACLs *within* /projects
-  # It will create subdirs and set specific ACLs later via the helper.
-  setfacl -m "u:$SERVICE_USER:rwx" /projects
-  setfacl -d -m "u:$SERVICE_USER:rwx" /projects # Default for new items
+# Test ACL setting ability
+echo "Testing ACL functionality on '$BTRFS_MOUNT_POINT'..."
+if setfacl -m "u:$SERVICE_USER:rwx" "$BTRFS_MOUNT_POINT" >/dev/null 2>&1; then
+  echo "ACL test successful. Granting service user base access."
+  # Grant service user ability to manage items *within* BTRFS_MOUNT_POINT
+  setfacl -m "u:$SERVICE_USER:rwx" "$BTRFS_MOUNT_POINT"
+  setfacl -d -m "u:$SERVICE_USER:rwx" "$BTRFS_MOUNT_POINT"
+  setfacl -m "u:root:rwx" "$BTRFS_MOUNT_POINT" # Ensure root retains full ACL control
 else
-  setfacl -m "u:root:rwx" /projects # Cleanup potential failed attempt
-  echo "Error: ACL might not be enabled or working correctly on /projects."
-  echo "Please ensure the filesystem for /projects is mounted with the 'acl' option."
-  # exit 1 # Optional: exit if ACLs are critical
+  # Cleanup potential failed ACL test if it left an entry
+  setfacl -x "u:$SERVICE_USER" "$BTRFS_MOUNT_POINT" >/dev/null 2>&1 || true
+  echo "ERROR: Failed to set test ACL on '$BTRFS_MOUNT_POINT'."
+  echo "Ensure the filesystem is mounted with 'acl' option and supports ACLs."
+  exit 1 # ACLs are critical for this design
 fi
 
-echo "✅ Initialization done."
-echo "User '$SERVICE_USER', Group '$SFTP_GROUP' created (if not existing)."
-echo "Folders created and base permissions set:"
-echo " - /sftp/users (root:root 755)"
-echo " - /projects (root:root 711, +ACL for $SERVICE_USER)"
-echo "Ensure your main 'server' application runs as user '$SERVICE_USER'."
-echo "Configure SSHD for AuthorizedKeysCommand and Match Group $SFTP_GROUP."
+# Grant service user access to manage production mount points
+echo "Granting service user access to '$PROD_MOUNT_BASE'..."
+setfacl -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE"
+setfacl -d -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE" # Allow creating mount dirs
+
+echo "✅ Initialization Script Completed."
+echo "Base directories created under '$HIVEHOST_BASE'."
+echo "Service user '$SERVICE_USER' and SFTP group '$SFTP_GROUP' ensured."
+echo "ACL support verified on '$BTRFS_MOUNT_POINT'."
+echo "Base permissions set for '$SERVICE_USER'."
+echo "---"
+echo "Next Steps:"
+echo "1. Ensure your Btrfs volume is mounted at '$BTRFS_MOUNT_POINT' with 'acl' in /etc/fstab."
+echo "2. Configure SSHD for SFTP Chroot (Match Group $SFTP_GROUP, ChrootDirectory $USERS_BASE/%u, ForceCommand internal-sftp, etc.)."
+echo "3. Ensure your backend service runs as/uses '$SERVICE_USER' (likely via sudo for helper commands)."
 
 exit 0

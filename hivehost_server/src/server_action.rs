@@ -1,8 +1,3 @@
-use crate::cmd::{
-     project_path,
-    user_path, user_project_path,
-    user_projects_path,
-};
 use crate::ServerError;
 use crate::{ensure_authorization, AppState, ServerResult};
 use axum::extract::State;
@@ -11,7 +6,7 @@ use axum::Json;
 use common::permission::Permission;
 use common::server_action::user_action::UserAction;
 use common::server_action::{ServerAction, ServerActionResponse};
-use common::{ProjectSlugStr, UserSlugStr};
+use common::{get_project_dev_path, get_user_path, get_user_project_path, get_user_projects_path, ProjectSlugStr, UserSlugStr};
 use secrecy::ExposeSecret;
 use std::path::Path;
 use tokio::fs::OpenOptions;
@@ -66,8 +61,8 @@ pub async fn handle_server_action(
 }
 
 pub async fn create_user(helper_client:HelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
-    let user_path = user_path(user_slug.clone());
-    let user_projects_path = user_projects_path(user_slug.clone());
+    let user_path = get_user_path(&user_slug);
+    let user_projects_path = get_user_projects_path(&user_slug);
     helper_client.execute(ServerHelperCommand::CreateUser {
         user_slug,
         user_path:user_path.clone(),
@@ -81,22 +76,24 @@ pub async fn create_project(
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
-    let project_path = project_path(project_slug.clone());
-    helper_client.execute(ServerHelperCommand::CreateProjectDir {
-        project_path: project_path.clone(),
+    helper_client.execute(ServerHelperCommand::CreateProject {
+        project_slug:project_slug.clone(),
         service_user: user_slug.clone(),
     }).await?;
     
-    let user_project_path = user_project_path(user_slug.clone(), project_slug.clone());
-    helper_client.execute(ServerHelperCommand::BindMount {
-        source_path: project_path.clone(),
+    
+    let dev_path = get_project_dev_path(&project_slug);
+    
+    let user_project_path = get_user_project_path(&user_slug, &project_slug);
+    helper_client.execute(ServerHelperCommand::BindMountUserProject {
+        source_path: dev_path.clone(),
         target_path: user_project_path.clone(),
     }).await?;
-    
     //add file index.html to project
-    let index_file_path = format!("{}/index.html", project_path);
+    let index_file_path = format!("{dev_path}/index.html");
     let mut index_file = OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .open(&index_file_path)
         .await?;
@@ -115,14 +112,14 @@ pub async fn add_user_to_project(
 ) -> ServerResult<()> {
     
     let is_read_only = permission < Permission::Write;
-    let project_path = project_path(project_slug.clone()); 
+    let project_path = get_project_dev_path(&project_slug); 
     helper_client.execute(ServerHelperCommand::SetAcl {
         path: project_path.clone(),
         user_slug:user_slug.clone(),
         is_read_only,
     }).await?;
-    let user_project_path = user_project_path(user_slug.clone(), project_slug.clone());
-    helper_client.execute(ServerHelperCommand::BindMount {
+    let user_project_path = get_user_project_path(&user_slug, &project_slug);
+    helper_client.execute(ServerHelperCommand::BindMountUserProject {
         source_path: project_path,
         target_path: user_project_path,
     }).await?;
@@ -137,7 +134,7 @@ pub async fn update_user_in_project(
 ) -> ServerResult<()> {
     let is_read_only = permission < Permission::Write;
     helper_client.execute(ServerHelperCommand::SetAcl {
-        path: project_path(project_slug.clone()),
+        path: get_project_dev_path(&project_slug),
         user_slug,
         is_read_only,
     }).await?;
@@ -149,14 +146,14 @@ pub async fn remove_user_from_project(
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
-    let proj_path = project_path(project_slug.clone());
-    let user_project_path = user_project_path(user_slug.clone(), project_slug.clone());
+    let proj_path = get_project_dev_path(&project_slug);
+    let user_project_path = get_user_project_path(&user_slug, &project_slug);
     helper_client.execute(ServerHelperCommand::RemoveAcl {
         path: proj_path.clone(),
         user_slug:user_slug.clone(),
     }).await?;
     
-    helper_client.execute(ServerHelperCommand::Unmount {
+    helper_client.execute(ServerHelperCommand::UnmountUserProject {
         target_path: user_project_path.clone(),
     }).await?;
     Ok(())
@@ -164,15 +161,14 @@ pub async fn remove_user_from_project(
 
 
 pub async fn remove_project(helper_client:HelperClient,project_slug: ProjectSlugStr) -> ServerResult<()> {
-    let project_path = project_path(project_slug);
-    helper_client.execute(ServerHelperCommand::DeleteProjectDir {
-        project_path,
+    helper_client.execute(ServerHelperCommand::DeleteProject {
+        project_slug,
     }).await?;
     Ok(())
 }
 
 pub async fn remove_user(helper_client:HelperClient,user_slug: UserSlugStr) -> ServerResult<()> {
-    let user_projects_path = user_projects_path(user_slug.clone());
+    let user_projects_path = get_user_projects_path(&user_slug);
     let path = Path::new(&user_projects_path);
 
     if path.exists() {
@@ -180,7 +176,7 @@ pub async fn remove_user(helper_client:HelperClient,user_slug: UserSlugStr) -> S
         while let Some(entry) = read_dir.next_entry().await? {
             let submount = entry.path();
             if submount.is_dir() {
-                helper_client.execute(ServerHelperCommand::Unmount {
+                helper_client.execute(ServerHelperCommand::UnmountUserProject {
                     target_path: submount.to_string_lossy().to_string(),
                 }).await?;
             }
@@ -189,7 +185,7 @@ pub async fn remove_user(helper_client:HelperClient,user_slug: UserSlugStr) -> S
     helper_client.execute(ServerHelperCommand::DeleteUser {
         user_slug:user_slug.clone(),
     }).await?;
-    tokio::fs::remove_dir_all(user_path(user_slug)).await?;
+    tokio::fs::remove_dir_all(get_user_path(&user_slug)).await?;
 
     Ok(())
 }

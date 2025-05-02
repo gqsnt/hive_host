@@ -4,7 +4,7 @@ use leptos::server;
 use crate::AppResult;
 
 pub fn token_url(server_url: &str, token: &str) -> String {
-    format!("http://{}/token/{}", server_url, token)
+    format!("http://{server_url}/token/{token}")
 }
 
 #[server]
@@ -15,8 +15,7 @@ pub async fn request_server_project_action_front(
 ) -> AppResult<ServerProjectActionResponse> {
     use crate::api::ssr::{request_server_project_action, request_server_project_action_token};
     use common::server_project_action::IsProjectServerAction;
-
-    Ok(ssr::handle_project_permission_request(
+    ssr::handle_project_permission_request(
         project_slug,
         action.permission(),
         action.require_csrf().then_some(csrf.unwrap_or_default()),
@@ -28,7 +27,7 @@ pub async fn request_server_project_action_front(
             }
         },
     )
-    .await?)
+        .await
 }
 
 #[cfg(feature = "ssr")]

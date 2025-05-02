@@ -1,89 +1,11 @@
-use std::borrow::Cow;
-use std::sync::LazyLock;
-use regex::Regex;
-use validator::{Validate, ValidationError};
 
-pub static SANITIZED_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[a-zA-Z0-9_]+$").unwrap());
-
-pub fn validate_password_strength(value:&str) -> Result<(), ValidationError>{
-    let mut has_lowercase = false;
-    let mut has_uppercase = false;
-    let mut has_digit = false;
-    let mut has_symbol = false;
-
-    for c in value.chars() {
-        if c.is_lowercase() {
-            has_lowercase = true;
-        } else if c.is_uppercase() {
-            has_uppercase = true;
-        } else if c.is_ascii_digit() { // Use is_ascii_digit for clarity with typical password rules
-            has_digit = true;
-        } else {
-            // Consider what characters you count as "symbols".
-            // This example counts anything that isn't alphanumeric or underscore.
-            // Adjust this logic based on your allowed/required symbol set.
-            if !c.is_whitespace() && !c.is_control() {
-                has_symbol = true;
-            }
-        }
-    }
-    let mut password_strength_errors = vec![];
-
-    if !has_lowercase {
-        // Provide a specific error code/message if desired
-        password_strength_errors.push(
-            String::from("lowercase letter")
-        );
-    }
-    if !has_uppercase {
-        password_strength_errors.push(
-            String::from("uppercase letter")
-        );
-    }
-    if !has_digit {
-        password_strength_errors.push(
-            String::from("digit")
-        );
-    }
-    if !has_symbol {
-        password_strength_errors.push(
-            String::from("symbol")
-        );
-    }
-    if !password_strength_errors.is_empty() {
-        let error_message = format!(
-            "Password must contain at least one {}.",
-            password_strength_errors.join(", ")
-        );
-        Err(ValidationError::new(
-            "password_strength",
-        ).with_message(Cow::from(error_message)))
-    }else{
-        Ok(())
-    }
-}
-
-
-
-
-
-
-
-#[derive(Debug, Clone, Validate)]
-pub struct PasswordForm {
-    #[validate(
-        // length(min = 12, max = 30),
-        // custom(function="validate_password_strength")
-    )]
-    pub password: String,
-    #[validate(must_match(other = "password"))]
-    pub password_confirmation: String,
-}
 
 
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
+    use std::borrow::Cow;
+    use std::sync::LazyLock;
     use crate::security::ssr::AppAuthSession;
     use crate::{AppError, AppResult};
     use blake2::{Blake2s256, Digest};
@@ -91,10 +13,92 @@ pub mod ssr {
     use http::header::CONTENT_TYPE;
     use http::HeaderValue;
     use leptos::prelude::use_context;
+    use regex::Regex;
     use secrecy::{ExposeSecret, SecretString};
     use sqlx::PgPool;
     use tokio::runtime::Handle;
     use uuid::Uuid;
+    use validator::{Validate, ValidationError};
+
+
+
+    pub fn validate_password_strength(value:&str) -> Result<(), ValidationError>{
+        let mut has_lowercase = false;
+        let mut has_uppercase = false;
+        let mut has_digit = false;
+        let mut has_symbol = false;
+
+        for c in value.chars() {
+            if c.is_lowercase() {
+                has_lowercase = true;
+            } else if c.is_uppercase() {
+                has_uppercase = true;
+            } else if c.is_ascii_digit() { // Use is_ascii_digit for clarity with typical password rules
+                has_digit = true;
+            } else {
+                // Consider what characters you count as "symbols".
+                // This example counts anything that isn't alphanumeric or underscore.
+                // Adjust this logic based on your allowed/required symbol set.
+                if !c.is_whitespace() && !c.is_control() {
+                    has_symbol = true;
+                }
+            }
+        }
+        let mut password_strength_errors = vec![];
+
+        if !has_lowercase {
+            // Provide a specific error code/message if desired
+            password_strength_errors.push(
+                String::from("lowercase letter")
+            );
+        }
+        if !has_uppercase {
+            password_strength_errors.push(
+                String::from("uppercase letter")
+            );
+        }
+        if !has_digit {
+            password_strength_errors.push(
+                String::from("digit")
+            );
+        }
+        if !has_symbol {
+            password_strength_errors.push(
+                String::from("symbol")
+            );
+        }
+        if !password_strength_errors.is_empty() {
+            let error_message = format!(
+                "Password must contain at least one {}.",
+                password_strength_errors.join(", ")
+            );
+            Err(ValidationError::new(
+                "password_strength",
+            ).with_message(Cow::from(error_message)))
+        }else{
+            Ok(())
+        }
+    }
+
+
+
+
+
+
+
+    #[derive(Debug, Clone, Validate)]
+    pub struct PasswordForm {
+        #[validate(
+            // length(min = 12, max = 30),
+            // custom(function="validate_password_strength")
+        )]
+        pub password: String,
+        #[validate(must_match(other = "password"))]
+        pub password_confirmation: String,
+    }
+
+
+    pub static SANITIZED_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[a-zA-Z0-9_]+$").unwrap());
 
     pub struct AsyncValidationContext {
         pub pg_pool: PgPool,

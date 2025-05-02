@@ -8,6 +8,7 @@ use leptos::prelude::{FromServerFnError, ServerFnErrorErr};
 use leptos::server_fn::codec::JsonEncoding;
 #[cfg(feature = "ssr")]
 use sqlx::migrate::MigrateError;
+#[cfg(feature = "ssr")]
 use validator::{ValidationError, ValidationErrors};
 
 pub mod api;
@@ -67,8 +68,10 @@ pub enum AppError {
     InvalidProjectSlug,
     #[error("Invalid Slug {0}")]
     ParseSlug(#[from] ParseSlugError),
+    #[cfg(feature = "ssr")]
     #[error("Validation Error {0}")]
     ValidationError(#[from] ValidationError),
+    #[cfg(feature = "ssr")]
     #[error("Validation Errors {0}")]
     ValidationErrors(#[from] ValidationErrors),
     #[error("ServerFnError {0}")]
@@ -85,6 +88,14 @@ pub enum AppError {
     InvalidCsrf,
     #[error("Invalid credentials")]
     InvalidCredentials,
+    #[error("Custom: {0}")]
+    Custom(String),
+    #[error("To much Snapshots")]
+    ToMuchSnapshots,
+    #[error("Cant delete active snapshot")]
+    CantDeleteActiveSnapshot,
+    #[error("No Active snapshot")]
+    NoActiveSnapshot,
 }
 
 macro_rules! impl_from_to_string {

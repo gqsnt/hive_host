@@ -5,9 +5,9 @@ use strum_macros::EnumIter;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default, EnumIter,
 )]
-#[cfg_attr(feature = "ssr", derive(sqlx::Type))]
+#[cfg_attr(feature = "website-ssr", derive(sqlx::Type))]
 #[cfg_attr(
-    feature = "ssr",
+    feature = "website-ssr",
     sqlx(type_name = "permission_type", rename_all = "lowercase")
 )]
 pub enum Permission {
@@ -42,7 +42,7 @@ impl Display for Permission {
             Permission::Write => "Write".to_string(),
             Permission::Owner => "Owner".to_string(),
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
 

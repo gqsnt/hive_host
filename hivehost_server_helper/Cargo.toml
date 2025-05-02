@@ -7,9 +7,9 @@ edition = "2024"
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = {workspace = true}
-tracing = {workspace = true}
-tracing-subscriber = {workspace = true}
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true , features = ["env-filter"]}
 thiserror = {workspace = true}
 dotenvy = { workspace = true }
-common= { path = "../common" }
+common= { path = "../common" , features = ["server"]}
 listenfd = { version = "1.0.2" }

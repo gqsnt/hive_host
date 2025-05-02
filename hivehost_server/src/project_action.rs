@@ -1,4 +1,4 @@
-use crate::cmd::project_path;
+
 use crate::server_action::{add_user_to_project, remove_user_from_project, update_user_in_project};
 use crate::{ensure_authorization, AppState, ServerError};
 
@@ -16,11 +16,13 @@ use common::server_project_action::{
     IsProjectServerAction, ServerProjectAction, ServerProjectActionRequest,
     ServerProjectActionResponse,
 };
-use common::{ProjectSlugStr, StringContent};
+use common::{get_project_dev_path,get_project_prod_path, get_project_snapshot_path, ProjectSlugStr, StringContent};
 use secrecy::ExposeSecret;
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
+use common::server_helper::ServerHelperCommand;
+use common::server_project_action::snapshot::SnapshotAction;
 use crate::helper_client::HelperClient;
 
 pub async fn server_project_action_token(
@@ -76,8 +78,48 @@ pub async fn handle_server_project_action(
         ServerProjectAction::Permission(permission) => {
             handle_server_project_action_permission(state.helper_client, project_slug, permission).await
         }
+        ServerProjectAction::Snapshot(snapshot) => {
+            handle_server_project_action_snapshot(state.helper_client, project_slug, snapshot).await
+        }
     }
 }
+
+
+
+
+pub async fn handle_server_project_action_snapshot(
+    helper_client: HelperClient,
+    project_slug:ProjectSlugStr,
+    action:SnapshotAction,
+) -> Result<Json<ServerProjectActionResponse>, (StatusCode, String)> {
+    match action{
+        SnapshotAction::Create { snapshot_name } => {
+             helper_client.execute(ServerHelperCommand::CreateSnapshot {
+                snapshot_path: get_project_snapshot_path(&snapshot_name),
+                path: get_project_dev_path(&project_slug),
+            }).await.map_err(ServerError::from)?;
+        }
+        SnapshotAction::Delete { snapshot_name } => {
+            helper_client.execute(ServerHelperCommand::DeleteSnapshot {
+                snapshot_path: get_project_snapshot_path(&snapshot_name),
+            }).await.map_err(ServerError::from)?;
+        }
+        SnapshotAction::MountSnapshotProd {  snapshot_name } => {
+            helper_client.execute(ServerHelperCommand::MountSnapshot {
+                path: get_project_prod_path(&project_slug),
+                snapshot_name,
+            }).await.map_err(ServerError::from)?;
+            
+        },
+        SnapshotAction::UnmountProd  => {
+            helper_client.execute(ServerHelperCommand::UnmountProd {
+                path: get_project_prod_path(&project_slug),
+            }).await.map_err(ServerError::from)?;
+        }
+    }
+    Ok(Json(ServerProjectActionResponse::Ok))
+}
+
 
 pub async fn handle_server_project_action_permission(
     helper_client:HelperClient,
@@ -162,9 +204,9 @@ pub async fn handle_server_project_action_dir(
         }
         DirAction::Download => {
             // make a tar.gz of the project and send it to the client
-            let project_path = project_path(project_slug.clone());
-            let tar_path = format!("/tmp/{}.tar.gz", project_slug.clone());
-            let tar_cmd = format!("tar -czf {} -C {} .", tar_path, project_path);
+            let project_path = get_project_dev_path(&project_slug.to_string());
+            let tar_path = format!("/tmp/{project_slug}.tar.gz");
+            let tar_cmd = format!("tar -czf {tar_path} -C {project_path} ." );
             let output = tokio::process::Command::new("bash")
                 .arg("-c")
                 .arg(tar_cmd)
@@ -244,7 +286,7 @@ pub async fn handle_server_project_action_file(
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
             let path_copy = path.clone();
             let path_copy = path_copy
-                .strip_prefix(project_path(project_slug.clone()))
+                .strip_prefix(get_project_dev_path(&project_slug.to_string()))
                 .map_err(ServerError::from)?;
             let name = path
                 .file_name()
@@ -304,7 +346,7 @@ pub async fn ensure_path_in_project_path(
     }
     project_path_ = project_path_.replacen("root/", "./", 1);
     
-    let project_root = PathBuf::from(project_path(project_slug));
+    let project_root = PathBuf::from(get_project_dev_path(&project_slug.to_string()));
     let project_root = tokio::fs::canonicalize(&project_root)
         .await
         .map_err(ServerError::from)?;

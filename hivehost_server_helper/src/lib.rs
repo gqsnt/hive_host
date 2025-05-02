@@ -1,9 +1,14 @@
+use std::sync::LazyLock;
+
 pub mod command;
 pub mod handler;
 
 
+pub static BTRFS_DEVICE: LazyLock<String> = LazyLock::new(|| {
+    dotenvy::var("BTRFS_DEVICE").unwrap_or_else(|_| "/dev/sda".to_string())
+});
+
 pub type ServerHelperResult<T> = Result<T, ServerHelperError>;
-pub const USER_GROUP: &str = "sftp_users";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServerHelperError {

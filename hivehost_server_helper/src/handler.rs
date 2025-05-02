@@ -12,7 +12,6 @@ pub async fn handle_connection(stream: UnixStream) {
         Ok(_) => info!("Client connection handled successfully"),
         Err(e) => error!("Error processing client connection: {:?}", e), 
     }
-    info!("Client connection handler task finished."); 
 }
 
 async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
@@ -42,8 +41,8 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                 let request: ServerHelperRequest = match serde_json::from_str(trimmed_line) {
                     Ok(req) => req,
                     Err(e) => {
-                        error!("Failed to deserialize request: {}. Raw: '{}'", e, trimmed_line);
-                        let response = ServerHelperResponse { status: ServerHelperResponseStatus::Error(format!("Bad request: {}", e)) };
+                        error!("Failed to deserialize request: {e}. Raw: '{trimmed_line}'");
+                        let response = ServerHelperResponse { status: ServerHelperResponseStatus::Error(format!("Bad request: {e}")) };
                         let response_json = serde_json::to_string(&response)? + "\n";
                         // Try to send error back before potentially closing
                         if write_half.write_all(response_json.as_bytes()).await.is_err() {
@@ -61,7 +60,7 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                     Ok(_) => ServerHelperResponseStatus::Success,
                     Err(e) => {
                         error!("Command execution failed: {:?}", e);
-                        ServerHelperResponseStatus::Error(format!("Command execution failed: {}", e.to_string()))
+                        ServerHelperResponseStatus::Error(format!("Command execution failed: {e}"))
                     }
                 };
 
@@ -76,7 +75,6 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                             error!("Failed to flush response to client: {}. Closing connection.", e);
                             break Err(e.into()); // Exit loop with IO error
                         }
-                        info!("Response sent successfully: {:?}", response);
                     }
                     Err(e) => {
                         error!("Failed to write response to client: {}. Closing connection.", e);

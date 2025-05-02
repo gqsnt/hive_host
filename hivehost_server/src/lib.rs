@@ -1,4 +1,3 @@
-pub mod cmd;
 pub mod project_action;
 pub mod server_action;
 pub mod helper_client;

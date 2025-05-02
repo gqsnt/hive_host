@@ -1,5 +1,4 @@
 
-use crate::models::User;
 use crate::{AppResult, BoolInput};
 use leptos::server;
 
@@ -12,28 +11,41 @@ pub async fn signup(
     password: String,
     password_confirmation: String,
     remember: Option<BoolInput>,
-) -> AppResult<User> {
+) -> AppResult<()> {
     use crate::models::RoleType;
+    use leptos::logging::log;
+    use crate::models::User;
     use crate::security::utils::ssr::verify_easy_hash;
     use common::server_action::user_action::UserAction;
     use crate::app::pages::user::projects::new_project::server_fns::ssr::create_project;
     use secrecy::ExposeSecret;
-    use crate::security::utils::ssr::AsyncValidationContext;
-    use crate::security::utils::{PasswordForm, SANITIZED_REGEX};
     use tokio::runtime::Handle;
     use validator::{Validate, ValidateArgs, ValidationError};
+    use crate::security::utils::ssr::AsyncValidationContext;
+    use crate::security::utils::ssr::SANITIZED_REGEX;
+    use crate::security::utils::ssr::PasswordForm;
     use crate::AppError;
     use common::{Slug};
+
 
 
     pub fn unique_email(email: &str, context:&AsyncValidationContext) -> Result<(), ValidationError>{
         tokio::task::block_in_place(|| {
             let AsyncValidationContext { pg_pool, handle } = context;
-            let result = handle.block_on(User::get_from_email_with_password(email, pg_pool));
-            if result.is_ok() {
-                return Err(ValidationError::new("Email already taken"));
+            let result = handle.block_on(User::exist(email, pg_pool));
+            match result{
+                Ok(exist) => {
+                    if exist {
+                         Err(ValidationError::new("Email already taken"))
+                    }else{
+                        Ok(())
+                    }
+                }
+                Err(e) => {
+                    log!("Error checking email uniqueness: {:?}", e);
+                     Err(ValidationError::new("Database error"))
+                }
             }
-            Ok(())
         })
     }
 
@@ -91,14 +103,6 @@ pub async fn signup(
     auth.remember_user(remember);
     leptos_axum::redirect("/user");
     let user_slug = Slug::new(user.id, form.username.clone());
-    let user = User {
-        id: user.id,
-        email,
-        role_type: RoleType::default(),
-        username:form.username.clone(),
-        slug:user_slug.to_string(),
-    };
-    let user_slug = user.get_slug();
     crate::api::ssr::request_server_action(
         UserAction::Create {
             user_slug: user_slug.clone(),
@@ -107,5 +111,5 @@ pub async fn signup(
     )
     .await?;
     create_project(user_slug, "default".to_string()).await?;
-    Ok(user)
+    Ok(())
 }

@@ -144,7 +144,7 @@ pub mod server_fns {
         let pool = crate::ssr::pool()?;
         let auth = crate::ssr::auth(false)?;
         let projects = sqlx::query_as!(Project,
-        "SELECT * FROM projects WHERE id IN (SELECT project_id FROM permissions WHERE user_id = $1)",
+        "SELECT id,name,active_snapshot_id, slug FROM projects WHERE id IN (SELECT project_id FROM permissions WHERE user_id = $1)",
         get_auth_session_user_id(&auth).unwrap()
     )
             .fetch_all(&pool)

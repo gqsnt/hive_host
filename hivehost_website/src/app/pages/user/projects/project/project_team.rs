@@ -202,7 +202,7 @@ pub fn ProjectTeam() -> impl IntoView {
                             EitherOf3::B(
                                 view! {
                                     <p class="text-red-500">
-                                        {format!("Error fetching team: {}", e)}
+                                        {format!("Error fetching team: {e}")}
                                     </p>
                                 },
                             )
@@ -240,7 +240,7 @@ pub mod server_fns {
         project_slug: ProjectSlugStr,
         user_id: UserId,
     ) -> AppResult<()> {
-        Ok(handle_project_permission_request(
+        handle_project_permission_request(
             project_slug,
             Permission::Owner,
             Some(csrf),
@@ -254,25 +254,25 @@ pub mod server_fns {
                     user_id,
                     project_slug.id
                 )
-                .execute(&pool)
-                .await?;
+                    .execute(&pool)
+                    .await?;
                 let project = sqlx::query!(
                     r#"SELECT id, name FROM projects WHERE id = $1"#,
                     project_slug.id
                 )
-                .fetch_one(&pool)
-                .await?;
+                    .fetch_one(&pool)
+                    .await?;
                 let user_slug = Slug::new(user_id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     project_slug,
                     PermissionAction::Revoke { user_slug }.into(),
                 )
-                .await?;
+                    .await?;
                 Ok(())
             },
         )
-        .await?)
+            .await
     }
 
     #[server]
@@ -282,7 +282,7 @@ pub mod server_fns {
         user_id: UserId,
         permission: Permission,
     ) -> AppResult<()> {
-        Ok(handle_project_permission_request(
+        handle_project_permission_request(
             project_slug,
             Permission::Owner,
             Some(csrf),
@@ -297,14 +297,14 @@ pub mod server_fns {
                 user_id,
                 project_slug.id
             )
-                        .execute(&pool)
-                        .await?;
+                    .execute(&pool)
+                    .await?;
                 let project = sqlx::query!(
                     r#"SELECT id, name FROM projects WHERE id = $1"#,
                     project_slug.id
                 )
-                .fetch_one(&pool)
-                .await?;
+                    .fetch_one(&pool)
+                    .await?;
                 let user_slug = Slug::new(user_id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
@@ -313,13 +313,13 @@ pub mod server_fns {
                         user_slug,
                         permission,
                     }
-                    .into(),
+                        .into(),
                 )
-                .await?;
+                    .await?;
                 Ok(())
             },
         )
-        .await?)
+            .await
     }
 
 
@@ -333,7 +333,7 @@ pub mod server_fns {
         email: String,
         permission: Permission,
     ) -> AppResult<()> {
-        Ok(handle_project_permission_request(
+        handle_project_permission_request(
             project_slug,
             Permission::Owner,
             Some(csrf),
@@ -354,14 +354,14 @@ pub mod server_fns {
                 project_slug.id,
                 permission as Permission
             )
-                        .execute(&pool)
-                        .await?;
+                    .execute(&pool)
+                    .await?;
                 let project = sqlx::query!(
                     r#"SELECT id, name FROM projects WHERE id = $1"#,
                     project_slug.id
                 )
-                .fetch_one(&pool)
-                .await?;
+                    .fetch_one(&pool)
+                    .await?;
                 let user_slug = Slug::new(other_user.id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
@@ -370,20 +370,20 @@ pub mod server_fns {
                         user_slug,
                         permission,
                     }
-                    .into(),
+                        .into(),
                 )
-                .await?;
+                    .await?;
                 Ok(())
             },
         )
-        .await?)
+            .await
     }
 
     #[server]
     pub async fn get_project_team(
         project_slug: ProjectSlugStr,
     ) -> AppResult<ProjectTeamResponse> {
-        Ok(handle_project_permission_request(
+        handle_project_permission_request(
             project_slug,
             Permission::Read,
             None,
@@ -409,7 +409,7 @@ pub mod server_fns {
                 })
             }
         )
-            .await?)
+            .await
     }
 
     #[derive(Clone, Deserialize, Debug, Serialize, Default)]

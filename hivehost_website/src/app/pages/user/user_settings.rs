@@ -2,7 +2,7 @@ use leptos::control_flow::For;
 use leptos::either::Either;
 
 use crate::app::components::csrf_field::CSRFField;
-use leptos::prelude::ElementChild;
+use leptos::prelude::{ElementChild};
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, AddAnyAttr, Effect, Set};
@@ -14,12 +14,13 @@ use leptos::text_prop::TextProp;
 use leptos::{component, view, IntoView};
 use web_sys::SubmitEvent;
 
-
 #[component]
 pub fn UserSettingsPage() -> impl IntoView {
     let delete_ssh_action = ServerAction::<server_fns::DeleteSshKey>::new();
     let add_ssh_action = ServerAction::<server_fns::AddSshKey>::new();
     let update_password_action = ServerAction::<server_fns::UpdatePassword>::new();
+    
+    
     let ssh_keys_resource = Resource::new(
         move || {
             (
@@ -29,6 +30,8 @@ pub fn UserSettingsPage() -> impl IntoView {
         },
         |_| server_fns::get_ssh_keys(),
     );
+
+
 
 
     let (new_ssh_key_result, set_new_ssh_key_result) = signal(" ".to_string());
@@ -52,6 +55,7 @@ pub fn UserSettingsPage() -> impl IntoView {
         };
     });
 
+   
     view! {
         // --- Profile Section (Empty as requested) ---
         <div class="h-full">
@@ -132,7 +136,7 @@ pub fn UserSettingsPage() -> impl IntoView {
             <div class="section-border">
                 <h2 class="section-title">"SSH Keys"</h2>
                 <p class="section-desc">
-                    "Manage SSH keys used for accessing your account via Git."
+                    "Manage SSH keys used for accessing your account SFTP via SSH"
                 </p>
 
                 // --- Flex container for List and Form ---
@@ -191,8 +195,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                                 window
                                                                                                     .confirm_with_message(
                                                                                                         &format!(
-                                                                                                            "Are you sure you want to delete the key '{}'?",
-                                                                                                            key_name_to_delete,
+                                                                                                            "Are you sure you want to delete the key '{key_name_to_delete}'?",
                                                                                                         ),
                                                                                                     )
                                                                                                     .unwrap_or(false)
@@ -386,6 +389,7 @@ fn SingleColMessageRow(
     }
 }
 
+
 pub mod server_fns {
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::utils::ssr::get_auth_session_user_id;
@@ -393,15 +397,37 @@ pub mod server_fns {
         use crate::ssr::auth;
         use crate::ssr::pool;
         use crate::ssr::server_vars;
+        use validator::Validate;
         use secrecy::ExposeSecret;
-        use crate::security::utils::PasswordForm;
+            use crate::security::utils::ssr::PasswordForm;
+            use crate::app::pages::user::user_settings::server_fns::ssr::AddSshKeyForm;
+
     }}
 
     use crate::models::SshKeyInfo;
     use leptos::server;
-    use serde::{Deserialize, Serialize};
-    use validator::Validate;
     use crate::AppResult;
+
+
+    #[cfg(feature = "ssr")]
+    mod ssr{
+        use serde::{Deserialize, Serialize};
+        use validator::Validate;
+        #[derive(Validate, Debug, Serialize, Deserialize)]
+        pub struct AddSshKeyForm {
+            #[validate(length(min = 1,max=20))]
+            pub ssh_key_name: String,
+            #[validate(length(min = 1, message = "SSH key value is required"))]
+            pub ssh_key_value: String,
+        }
+
+        #[derive(Validate, Debug, Serialize, Deserialize)]
+        pub struct GitSshKeyForm {
+            #[validate(length(min = 1, message = "Git SSH key value cannot be empty"))]
+            pub git_ssh_key_value: String,
+        }
+
+    }
 
     #[server]
     pub async fn get_ssh_keys() -> AppResult<Vec<SshKeyInfo>> {
@@ -443,14 +469,7 @@ pub mod server_fns {
     }
 
     
-    #[derive(Validate, Debug, Serialize, Deserialize)]
-    pub struct AddSshKeyForm {
-        #[validate(length(min = 1,max=20))]
-        pub ssh_key_name: String,
-        #[validate(length(min = 1, message = "SSH key value is required"))]
-        pub ssh_key_value: String,
-    }
-    
+
     
     #[server]
     pub async fn add_ssh_key(
@@ -460,7 +479,7 @@ pub mod server_fns {
     ) -> AppResult<()> {
         let ssh_key_form = AddSshKeyForm {
             ssh_key_name: ssh_key_name.clone(),
-            ssh_key_value: ssh_key_value.clone(),
+            ssh_key_value: ssh_key_value.trim().to_string(),
         };
         ssh_key_form.validate()?;
         let auth = auth(false)?;

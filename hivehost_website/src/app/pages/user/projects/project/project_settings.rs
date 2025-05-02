@@ -5,7 +5,7 @@ use common::{ProjectSlugStr};
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, Action, ElementChild, Signal};
 use leptos::prelude::{signal, ClassAttribute, OnAttribute};
-use leptos::prelude::{CustomAttribute, Effect, Read};
+use leptos::prelude::{CustomAttribute, Effect};
 use leptos::prelude::{Get, GlobalAttributes, Show};
 use leptos::{component, view};
 use reactive_stores::Store;
@@ -15,48 +15,24 @@ pub fn ProjectSettings() -> impl IntoView {
     let global_state:Store<GlobalState> = expect_context();
     let project_slug_signal:Signal<ProjectSlugSignal> = expect_context();
     let slug = move ||
-        project_slug_signal.read().0.clone();
+        project_slug_signal.get().0;
 
-    let active_signal = move ||
-        global_state.project().read().as_ref().map(|inner|inner.1.is_active).unwrap_or_default();
-
+    let is_active = Signal::derive(move ||
+        global_state.project().get().and_then(|inner| inner.1.active_snapshot_id).is_some());
 
     let hosting_url = move ||
-        global_state.hosting_url().read().as_ref().map(|inner|inner.to_string()).unwrap_or_default();
+        global_state.hosting_url().get().unwrap_or_default();
 
     let csrf = move || {
-        global_state.csrf().read().as_ref().map(|inner|inner.clone()).unwrap_or_default()
+        global_state.csrf().get().unwrap_or_default()
     };
 
-
-    let (is_active, set_is_active) = signal( active_signal());
+    
     let (preview_version, set_preview_version) = signal(0u32);
 
     let refresh_preview = move || {
         set_preview_version(preview_version() + 1);
     };
-
-
-    let toggle_project_action = Action::new(|intput: &(ProjectSlugStr, String, bool)| {
-        let (project_slug, csrf, is_active) = intput.clone();
-        async move { server_fns::toggle_project_active(csrf, project_slug, is_active).await }
-    });
-
-    let on_toggle_project = move |_| {
-        let next_active = !is_active();
-        toggle_project_action.dispatch((slug(), csrf(), next_active));
-        set_is_active(next_active);
-    };
-
-    let (toggle_project_action_result,set_toggle_project_action_result ) = signal("".to_string());
-    Effect::new(move |_| {
-        let result = toggle_project_action.value().get();
-        if let Some(Ok(_)) = result {
-            set_toggle_project_action_result("Project status updated".to_string());
-        } else if let Some(Err(e)) = result {
-            set_toggle_project_action_result(format!("Error: {}", e));
-        }
-    });
 
     let delete_project_action = Action::new(|intput: &(ProjectSlugStr, String)| {
         let (project_slug, csrf) = intput.clone();
@@ -71,8 +47,7 @@ pub fn ProjectSettings() -> impl IntoView {
                 window
                     .confirm_with_message(
                         &format!(
-                            "Are you sure you want to delete the project '{}'?",
-                            project_slug,
+                            "Are you sure you want to delete the project '{project_slug}'?",
                         ),
                     )
                     .unwrap_or(false)
@@ -89,31 +64,11 @@ pub fn ProjectSettings() -> impl IntoView {
         if let Some(Ok(_)) = result {
             set_delete_project_action_result("Project deleted".to_string());
         } else if let Some(Err(e)) = result {
-            set_delete_project_action_result(format!("Error: {}", e));
+            set_delete_project_action_result(format!("Error: {e}"));
         }
     });
-
-    let reload_project_action = Action::new(|intput: &(ProjectSlugStr, String)| {
-        let (project_slug, csrf) = intput.clone();
-        async move { server_fns::on_reload_project(csrf, project_slug).await }
-    });
-
-    let on_reload_project = move |_| {
-        reload_project_action.dispatch((slug(), csrf()));
-    };
-    let (reload_project_action_result,set_reload_project_action_result ) = signal("".to_string());
-
-    Effect::new(move |_| {
-        let result = reload_project_action.value().get();
-        if let Some(Ok(_)) = result {
-            set_reload_project_action_result("Project reload requested".to_string());
-        } else if let Some(Err(e)) = result {
-            set_reload_project_action_result(format!("Error: {}", e));
-        }
-    });
-
-
-
+    
+    
 
 
     view! {
@@ -123,28 +78,20 @@ pub fn ProjectSettings() -> impl IntoView {
             <div class="section-border">
                 <h2 class="section-title">"Project Status & Activation"</h2>
                 <p class="section-desc">"Control whether your project is live and accessible."</p>
-                <div class="mt-6 flex items-center justify-between">
-                    <div>
-                        <span class="text-sm font-medium text-white">"Current Status: "</span>
-                        <span class=move || {
-                            format!(
-                                "text-sm font-semibold {}",
-                                if is_active() { "text-green-400" } else { "text-gray-500" },
-                            )
-                        }>{move || if is_active() { "Online" } else { "Offline" }}</span>
-                    </div>
-                    <button
-                        class="btn btn-primary"
-                        on:click=on_toggle_project
-                        disabled=move || toggle_project_action.pending().get()
-                    >
-                        {move || if is_active() { "Deactivate" } else { "Activate" }}
-                    </button>
-                </div>
-                <div class="mt-2 text-sm text-right min-h-[1.25em]">
-                    {toggle_project_action_result}
-                </div>
-                <Show when=move || is_active() && !toggle_project_action.pending().get()>
+                <Show
+                    when=move || is_active()
+                    fallback=move || {
+                        view! {
+                            <div class="flex items-center my-2">
+                                <p class="text-sm font-medium text-white">"Project is not live"</p>
+                                <p class="text-xs text-gray-400 ml-4">
+                                    "Set a Snapshot as active to make it live."
+                                </p>
+                            </div>
+                        }
+                    }
+                >
+
                     <div class="mt-6 pt-6 border-t border-gray-700 space-y-4">
                         <div class="flex justify-between items-center">
                             <h3 class="text-base font-semibold leading-6 text-white">
@@ -172,13 +119,7 @@ pub fn ProjectSettings() -> impl IntoView {
                             <a
                                 class="inline-flex items-center gap-x-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition duration-150 ease-in-out"
 
-                                href=move || {
-                                    format!(
-                                        "http://{}.{}/",
-                                        slug(),
-                                        hosting_url(),
-                                    )
-                                }
+                                href=move || { format!("http://{}.{}/", slug(), hosting_url()) }
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
@@ -219,28 +160,6 @@ pub fn ProjectSettings() -> impl IntoView {
 
             </div>
 
-            // --- Reload Section ---
-            <div class="section-border">
-                <h2 class="section-title">"Reload Project Cache"</h2>
-                <p class="section-desc">
-                    "Force the hosting server to reload your project files from disk. Use this after manual SFTP uploads if changes aren't reflected."
-                </p>
-                // Aligned to the right
-                <div class="mt-6 flex items-center justify-end">
-                    <button
-                        class="btn btn-primary"
-                        on:click=on_reload_project
-                        disabled=move || reload_project_action.pending().get()
-                    >
-                        "Reload Project"
-                    </button>
-                </div>
-                // Feedback for reload action
-                <div class="mt-2 text-sm text-right min-h-[1.25em]">
-                    {reload_project_action_result}
-                </div>
-            </div>
-
             // --- Danger Zone ---
             // Subtle red border hint
             <div class=" pb-6">
@@ -278,11 +197,14 @@ pub mod server_fns {
     use crate::AppResult;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+        use crate::api::ssr::request_server_project_action;
         use crate::security::permission::ssr::handle_project_permission_request;
         use crate::api::ssr::{request_server_action, request_hosting_action};
         use common::permission::Permission;
         use common::server_action::user_action::UserAction;
         use common::Slug;
+            use common::server_project_action::snapshot::SnapshotAction;
+
     }}
 
     #[server]
@@ -290,7 +212,7 @@ pub mod server_fns {
         csrf: String,
         project_slug: ProjectSlugStr,
     ) -> AppResult<()> {
-        Ok(handle_project_permission_request(
+        handle_project_permission_request(
             project_slug,
             Permission::Owner,
             Some(csrf),
@@ -299,92 +221,51 @@ pub mod server_fns {
                     "DELETE FROM permissions WHERE project_id = $1 RETURNING user_id",
                     project_slug.id,
                 )
-                .fetch_all(&db)
-                .await?;
+                    .fetch_all(&db)
+                    .await?;
                 let users = sqlx::query!(
                     "SELECT id,username FROM users WHERE id = ANY($1)",
                     &user_ids.iter().map(|u| u.user_id).collect::<Vec<_>>()
                 )
-                .fetch_all(&db)
-                .await?;
+                    .fetch_all(&db)
+                    .await?;
                 let user_slugs = users
                     .into_iter()
                     .map(|u| Slug::new(u.id, u.username))
                     .collect::<Vec<_>>();
-                let is_active = sqlx::query!(
-                    "delete from projects where id = $1 returning is_active",
+                let snapshot_names = sqlx::query!( 
+                    "DELETE FROM projects_snapshots WHERE project_id = $1 RETURNING snapshot_name",
+                    project_slug.id
+                ).fetch_all(&db).await?;
+                let active_id = sqlx::query!(
+                    "delete from projects where id = $1 returning active_snapshot_id",
                     project_slug.id
                 )
-                .fetch_one(&db)
-                .await?
-                .is_active;
-
-                if is_active {
-                    let action = common::hosting_action::HostingAction::StopServingProject;
-                    request_hosting_action(project_slug.clone(), action).await?;
+                    .fetch_one(&db)
+                    .await?
+                    .active_snapshot_id;
+                if active_id.is_some() {
+                    request_server_project_action(project_slug.clone(), SnapshotAction::UnmountProd.into()).await?;
+                    request_hosting_action(project_slug.clone(), common::hosting_action::HostingAction::StopServingProject).await?;
                 }
+                for snapshot in snapshot_names {
+                    request_server_project_action(project_slug.clone(), SnapshotAction::Delete{snapshot_name:snapshot.snapshot_name}.into()).await?;
+                }
+
 
                 request_server_action(
                     UserAction::RemoveProject {
                         user_slugs,
                         project_slug,
                     }
-                    .into(),
+                        .into(),
                 )
-                .await?;
+                    .await?;
                 leptos_axum::redirect("/user/projects");
 
                 Ok(())
             },
         )
-        .await?)
-    }
-
-    #[server]
-    pub async fn toggle_project_active(
-        csrf: String,
-        project_slug: ProjectSlugStr,
-        is_active: bool,
-    ) -> AppResult<()> {
-        Ok(handle_project_permission_request(
-            project_slug,
-            Permission::Owner,
-            Some(csrf),
-            |_, db, project_slug| async move {
-                let _ = sqlx::query!(
-                    "UPDATE projects SET is_active = $1 WHERE id = $2",
-                    is_active,
-                    project_slug.id
-                )
-                .execute(&db)
-                .await?;
-                let action = if is_active {
-                    common::hosting_action::HostingAction::ServeReloadProject
-                } else {
-                    common::hosting_action::HostingAction::StopServingProject
-                };
-                request_hosting_action(project_slug, action).await?;
-                Ok(())
-            },
-        )
-        .await?)
-    }
-
-    #[server]
-    pub async fn on_reload_project(
-        csrf: String,
-        project_slug: ProjectSlugStr,
-    ) -> AppResult<()> {
-        Ok(handle_project_permission_request(
-            project_slug,
-            Permission::Owner,
-            Some(csrf),
-            |_, _, project_slug| async move {
-                let action = common::hosting_action::HostingAction::ServeReloadProject;
-                request_hosting_action(project_slug, action).await?;
-                Ok(())
-            },
-        )
-        .await?)
+            .await
     }
 }

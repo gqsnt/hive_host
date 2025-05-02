@@ -199,6 +199,6 @@ fn format_bytes(bytes: u64) -> String {
     } else if bytes_f64 >= KB {
         format!("{:.2} KB", bytes_f64 / KB)
     } else {
-        format!("{} Bytes", bytes)
+        format!("{bytes} Bytes")
     }
 }

@@ -54,28 +54,24 @@ pub fn NewProjectPage(
 
 pub mod server_fns {
     use leptos::server;
-    use serde::{Deserialize, Serialize};
-    use validator::Validate;
     use crate::AppResult;
-    use crate::security::utils::SANITIZED_REGEX;
+
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::utils::ssr::verify_easy_hash;
         use leptos::leptos_dom::log;
+
     }}
     
-    #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-    pub struct NewProjectForm {
-        #[validate(length(min = 2, max = 30), regex(path = *SANITIZED_REGEX, message="Project must contain only letters (a-z, A-Z), number (0-9) and underscores (_)"))]
-        pub name: String,
-    }
+    
+    
+  
+  
+    
+   
 
     #[server]
     pub async fn create_project(csrf: String, name: String) -> AppResult<()> {
-        let new_project_form = NewProjectForm{
-            name: name.clone(),
-        };
-        new_project_form.validate()?;
         let auth = crate::ssr::auth(false)?;
         let server_vars = crate::ssr::server_vars()?;
         verify_easy_hash(
@@ -101,17 +97,44 @@ pub mod server_fns {
 
     #[cfg(feature = "ssr")]
     pub mod ssr {
-        use crate::security::utils::SANITIZED_REGEX;
-        use validator::Validate;
-        use crate::models::Project;
+        use validator::{Validate, ValidationError};
+        use crate::models::{Project};
         use common::permission::Permission;
         use common::server_action::user_action::UserAction;
         use common::{Slug};
         use crate::AppResult;
+        use crate::security::utils::ssr::SANITIZED_REGEX;
 
+        pub fn parse_repo(repo_url:&str) -> Result<(String, String, String), ValidationError>{
+            if repo_url.is_empty() {
+                return Err(ValidationError::new("invalid_git_repo"));
+            };
+            let https_git = "https://github.com/";
+            let ssh_git = "git@github.com:";
+
+            let (before, after) = if repo_url.starts_with(https_git){
+                (https_git.to_string(), repo_url.replace(https_git, ""))
+            }else if repo_url.starts_with(ssh_git) {
+                (ssh_git.to_string(), repo_url.replace(ssh_git, ""))
+            }
+            else {
+                return Err(ValidationError::new("invalid_git_repo"));
+            };
+            let (user_name, repo_name) = after.split_once("/").ok_or_else(|| ValidationError::new("invalid_git_repo"))?;
+
+            Ok((before,user_name.to_string(), repo_name.to_string()))
+
+        }
+
+
+        pub fn validate_git_repo(repo_url: &str) -> Result<(), ValidationError> {
+            parse_repo(repo_url)?;
+            Ok(())
+        }
+        
         #[derive(Debug, Clone, Validate)]
         pub struct CreateProjectForm {
-            #[validate(length(min = 3, max = 20),regex(path=*SANITIZED_REGEX, message="Username must contain only letters (a-z, A-Z), number (0-9) and underscores (_)"))]
+            #[validate(length(min = 2, max = 30), regex(path = *SANITIZED_REGEX, message="Project must contain only letters (a-z, A-Z), number (0-9) and underscores (_)"))]
             pub name: String,
         }
 
@@ -122,9 +145,10 @@ pub mod server_fns {
             use crate::api::ssr::request_server_action;
             let pool = crate::ssr::pool()?;
             let project_form = CreateProjectForm {
-                name: name.clone(),
+                name: name.clone()
             };
             project_form.validate()?;
+            
             let project =
                 sqlx::query!("INSERT INTO projects (name) VALUES ($1) returning id", project_form.name)
                     .fetch_one(&pool)

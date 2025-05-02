@@ -119,7 +119,6 @@ impl HelperClientActor {
 
     /// Ensures a valid connection exists, attempting to reconnect if necessary.
     /// Returns mutable references to the reader and writer if successful.
-    #[instrument(skip(self))]
     async fn ensure_connection(&mut self) -> HelperClientResult<(&mut BufReader<OwnedReadHalf>, &mut BufWriter<OwnedWriteHalf>)> {
         if self.writer.is_none() || self.reader.is_none() {
             debug!("No active connection, attempting to connect...");
@@ -128,21 +127,18 @@ impl HelperClientActor {
             // Optionally add a cheap "is alive" check here if needed,
             // e.g., check stream.peer_addr(), although read/write errors
             // are the more definitive way to detect breakage.
-            debug!("Connection appears active.");
         }
 
         // We need to return mutable refs, which requires careful handling
         // This unwrap is safe because connect_with_retry ensures they are Some
         Ok((self.reader.as_mut().unwrap(), self.writer.as_mut().unwrap()))
     }
-
-    #[instrument(skip(self))]
+    
     async fn connect_with_retry(&mut self) -> HelperClientResult<()> {
         let mut delay = RECONNECT_DELAY_MS;
         loop {
             match UnixStream::connect(&self.socket_path).await {
                 Ok(stream) => {
-                    info!("Successfully connected to helper socket: {}", self.socket_path);
                     // Split the stream for BufReader/BufWriter if necessary,
                     // but keeping them separate simplifies ownership for reconnection.
                     // Let's re-connect fully each time for simplicity here.
@@ -171,7 +167,6 @@ impl HelperClientActor {
     }
 
     /// Processes a single command, handling connection and communication.
-    #[instrument(skip(self, command), fields(command = ?command))]
     async fn process_command(&mut self, command: ServerHelperCommand) -> HelperClientResult<()> {
         let request = ServerHelperRequest { command };
         let request_json = serde_json::to_string(&request)
@@ -194,8 +189,6 @@ impl HelperClientActor {
                             continue;
                         }
                     }
-                    debug!("Successfully wrote request to helper.");
-
                     // Attempt to read response
                     let mut line = String::new();
                     match reader.read_line(&mut line).await {
@@ -232,8 +225,7 @@ impl HelperClientActor {
                 error!("Failed to deserialize response: {}. Raw: '{}'", e, response_line.trim());
                 HelperClientError::DeserializationError(e)
             })?;
-
-        debug!("Received response from helper: {:?}", response);
+        
 
         // Check response status
         match response.status {
@@ -245,7 +237,7 @@ impl HelperClientActor {
 
 /// Spawns the actor task and returns the client handle.
 pub fn start_helper_client(socket_path: String) -> HelperClient {
-    let (command_tx, command_rx) = mpsc::channel(100); // Buffer size 100
+    let (command_tx, command_rx) = mpsc::channel(500); // Buffer size 100
     let actor = HelperClientActor::new(socket_path, command_rx);
 
     tokio::spawn(actor.run()); // Spawn the actor task

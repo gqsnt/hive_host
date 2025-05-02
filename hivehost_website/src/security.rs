@@ -23,7 +23,7 @@ pub async fn get_user() -> AppResult<User> {
         Ok(user)
     }else{
         leptos_axum::redirect("/login");
-        Err(AppError::UnauthorizedAuthAccess.into())
+        Err(AppError::UnauthorizedAuthAccess)
     }
 }
 
@@ -67,7 +67,7 @@ pub mod ssr {
         pub async fn get_from_id(id: UserId, pool: &PgPool) -> Option<Self> {
             let user = sqlx::query_as!(
                 SqlUserShort,
-                r#"SELECT id, email, role as "role: RoleType",username,slug FROM users WHERE id = $1"#,
+                r#"SELECT id, role as "role: RoleType",username, slug FROM users WHERE id = $1"#,
                 id
             )
             .fetch_one(pool)
@@ -75,53 +75,46 @@ pub mod ssr {
             .ok()?;
             Some(Self {
                 id: user.id,
-                email: user.email,
                 role_type: user.role,
                 username: user.username,
                 slug: user.slug,
             })
         }
-
-        pub async fn get_from_email_with_password(
+        
+        pub async fn exist(
             email: &str,
             pool: &PgPool,
-        ) -> AppResult<(Self, SecretString)> {
-            let user = sqlx::query_as!(
-                SqlUserLong,
-                r#"SELECT id, email, password, role as "role: RoleType", username, slug FROM users WHERE email = $1"#,
+        ) -> AppResult<bool> {
+            let user = sqlx::query!(
+                r#"SELECT  email FROM users WHERE email = $1"#,
+                email
+            )
+                .fetch_optional(pool)
+                .await?;
+            Ok(user.is_some())
+        }
+        
+        
+
+        pub async fn get_id_password(
+            email: &str,
+            pool: &PgPool,
+        ) -> AppResult<(UserId, SecretString)> {
+            let user = sqlx::query!(
+                r#"SELECT  id, email, password FROM users WHERE email = $1"#,
                 email
             )
                 .fetch_one(pool)
                 .await?;
-            Ok((
-                Self {
-                    id: user.id,
-                    email: user.email,
-                    role_type: user.role,
-                    username: user.username,
-                    slug: user.slug
-                },
-                user.password,
-            ))
+            Ok((user.id, SecretString::from(user.password)))
         }
     }
-
-    #[derive(sqlx::FromRow, Clone)]
-    pub struct SqlUserLong {
-        pub id: UserId,
-        pub email: String,
-        pub password: SecretString,
-        pub role: RoleType,
-        pub username: String,
-        pub slug : UserSlugStr,
-    }
-
+    
     #[derive(sqlx::FromRow, Clone)]
     pub struct SqlUserShort {
         pub id: UserId,
-        pub email: String,
         pub role: RoleType,
         pub username: String,
-        pub slug : UserSlugStr,
+        slug : UserSlugStr,
     }
 }

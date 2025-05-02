@@ -9,7 +9,7 @@ create table if not exists users
     password text      not null,
     role     role_type not null,
     slug     TEXT
-        GENERATED ALWAYS AS (username || id::TEXT)
+        GENERATED ALWAYS AS (username ||'_'|| id::TEXT)
             STORED not null
 );
 
@@ -19,11 +19,22 @@ create table if not exists projects
 (
     id        bigserial primary key,
     name      text                  not null,
-    is_active boolean default false not null,
     slug      TEXT
-        GENERATED ALWAYS AS (name || id::TEXT)
+        GENERATED ALWAYS AS (name ||'_'|| id::TEXT)
             STORED not null
 );
+
+create table if not exists projects_snapshots
+(
+    id        bigserial primary key,
+    project_id BIGINT references projects (id) on delete cascade NOT NULL,
+    name      text                  not null,
+    snapshot_name      text                  not null,
+    description text,
+    created_at timestamp default now() not null
+);
+
+alter table projects add column if not exists active_snapshot_id BIGINT references projects_snapshots (id) on delete set null;
 
 
 

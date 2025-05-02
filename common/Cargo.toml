@@ -5,10 +5,15 @@ edition = "2024"
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-sqlx = { workspace = true, features = ["runtime-async-std", "postgres", "uuid", "chrono"], optional = true }
+sqlx = { version = "0.8.5", features = ["runtime-async-std", "postgres", "uuid", "chrono"], optional = true }
 strum = { workspace = true, features = ["derive"] }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 
+tokio = {workspace=true, optional = true, features = ["process"]}
+
 [features]
-ssr = ["dep:sqlx"]
+website-ssr = ["dep:sqlx"]
+website-to-server=[]
+website-to-hosting=[]
+server=["tokio"]

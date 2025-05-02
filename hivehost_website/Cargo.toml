@@ -24,11 +24,11 @@ blake2 = { version = "0.10.6", optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"], optional = true }
 
 reqwest = { version = "0.12.15", features = ["rustls-tls", "json"], optional = true }
-common = { path = "../common" }
+common = { path = "../common",features = ["website-to-server", "website-to-hosting"] }
 
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, features = ["fs", "compression-full"], optional = true }
-sqlx = { workspace = true, optional = true, features = ["postgres", "time", "runtime-tokio-rustls"] }
+sqlx = { version = "0.8.5", optional = true, features = ["postgres", "time", "runtime-tokio-rustls"] }
 serde = { workspace = true, features = ["derive"] }
 dotenvy = { workspace = true, optional = true }
 anyhow = { version = "1.0.97", optional = true }
@@ -47,10 +47,10 @@ send_wrapper = { version = "0.6.0", features = ["futures"] }
 uuid = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 strum_macros = { workspace = true }
-serde_json = { workspace = true }
-validator = { version = "0.20.0", features = ["derive"] }
-regex = "1.11.1"
+validator = { version = "0.20.0", features = ["derive"], optional = true }
+regex = {workspace = true, optional = true} # maybe swtich to ssr common has regex too
 cfg-if = "1.0.0"
+time = { version = "0.3.41" , features = ["serde", "formatting"]}
 
 [features]
 hydrate = [
@@ -66,7 +66,6 @@ ssr = [
     "leptos_meta/ssr",
     "leptos_router/ssr",
     "dep:tower",
-    "dep:sqlx",
     "dep:password-auth",
     "dep:dotenvy",
     "dep:axum_session_auth",
@@ -83,7 +82,10 @@ ssr = [
     "dep:async-trait",
     "dep:memory-serve",
     "dep:reqwest",
-    "common/ssr"
+    "common/website-ssr",
+    "dep:regex",
+    "dep:validator",
+    "dep:sqlx",
 ]
 
 # Defines a size-optimized profile for the WASM bundle in release mode

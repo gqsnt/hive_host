@@ -1,15 +1,72 @@
 #![feature(associated_type_defaults)]
 
+
+#[cfg(feature = "website-to-hosting")]
 pub mod hosting_action;
+
+#[cfg(feature = "website-to-server")]
 pub mod permission;
+
+
+#[cfg(feature = "website-to-server")]
 pub mod server_action;
+
+
+#[cfg(feature = "website-to-server")]
 pub mod server_project_action;
+
+#[cfg(feature = "server")]
 pub mod server_helper;
+
+#[cfg(feature = "server")]
+pub mod command;
 
 use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 use std::str::FromStr;
 use thiserror::Error;
+
+
+
+
+pub const SERVICE_USER:&str= "hivehost_server";
+pub const USER_GROUP:&str= "sftp_users";
+
+
+pub const DEV_ROOT_PATH_PREFIX: &str = "/hivehost/dev";
+pub const PROD_ROOT_PATH_PREFIX: &str = "/hivehost/prod";
+pub const USER_ROOT_PATH_PREFIX: &str = "/hivehost/users";
+
+
+pub fn get_project_dev_path(project_slug_str: &str) -> String {
+    format!("{DEV_ROOT_PATH_PREFIX}/{project_slug_str}")
+}
+pub fn get_project_snapshot_path(snapshot_name: &str) -> String {
+    format!("{DEV_ROOT_PATH_PREFIX}/{snapshot_name}")
+}
+
+
+
+pub fn get_project_prod_path(project_slug_str: &str) -> String {
+    format!("{PROD_ROOT_PATH_PREFIX}/{project_slug_str}" )
+}
+
+
+
+pub fn get_user_path(user_slug_str: &str) -> String {
+    format!("{USER_ROOT_PATH_PREFIX}/{user_slug_str}" )
+}
+
+pub fn get_user_projects_path(user_slug_str: &str) -> String {
+    format!("{}/projects", get_user_path(user_slug_str))
+}
+
+pub fn get_user_project_path(user_slug_str: &str, project_slug_str: &str) -> String {
+    format!("{}/{}", get_user_projects_path(user_slug_str), project_slug_str)
+}
+
+
+
 
 #[macro_export]
 macro_rules! impl_chain_from {
@@ -68,7 +125,7 @@ impl Slug {
 
 impl std::fmt::Display for Slug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}_{}", self.id, self.slug)
+        write!(f, "{}_{}",self.slug, self.id )
     }
 }
 
@@ -77,13 +134,32 @@ impl FromStr for Slug {
     type Err = ParseSlugError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split('_').collect();
-        if parts.len() != 2 {
-            return Err(ParseSlugError::InvalidFormat);
+        match s.rsplit_once('_'){
+            None => {
+                Err(ParseSlugError::InvalidFormat)
+            }
+            Some((name, id)) => {
+                if id.is_empty() {
+                    return Err(ParseSlugError::InvalidFormat);
+                }
+                if name.is_empty() {
+                    return Err(ParseSlugError::InvalidFormat);
+                }
+                // check regex for name
+
+                match id.parse::<i64>(){
+                    Ok(id) => {
+                        if id < 0 {
+                            return Err(ParseSlugError::InvalidFormat);
+                        }
+                        Ok(Slug::new(id, name.to_string()))
+                    }
+                    Err(e) => {
+                         Err(ParseSlugError::ParseIntError(e.to_string()))
+                    }
+                }
+            }
         }
-        let id = parts[0].parse::<i64>()?;
-        let slug = parts[1].to_string();
-        Ok(Slug { id, slug })
     }
 }
 

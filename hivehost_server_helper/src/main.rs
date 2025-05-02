@@ -1,22 +1,26 @@
-use tracing::{error, info, Level};
-use tracing_subscriber;
-use hivehost_server_helper::{handler, ServerHelperError, ServerHelperResult};
-use dotenvy;
+use std::sync::LazyLock;
+use tracing::{error, info};
+use hivehost_server_helper::{handler, ServerHelperError, ServerHelperResult, BTRFS_DEVICE};
 use listenfd::ListenFd;
 use tokio::net::UnixListener;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 #[tokio::main]
 async fn main() -> ServerHelperResult<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO) // Adjust log level as needed
-        .with_target(true)
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_env("/home/canarit/projects/hive_host/.env")
+                .unwrap_or_else(|_| format!("{}=debug", env!("CARGO_CRATE_NAME")).into()),
+        )
+        .with(tracing_subscriber::fmt::layer().with_ansi(true))
         .init();
     dotenvy::from_path("/home/canarit/projects/hive_host/.env").expect("Failed to load .env file");
+    LazyLock::force(&BTRFS_DEVICE);
     let mut listen_fds = ListenFd::from_env();
     info!("HiveHost Helper Service starting...");
     let unix_listener_std = match listen_fds.take_unix_listener(0)? { // Use listen_fds result directly
         Some(listener) => {
-            info!("Successfully obtained listener socket from systemd.");
             listener // This is a std::os::unix::net::UnixListener
         },
         None => {
