@@ -1,15 +1,10 @@
 use crate::UserSlugStr;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ServerHelperRequest {
-    // Add a unique ID for tracing/correlation if needed
-    // pub request_id: String,
-    pub command: ServerHelperCommand,
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ServerHelperCommand {
+pub enum ServerToHelperAction {
+    Ping,
     CreateUser {
         user_slug: UserSlugStr,
         user_path: String,
@@ -61,14 +56,11 @@ pub enum ServerHelperCommand {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ServerHelperResponse {
-    // pub corresponding_request_id: String, // Optional
-    pub status: ServerHelperResponseStatus,
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum ServerToHelperResponse {
+    Ok,
+    Pong,
+    Error(String),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ServerHelperResponseStatus {
-    Success,
-    Error(String), // Contains error message
-}

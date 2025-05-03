@@ -741,12 +741,19 @@ checksum = "186dce98367766de751c42c4f03970fc60fc012296e706ccbb9d5df9b6c1e271"
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "dashmap",
+ "deadpool",
+ "listenfd",
+ "secrecy",
  "serde",
+ "serde_json",
  "sqlx",
  "strum",
  "strum_macros",
  "thiserror 2.0.12",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1609,30 +1616,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
-name = "hivehost_hosting"
-version = "0.1.0"
-dependencies = [
- "async-compression",
- "common",
- "dashmap",
- "deadpool-postgres",
- "dotenvy",
- "http",
- "http-body-util",
- "hyper",
- "hyper-util",
- "mime_guess",
- "quick_cache",
- "serde_json",
- "socket2 0.5.9",
- "thiserror 2.0.12",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "walkdir",
-]
-
-[[package]]
 name = "hivehost_server"
 version = "0.1.0"
 dependencies = [
@@ -1656,13 +1639,34 @@ version = "0.1.0"
 dependencies = [
  "common",
  "dotenvy",
- "listenfd",
- "serde",
- "serde_json",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "hivehost_server_hosting"
+version = "0.1.0"
+dependencies = [
+ "async-compression",
+ "common",
+ "dashmap",
+ "deadpool-postgres",
+ "dotenvy",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "mime_guess",
+ "quick_cache",
+ "serde_json",
+ "socket2 0.5.9",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "walkdir",
 ]
 
 [[package]]
@@ -1681,8 +1685,9 @@ dependencies = [
  "chrono",
  "common",
  "console_error_panic_hook",
+ "dashmap",
+ "deadpool",
  "dotenvy",
- "gloo-net",
  "http",
  "leptos",
  "leptos_axum",
@@ -1697,8 +1702,8 @@ dependencies = [
  "regex",
  "reqwest",
  "secrecy",
- "send_wrapper",
  "serde",
+ "serde_json",
  "sqlx",
  "strum",
  "strum_macros",

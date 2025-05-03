@@ -1,13 +1,13 @@
 use crate::{ServerHelperResult, BTRFS_DEVICE};
 use common::command::run_external_command;
-use common::server_helper::ServerHelperCommand;
 use common::{get_project_dev_path, get_project_prod_path, SERVICE_USER, USER_GROUP};
-use tracing::info;
+use tracing::{error, info};
+use common::multiplex_protocol::{GenericRequest, GenericResponse};
+use common::server::server_to_helper::{ServerToHelperAction, ServerToHelperResponse};
 
-pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult<()> {
-    info!("Executing command: {:?}", command);
-    match command {
-        ServerHelperCommand::CreateUser {
+pub async fn execute_command(action: ServerToHelperAction) -> ServerHelperResult<ServerToHelperResponse> {
+    match action {
+        ServerToHelperAction::CreateUser {
             user_slug,
             user_path,
             user_projects_path,
@@ -27,7 +27,7 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
                     &user_slug,
                 ],
             )
-            .await?;
+                .await?;
 
             run_external_command("chown", &["root:root", &user_path]).await?;
             run_external_command("chmod", &["755", &user_path]).await?;
@@ -35,10 +35,10 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
             run_external_command("chown", &["root:root", &user_projects_path]).await?;
             run_external_command("chmod", &["755", &user_projects_path]).await?;
         }
-        ServerHelperCommand::DeleteUser { user_slug } => {
+        ServerToHelperAction::DeleteUser { user_slug } => {
             run_external_command("userdel", &["--remove", &user_slug]).await?;
         }
-        ServerHelperCommand::CreateProject {
+        ServerToHelperAction::CreateProject {
             project_slug: project_slug_str,
             service_user,
         } => {
@@ -72,7 +72,7 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
             run_external_command("setfacl", &["-d", "-m", &service_acl_rwx_entry, &dev_path])
                 .await?;
         }
-        ServerHelperCommand::DeleteProject {
+        ServerToHelperAction::DeleteProject {
             project_slug: project_slug_str,
         } => {
             let project_path = get_project_dev_path(&project_slug_str);
@@ -80,7 +80,7 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
             run_external_command("rm", &["-rf", &prod_path]).await?;
             run_external_command("btrfs", &["subvolume", "delete", &project_path]).await?;
         }
-        ServerHelperCommand::SetAcl {
+        ServerToHelperAction::SetAcl {
             path,
             user_slug,
             is_read_only,
@@ -90,12 +90,12 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
             run_external_command("setfacl", &["-R", "-m", &acl_entry, &path]).await?;
             run_external_command("setfacl", &["-d", "-m", &acl_entry, &path]).await?;
         }
-        ServerHelperCommand::RemoveAcl { path, user_slug } => {
+        ServerToHelperAction::RemoveAcl { path, user_slug } => {
             let acl_spec = format!("u:{user_slug}");
             run_external_command("setfacl", &["-x", &acl_spec, &path]).await?;
             run_external_command("setfacl", &["-d", "-x", &acl_spec, &path]).await?;
         }
-        ServerHelperCommand::BindMountUserProject {
+        ServerToHelperAction::BindMountUserProject {
             source_path,
             target_path,
         } => {
@@ -104,14 +104,14 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
             run_external_command("chmod", &["755", &target_path]).await?;
             run_external_command("mount", &["--bind", &source_path, &target_path]).await?;
         }
-        ServerHelperCommand::UnmountUserProject { target_path } => {
+        ServerToHelperAction::UnmountUserProject { target_path } => {
             // Check if it's actually mounted before trying to unmount?
             // `findmnt -n -o TARGET --target "$target_path"`
             run_external_command("umount", &[&target_path]).await?;
             // Attempt to remove the empty mount point directory after unmounting
             tokio::fs::remove_dir(&target_path).await?;
         }
-        ServerHelperCommand::CreateSnapshot {
+        ServerToHelperAction::CreateSnapshot {
             path,
             snapshot_path,
         } => {
@@ -125,12 +125,12 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
                     &snapshot_path,
                 ],
             )
-            .await?;
+                .await?;
         }
-        ServerHelperCommand::DeleteSnapshot { snapshot_path } => {
+        ServerToHelperAction::DeleteSnapshot { snapshot_path } => {
             run_external_command("btrfs", &["subvolume", "delete", &snapshot_path]).await?;
         }
-        ServerHelperCommand::MountSnapshot {
+        ServerToHelperAction::MountSnapshot {
             path,
             snapshot_name,
         } => {
@@ -143,11 +143,34 @@ pub async fn execute_command(command: ServerHelperCommand) -> ServerHelperResult
                     &path,
                 ],
             )
-            .await?;
+                .await?;
         }
-        ServerHelperCommand::UnmountProd { path } => {
+        ServerToHelperAction::UnmountProd { path } => {
             run_external_command("umount", &[&path]).await?;
         }
+        ServerToHelperAction::Ping => { 
+            return Ok(ServerToHelperResponse::Pong)
+        }
     }
-    Ok(())
+    Ok(ServerToHelperResponse::Ok)
+}
+
+
+
+pub async fn handle_command(request:GenericRequest<ServerToHelperAction>) -> GenericResponse<ServerToHelperResponse> {
+    
+    info!("Executing command: {:?}", request.action);
+    match execute_command(request.action).await{
+        Ok(action_response) => GenericResponse::<ServerToHelperResponse>{
+            id: request.id,
+            action_response,
+        },
+        Err(e) =>  {
+            error!("Error executing command: {:?}", e);
+            GenericResponse::<ServerToHelperResponse>{
+                id: request.id,
+                action_response: ServerToHelperResponse::Error(e.to_string()),
+            }
+        }
+    }
 }

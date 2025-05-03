@@ -1,5 +1,5 @@
 [package]
-name = "hivehost_hosting"
+name = "hivehost_server_hosting"
 version = "0.1.0"
 edition = "2024"
 
@@ -26,5 +26,5 @@ socket2 = { version = "0.5.9", features = ["all"] }
 quick_cache = { version = "0.6.13" }
 deadpool-postgres = "0.14.1"
 async-compression = { version = "0.4.23", features = ["all"] }
-common = { path = "../common", features = ["website-to-hosting"] }
+common = { path = "../common", features = ["server-to-hosting", "server-children" , "multiplex-protocol"] }
 serde_json = { workspace = true }

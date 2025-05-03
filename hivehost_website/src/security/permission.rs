@@ -1,7 +1,8 @@
-use crate::AppResult;
-use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
+use crate::{AppResult};
+use common::website_to_server::server_project_action::{ServerProjectAction, ServerProjectResponse};
 use common::ProjectSlugStr;
 use leptos::server;
+
 
 pub fn token_url(server_url: &str, token: &str) -> String {
     format!("http://{server_url}/token/{token}")
@@ -12,18 +13,25 @@ pub async fn request_server_project_action_front(
     project_slug: ProjectSlugStr,
     action: ServerProjectAction,
     csrf: Option<String>,
-) -> AppResult<ServerProjectActionResponse> {
-    use crate::api::ssr::{request_server_project_action, request_server_project_action_token};
-    use common::server_project_action::IsProjectServerAction;
+) -> AppResult<ServerProjectResponse> {
+    use crate::AppError;
+    use common::website_to_server::{WebSiteToServerAction, WebSiteToServerResponse};
+    use common::website_to_server::server_project_action::IsProjectServerAction;
     ssr::handle_project_permission_request(
         project_slug,
         action.permission(),
         action.require_csrf().then_some(csrf.unwrap_or_default()),
         |_, _, project_slug| async move {
-            if action.with_token() {
-                request_server_project_action_token(project_slug, action).await
-            } else {
-                request_server_project_action(project_slug, action).await
+            let mc = crate::ssr::multiplexer_client().unwrap();
+            let response = mc.send(
+                WebSiteToServerAction::from_server_project_action(project_slug.to_string(),action)
+                ).await;
+
+            match response {
+                Ok(WebSiteToServerResponse::ServerProjectActionResponse(action_response)) => {
+                    Ok(action_response)
+                }
+                _=> Err(AppError::Custom("server action failed".to_string())),
             }
         },
     )
@@ -36,7 +44,7 @@ pub mod ssr {
     use crate::security::utils::ssr::{get_auth_session_user_id, verify_easy_hash};
     use crate::ssr::{permissions, pool, Permissions};
     use crate::{AppError, AppResult};
-    use common::permission::Permission;
+    use common::website_to_server::permission::Permission;
     use common::{ProjectId, ProjectSlugStr, Slug, UserId};
     use leptos::logging::log;
     use sqlx::PgPool;

@@ -1,170 +1,81 @@
-use crate::app::get_server_url;
-use crate::security::permission::{request_server_project_action_front, token_url};
+use crate::security::permission::{request_server_project_action_front};
 use crate::AppResult;
-use common::server_project_action::{ServerProjectAction, ServerProjectActionResponse};
-use common::{ProjectSlugStr, StringContent};
+use common::website_to_server::server_project_action::{ServerProjectAction, ServerProjectResponse};
+use common::{ProjectSlugStr};
 use leptos::prelude::Action;
-
-#[cfg(not(feature = "ssr"))]
-pub fn fetch_api(
-    path: String,
-    content: StringContent,
-) -> impl std::future::Future<Output = AppResult<ServerProjectActionResponse>> + Send + 'static {
-    use leptos::prelude::on_cleanup;
-    use send_wrapper::SendWrapper;
-
-    SendWrapper::new(async move {
-        let abort_controller = SendWrapper::new(web_sys::AbortController::new().ok());
-        let abort_signal = abort_controller.as_ref().map(|a| a.signal());
-
-        //abort in-flight requests if, e.g., we've navigated away from this page
-        on_cleanup(move || {
-            if let Some(abort_controller) = abort_controller.take() {
-                abort_controller.abort()
-            }
-        });
-
-        let path_split = path.split("://").collect::<Vec<_>>();
-        let dns_path = if path_split.len() > 1 {
-            let path_split = path_split[1].split('/').collect::<Vec<_>>();
-            let path = path_split[0].to_string();
-            format!("{}://{}", path_split[0], path)
-        } else {
-            path.clone()
-        };
-
-        Ok(gloo_net::http::Request::post(&path)
-            .header("Access-Control-Allow-Origin", &dns_path)
-            .header("Content-Type", "application/json")
-            .abort_signal(abort_signal.as_ref())
-            .json(&content)?
-            .send()
-            .await?
-            .json::<ServerProjectActionResponse>()
-            .await?)
-    })
-}
-
-#[cfg(feature = "ssr")]
-pub async fn fetch_api(
-    path: String,
-    content: StringContent,
-) -> AppResult<ServerProjectActionResponse> {
-    let mut headers = reqwest::header::HeaderMap::new();
-    let server_vars = crate::ssr::server_vars().expect("SSR server vars missing");
-    headers.insert(
-        "Access-Control-Allow-Origin",
-        format!("http://{}", server_vars.server_url)
-            .parse()
-            .unwrap(),
-    );
-    headers.insert("Content-Type", "application/json".parse().unwrap());
-    headers.insert("Accept", "application/json".parse().unwrap());
-    let client = reqwest::Client::builder()
-        .default_headers(headers)
-        .build()?;
-    Ok(client
-        .post(path)
-        .json(&content)
-        .send()
-        .await?
-        .json::<ServerProjectActionResponse>()
-        .await?)
-}
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use crate::AppResult;
-    use common::hosting_action::{HostingAction, HostingActionRequest, HostingActionResponse};
-    use common::server_action::{ServerAction, ServerActionResponse};
-    use common::server_project_action::{
-        ServerProjectAction, ServerProjectActionRequest, ServerProjectActionResponse,
+    use leptos::logging::log;
+    use crate::{AppError, AppResult};
+    use common::website_to_server::server_action::{ServerAction, ServerActionResponse};
+    use common::website_to_server::server_project_action::{
+        ServerProjectAction, ServerProjectResponse,
     };
     use common::Slug;
-    use secrecy::ExposeSecret;
-
-    pub async fn request_server_project_action_token(
-        project_slug: Slug,
-        action: ServerProjectAction,
-    ) -> AppResult<ServerProjectActionResponse> {
-        let client = reqwest::Client::new();
-        let server_vars = crate::ssr::server_vars()?;
-        let token = sqlx::types::Uuid::new_v4().to_string();
-        let req = ServerProjectActionRequest {
-            token: Some(token.clone()),
-            action,
-            project_slug,
-        };
-        let _ = client
-            .post(format!(
-                "http://{}/server_project_action",
-                server_vars.server_url
-            ))
-            .json(&req)
-            .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send()
-            .await?
-            .text()
-            .await?;
-        //log!("request_server_project_action_token response: {}", response);
-        Ok(ServerProjectActionResponse::Token(token))
-    }
+    use common::hosting::{HostingAction, HostingResponse};
+    use common::website_to_server::{WebSiteToServerAction, WebSiteToServerResponse};
 
     pub async fn request_hosting_action(
         project_slug: Slug,
         action: HostingAction,
-    ) -> AppResult<HostingActionResponse> {
-        let client = reqwest::Client::new();
-        let server_vars = crate::ssr::server_vars()?;
-        let req = HostingActionRequest {
-            action,
-            project_slug: project_slug.to_string(),
-        };
-        Ok(client
-            .post(format!("http://{}", server_vars.hosting_url))
-            .json(&req)
-            .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send()
-            .await?
-            .json::<HostingActionResponse>()
-            .await?)
+    ) -> AppResult<HostingResponse> {
+        let mc = crate::ssr::multiplexer_client()?;
+        let response = mc.send(
+            WebSiteToServerAction::from_hosting_action(project_slug.to_string(), action),
+        ).await;
+        match response {
+            Ok(WebSiteToServerResponse::HostingActionResponse(action_response)) => {
+                Ok(action_response)
+            }
+            _ => Err(AppError::Custom("server action failed".to_string())),
+        }
     }
 
     pub async fn request_server_project_action(
         project_slug: Slug,
         action: ServerProjectAction,
-    ) -> AppResult<ServerProjectActionResponse> {
-        let client = reqwest::Client::new();
-        let server_vars = crate::ssr::server_vars()?;
-        let req = ServerProjectActionRequest {
-            token: None,
-            action,
-            project_slug,
-        };
-        Ok(client
-            .post(format!(
-                "http://{}/server_project_action",
-                server_vars.server_url
-            ))
-            .json(&req)
-            .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send()
-            .await?
-            .json::<ServerProjectActionResponse>()
-            .await?)
+    ) -> AppResult<ServerProjectResponse> {
+        let mc = crate::ssr::multiplexer_client()?;
+        let response = mc.send(
+            WebSiteToServerAction::from_server_project_action(project_slug.to_string(), action),
+        ).await;
+        match response {
+            Ok(WebSiteToServerResponse::ServerProjectActionResponse(action_response)) => {
+                Ok(action_response)
+            }
+            _ => Err(AppError::Custom("server action failed".to_string())),
+        }
     }
 
     pub async fn request_server_action(action: ServerAction) -> AppResult<ServerActionResponse> {
-        let client = reqwest::Client::new();
-        let server_vars = crate::ssr::server_vars()?;
-        Ok(client
-            .post(format!("http://{}/server_action", server_vars.server_url))
-            .json(&action)
-            .bearer_auth(server_vars.token_action_auth.expose_secret())
-            .send()
-            .await?
-            .json::<ServerActionResponse>()
-            .await?)
+        let mc = crate::ssr::multiplexer_client()?;
+        let response = mc.send(action.into()).await;
+        match response {
+            Ok(WebSiteToServerResponse::ServerActionResponse(action_response)) => {
+                Ok(action_response)
+            }
+            Err(e) => {
+                log!("Client Error: {:?}", e);
+                Err(AppError::Custom("server action failed".to_string()))
+            }
+            Ok(WebSiteToServerResponse::HostingActionResponse(r)) => {
+                log!("Hosting Action Response inside Server: {:?}", r);
+                Err(AppError::Custom("server action failed".to_string()))
+            }
+            Ok(WebSiteToServerResponse::ServerProjectActionResponse(r)) => {
+                log!("Server Project Action inside Server: {:?}", r);
+                Err(AppError::Custom("server action failed".to_string()))
+            }
+            Ok(WebSiteToServerResponse::Pong) => {
+                log!("Pong");
+                 Ok(ServerActionResponse::Ok)
+            }
+            Ok(WebSiteToServerResponse::Error(e)) => {
+                log!("Response Error: {:?}", e);
+                Err(AppError::Custom("server action failed".to_string()))
+            }
+        }
     }
 }
 
@@ -175,7 +86,7 @@ pub type ServerProjectActionFront = Action<
         Option<String>,
         Option<String>,
     ),
-    AppResult<ServerProjectActionResponse>,
+    AppResult<ServerProjectResponse>,
 >;
 
 pub fn get_action_server_project_action() -> ServerProjectActionFront {
@@ -198,16 +109,12 @@ pub fn get_action_server_project_action() -> ServerProjectActionFront {
 pub async fn get_action_server_project_action_inner(
     project_slug: ProjectSlugStr,
     action: ServerProjectAction,
-    content: Option<String>,
+    _content: Option<String>,
     csrf: Option<String>,
-) -> AppResult<ServerProjectActionResponse> {
+) -> AppResult<ServerProjectResponse> {
     let response = request_server_project_action_front(project_slug, action, csrf).await?;
-    if let ServerProjectActionResponse::Token(token) = response.clone() {
-        Ok(fetch_api(
-            token_url(&get_server_url().await?, &token),
-            StringContent { inner: content },
-        )
-        .await?)
+    if let ServerProjectResponse::Token(_token) = response.clone() {
+        Ok(ServerProjectResponse::Ok)
     } else {
         Ok(response)
     }

@@ -1,9 +1,9 @@
-use crate::server_action::ServerAction;
+use crate::website_to_server::server_action::ServerAction;
 use crate::{impl_chain_from, Slug};
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum UserAction {
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum ServerUserAction {
     Create {
         user_slug: Slug,
     },
@@ -20,4 +20,4 @@ pub enum UserAction {
     },
 }
 
-impl_chain_from!(ServerAction, ServerAction::UserAction => UserAction);
+impl_chain_from!(ServerAction, ServerAction::UserAction => ServerUserAction);

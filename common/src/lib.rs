@@ -1,28 +1,34 @@
 #![feature(associated_type_defaults)]
 
-#[cfg(feature = "website-to-hosting")]
-pub mod hosting_action;
 
-#[cfg(feature = "website-to-server")]
-pub mod permission;
 
-#[cfg(feature = "website-to-server")]
-pub mod server_action;
 
-#[cfg(feature = "website-to-server")]
-pub mod server_project_action;
 
-#[cfg(feature = "server")]
-pub mod server_helper;
 
-#[cfg(feature = "server")]
+#[cfg(feature = "server-command")]
 pub mod command;
+
+pub mod server;
+
+#[cfg(feature = "website-to-server")]
+pub mod website_to_server;
+
+#[cfg(feature = "multiplex-client")]
+pub mod multiplex_client;
+
+
+#[cfg(feature = "hosting")]
+pub mod hosting;
+#[cfg(feature = "multiplex-protocol")]
+pub mod multiplex_protocol;
 
 use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 use std::str::FromStr;
 use thiserror::Error;
 
+
+pub static PING_PONG_ID:u64= 0;
 pub const SERVICE_USER: &str = "hivehost_server";
 pub const USER_GROUP: &str = "sftp_users";
 

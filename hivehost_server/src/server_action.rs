@@ -1,48 +1,34 @@
-use crate::helper_client::HelperClient;
-use crate::ServerError;
-use crate::{ensure_authorization, AppState, ServerResult};
-use axum::extract::State;
-use axum::http::{HeaderMap, StatusCode};
-use axum::Json;
-use common::permission::Permission;
-use common::server_action::user_action::UserAction;
-use common::server_action::{ServerAction, ServerActionResponse};
-use common::server_helper::ServerHelperCommand;
+use common::website_to_server::permission::Permission;
+use common::website_to_server::server_action::user_action::ServerUserAction;
+use common::website_to_server::server_action::{ServerAction, ServerActionResponse};
 use common::{
     get_project_dev_path, get_user_path, get_user_project_path, get_user_projects_path,
     ProjectSlugStr, UserSlugStr,
 };
-use secrecy::ExposeSecret;
 use std::path::Path;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
+use common::server::server_to_helper::ServerToHelperAction;
+use common::website_to_server::WebSiteToServerResponse;
+use crate::{AppState, MultiplexServerHelperClient, ServerResult};
 
-pub async fn server_action(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Json(request): Json<ServerAction>,
-) -> Result<Json<ServerActionResponse>, (StatusCode, String)> {
-    ensure_authorization!(headers, state, {
-        handle_server_action(state, request).await
-    })
-}
 pub async fn handle_server_action(
     state: AppState,
     action: ServerAction,
-) -> Result<Json<ServerActionResponse>, (StatusCode, String)> {
+) -> ServerResult<WebSiteToServerResponse> {
     info!("Server action: {:?}", action);
     match action {
         ServerAction::UserAction(user_action) => match user_action {
-            UserAction::Create { user_slug } => {
+            ServerUserAction::Create { user_slug } => {
                 create_user(state.helper_client, user_slug.to_string()).await?;
-                Ok(Json(ServerActionResponse::Ok))
+                Ok(ServerActionResponse::Ok.into())
             }
-            UserAction::Delete { user_slug } => {
+            ServerUserAction::Delete { user_slug } => {
                 remove_user(state.helper_client, user_slug.to_string()).await?;
-                Ok(Json(ServerActionResponse::Ok))
+                Ok(ServerActionResponse::Ok.into())
             }
-            UserAction::AddProject {
+            ServerUserAction::AddProject {
                 user_slug,
                 project_slug,
             } => {
@@ -52,9 +38,9 @@ pub async fn handle_server_action(
                     project_slug.to_string(),
                 )
                 .await?;
-                Ok(Json(ServerActionResponse::Ok))
+                Ok(ServerActionResponse::Ok.into())
             }
-            UserAction::RemoveProject {
+            ServerUserAction::RemoveProject {
                 user_slugs,
                 project_slug,
             } => {
@@ -67,17 +53,17 @@ pub async fn handle_server_action(
                     .await?;
                 }
                 remove_project(state.helper_client, project_slug.to_string()).await?;
-                Ok(Json(ServerActionResponse::Ok))
+                Ok(ServerActionResponse::Ok.into())
             }
         },
     }
 }
 
-pub async fn create_user(helper_client: HelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
+pub async fn create_user(helper_client: MultiplexServerHelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
     let user_path = get_user_path(&user_slug);
     let user_projects_path = get_user_projects_path(&user_slug);
     helper_client
-        .execute(ServerHelperCommand::CreateUser {
+        .send(ServerToHelperAction::CreateUser {
             user_slug,
             user_path: user_path.clone(),
             user_projects_path: user_projects_path.clone(),
@@ -87,12 +73,12 @@ pub async fn create_user(helper_client: HelperClient, user_slug: UserSlugStr) ->
 }
 
 pub async fn create_project(
-    helper_client: HelperClient,
+    helper_client: MultiplexServerHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
     helper_client
-        .execute(ServerHelperCommand::CreateProject {
+        .send(ServerToHelperAction::CreateProject {
             project_slug: project_slug.clone(),
             service_user: user_slug.clone(),
         })
@@ -102,7 +88,7 @@ pub async fn create_project(
 
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
     helper_client
-        .execute(ServerHelperCommand::BindMountUserProject {
+        .send(ServerToHelperAction::BindMountUserProject {
             source_path: dev_path.clone(),
             target_path: user_project_path.clone(),
         })
@@ -123,14 +109,14 @@ pub async fn create_project(
 }
 
 pub async fn add_user_to_project(
-    helper_client: HelperClient,
+    helper_client: MultiplexServerHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
     permission: Permission,
 ) -> ServerResult<()> {
     let project_path = get_project_dev_path(&project_slug);
     helper_client
-        .execute(ServerHelperCommand::SetAcl {
+        .send(ServerToHelperAction::SetAcl {
             path: project_path.clone(),
             user_slug: user_slug.clone(),
             is_read_only: permission.is_read_only(),
@@ -138,7 +124,7 @@ pub async fn add_user_to_project(
         .await?;
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
     helper_client
-        .execute(ServerHelperCommand::BindMountUserProject {
+        .send(ServerToHelperAction::BindMountUserProject {
             source_path: project_path,
             target_path: user_project_path,
         })
@@ -147,13 +133,13 @@ pub async fn add_user_to_project(
 }
 
 pub async fn update_user_in_project(
-    helper_client: HelperClient,
+    helper_client: MultiplexServerHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
     permission: Permission,
 ) -> ServerResult<()> {
     helper_client
-        .execute(ServerHelperCommand::SetAcl {
+        .send(ServerToHelperAction::SetAcl {
             path: get_project_dev_path(&project_slug),
             user_slug,
             is_read_only: permission.is_read_only(),
@@ -163,21 +149,21 @@ pub async fn update_user_in_project(
 }
 
 pub async fn remove_user_from_project(
-    helper_client: HelperClient,
+    helper_client: MultiplexServerHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
     let proj_path = get_project_dev_path(&project_slug);
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
     helper_client
-        .execute(ServerHelperCommand::RemoveAcl {
+        .send(ServerToHelperAction::RemoveAcl {
             path: proj_path.clone(),
             user_slug: user_slug.clone(),
         })
         .await?;
 
     helper_client
-        .execute(ServerHelperCommand::UnmountUserProject {
+        .send(ServerToHelperAction::UnmountUserProject {
             target_path: user_project_path.clone(),
         })
         .await?;
@@ -185,16 +171,16 @@ pub async fn remove_user_from_project(
 }
 
 pub async fn remove_project(
-    helper_client: HelperClient,
+    helper_client: MultiplexServerHelperClient,
     project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
     helper_client
-        .execute(ServerHelperCommand::DeleteProject { project_slug })
+        .send(ServerToHelperAction::DeleteProject { project_slug })
         .await?;
     Ok(())
 }
 
-pub async fn remove_user(helper_client: HelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
+pub async fn remove_user(helper_client: MultiplexServerHelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
     let user_projects_path = get_user_projects_path(&user_slug);
     let path = Path::new(&user_projects_path);
 
@@ -204,7 +190,7 @@ pub async fn remove_user(helper_client: HelperClient, user_slug: UserSlugStr) ->
             let submount = entry.path();
             if submount.is_dir() {
                 helper_client
-                    .execute(ServerHelperCommand::UnmountUserProject {
+                    .send(ServerToHelperAction::UnmountUserProject {
                         target_path: submount.to_string_lossy().to_string(),
                     })
                     .await?;
@@ -212,7 +198,7 @@ pub async fn remove_user(helper_client: HelperClient, user_slug: UserSlugStr) ->
         }
     }
     helper_client
-        .execute(ServerHelperCommand::DeleteUser {
+        .send(ServerToHelperAction::DeleteUser {
             user_slug: user_slug.clone(),
         })
         .await?;

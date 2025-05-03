@@ -18,7 +18,7 @@ pub async fn signup(
     use crate::security::utils::ssr::PasswordForm;
     use crate::security::utils::ssr::SANITIZED_REGEX;
     use crate::AppError;
-    use common::server_action::user_action::UserAction;
+    use common::website_to_server::server_action::user_action::ServerUserAction;
     use common::Slug;
     use leptos::logging::log;
     use secrecy::ExposeSecret;
@@ -98,7 +98,7 @@ pub async fn signup(
     leptos_axum::redirect("/user");
     let user_slug = Slug::new(user.id, form.username.clone());
     crate::api::ssr::request_server_action(
-        UserAction::Create {
+        ServerUserAction::Create {
             user_slug: user_slug.clone(),
         }
         .into(),

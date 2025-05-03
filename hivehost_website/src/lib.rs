@@ -10,6 +10,8 @@ use leptos::server_fn::codec::JsonEncoding;
 use sqlx::migrate::MigrateError;
 #[cfg(feature = "ssr")]
 use validator::{ValidationError, ValidationErrors};
+#[cfg(feature = "ssr")]
+use common::multiplex_client::ConnectionError;
 
 pub mod api;
 pub mod app;
@@ -17,6 +19,7 @@ pub mod models;
 pub mod rate_limiter;
 pub mod security;
 pub mod tasks;
+
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -57,6 +60,8 @@ pub enum AppError {
     ServerVarsNotFound,
     #[error("Rate limiter not found")]
     RateLimiterNotFound,
+    #[error("Multiplexer client not found")]
+    MultiplexerClientNotFound,
     #[error("Auth not found")]
     AuthNotFound,
     #[error("Permissions not found")]
@@ -93,8 +98,16 @@ pub enum AppError {
     CantDeleteActiveSnapshot,
     #[error("No Active snapshot")]
     NoActiveSnapshot,
+
+    #[cfg(feature = "ssr")]
+    #[error("Unix Socket error: {0}")]
+    UnixSocketError(#[from] ConnectionError),
+    #[cfg(feature = "ssr")]
+    #[error("Client error: {0}")]
+    ClientError(#[from] common::multiplex_client::ClientError),
 }
 
+#[cfg(feature = "ssr")]
 macro_rules! impl_from_to_string {
     ($res:path, $from:ty) => {
         impl From<$from> for AppError {
@@ -105,7 +118,6 @@ macro_rules! impl_from_to_string {
     };
 }
 
-impl_from_to_string!(AppError::GlooNet, gloo_net::Error);
 #[cfg(feature = "ssr")]
 impl_from_to_string!(AppError::AddrParse, std::net::AddrParseError);
 #[cfg(feature = "ssr")]
@@ -172,7 +184,7 @@ pub mod ssr {
         http::Request,
         response::{IntoResponse, Response},
     };
-    use common::permission::Permission;
+    use common::website_to_server::permission::Permission;
     use common::{ProjectId, UserId};
     use leptos::config::LeptosOptions;
     use leptos::context::{provide_context, use_context};
@@ -184,8 +196,12 @@ pub mod ssr {
     use sqlx::PgPool;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
+    use common::multiplex_client::MultiplexClient;
+    use common::website_to_server::{WebSiteToServerAction, WebSiteToServerResponse};
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
+    
+    pub type MultiplexWebsiteToServer = MultiplexClient<WebSiteToServerAction, WebSiteToServerResponse>;
 
     #[derive(Clone, FromRef)]
     pub struct AppState {
@@ -195,12 +211,16 @@ pub mod ssr {
         pub permissions: Permissions,
         pub server_vars: ServerVars,
         pub rate_limiter: Arc<RateLimiter>,
+        pub multiplex_to_server :MultiplexWebsiteToServer
     }
 
     #[derive(Debug, Clone)]
     pub struct ServerVars {
         pub csrf_server: Arc<CsrfServer>,
         pub server_url: Arc<String>,
+        pub server_url_front: Arc<String>,
+        pub server_addr: Arc<String>,
+        pub server_addr_front: Arc<String>,
         pub hosting_url: Arc<String>,
         pub token_action_auth: SecretString,
     }
@@ -209,12 +229,18 @@ pub mod ssr {
         pub fn new(
             token_action_auth: SecretString,
             server_url: String,
+            server_url_front: String,
+            server_addr: String,
+            server_addr_front: String,
             hosting_url: String,
         ) -> ServerVars {
             Self {
                 csrf_server: Arc::new(CsrfServer::default()),
                 token_action_auth,
                 server_url: Arc::new(server_url),
+                server_url_front: Arc::new(server_url_front),
+                server_addr: Arc::new(server_addr),
+                server_addr_front: Arc::new(server_addr_front),
                 hosting_url: Arc::new(hosting_url),
             }
         }
@@ -242,6 +268,10 @@ pub mod ssr {
     pub fn pool() -> AppResult<PgPool> {
         use_context::<PgPool>().ok_or(AppError::PoolNotFound)
     }
+    pub fn multiplexer_client() -> AppResult<MultiplexWebsiteToServer> {
+        use_context::<MultiplexWebsiteToServer>().ok_or(AppError::MultiplexerClientNotFound)
+    }
+    
 
     pub fn server_vars() -> AppResult<ServerVars> {
         use_context::<ServerVars>().ok_or(AppError::ServerVarsNotFound)
@@ -278,6 +308,7 @@ pub mod ssr {
                 provide_context(app_state.pool.clone());
                 provide_context(app_state.server_vars.clone());
                 provide_context(app_state.rate_limiter.clone());
+                provide_context(app_state.multiplex_to_server.clone());
             },
             request,
         )
@@ -298,6 +329,8 @@ pub mod ssr {
                 provide_context(app_state.permissions.clone());
                 provide_context(app_state.pool.clone());
                 provide_context(app_state.server_vars.clone());
+                provide_context(app_state.multiplex_to_server.clone());
+                
             },
             move || shell(app_state.leptos_options.clone()),
         );

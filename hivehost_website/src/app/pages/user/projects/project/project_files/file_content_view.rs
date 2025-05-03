@@ -1,7 +1,7 @@
 use crate::api::get_action_server_project_action;
-use common::permission::Permission;
-use common::server_project_action::io_action::file_action::FileAction;
-use common::server_project_action::ServerProjectActionResponse;
+use common::website_to_server::permission::Permission;
+use common::website_to_server::server_project_action::io_action::file_action::ServerProjectIoFileAction;
+use common::website_to_server::server_project_action::ServerProjectResponse;
 use common::ProjectSlugStr;
 use leptos::either::Either;
 use leptos::html::Textarea;
@@ -26,13 +26,13 @@ pub fn FileContentView(
                 Some(file_path) => {
                     match crate::api::get_action_server_project_action_inner(
                         slug,
-                        FileAction::View { path: file_path }.into(),
+                        ServerProjectIoFileAction::View { path: file_path }.into(),
                         None,
                         None,
                     )
                     .await
                     {
-                        Ok(ServerProjectActionResponse::File(file_info)) => Ok(file_info),
+                        Ok(ServerProjectResponse::File(file_info)) => Ok(file_info),
                         Err(e) => {
                             leptos::logging::error!("Error fetching file: {:?}", e);
                             Err(ServerFnError::new("Failed to fetch file"))
@@ -80,7 +80,7 @@ pub fn FileContentView(
                                                 server_project_action
                                                     .dispatch((
                                                         slug.get(),
-                                                        FileAction::Update {
+                                                        ServerProjectIoFileAction::Update {
                                                             path: path_clone.clone(),
                                                         }
                                                             .into(),

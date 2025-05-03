@@ -1,7 +1,7 @@
 cargo-features = ["profile-rustflags"]
 [workspace]
 resolver = "2"
-members = ["hivehost_website", "hivehost_server", "common", "hivehost_hosting", "hivehost_server_helper"]
+members = ["hivehost_website", "hivehost_server", "common", "hivehost_server_hosting", "hivehost_server_helper"]
 
 
 

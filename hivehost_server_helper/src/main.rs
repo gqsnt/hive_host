@@ -1,10 +1,9 @@
-use hivehost_server_helper::{handler, ServerHelperError, ServerHelperResult, BTRFS_DEVICE};
-use listenfd::ListenFd;
+use hivehost_server_helper::{ServerHelperResult, BTRFS_DEVICE};
 use std::sync::LazyLock;
-use tokio::net::UnixListener;
-use tracing::{error, info};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use common::server::server_children::run_unix_socket;
+use hivehost_server_helper::command::handle_command;
 
 #[tokio::main]
 async fn main() -> ServerHelperResult<()> {
@@ -15,37 +14,8 @@ async fn main() -> ServerHelperResult<()> {
         )
         .with(tracing_subscriber::fmt::layer().with_ansi(true))
         .init();
-    dotenvy::from_path("/home/canarit/projects/hive_host/.env").expect("Failed to load .env file");
+    let server_helper_socket_path = dotenvy::var("SERVER_HELPER_SOCKET_PATH").expect("HELPER_ADDR not set");
     LazyLock::force(&BTRFS_DEVICE);
-    let mut listen_fds = ListenFd::from_env();
-    info!("HiveHost Helper Service starting...");
-    let unix_listener_std = match listen_fds.take_unix_listener(0)? {
-        // Use listen_fds result directly
-        Some(listener) => {
-            listener // This is a std::os::unix::net::UnixListener
-        }
-        None => {
-            error!(
-                "No listener socket received from systemd. Ensure service is run via hivehost_server_helper.socket."
-            );
-            return Err(ServerHelperError::Other(
-                "No listener socket received from systemd".to_string(),
-            ));
-        }
-    };
-    unix_listener_std.set_nonblocking(true)?;
-    let listener = UnixListener::from_std(unix_listener_std)?;
-    info!("Listening for connections on systemd socket...");
-    loop {
-        match listener.accept().await {
-            Ok((stream, _)) => {
-                info!("Accepted connection from {:?}", stream.peer_addr());
-                tokio::spawn(handler::handle_connection(stream));
-            }
-            Err(e) => {
-                error!("Failed to accept connection: {}", e);
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            }
-        };
-    }
+    run_unix_socket(server_helper_socket_path, handle_command).await?;
+    Ok(())
 }

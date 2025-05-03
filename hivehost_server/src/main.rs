@@ -1,9 +1,6 @@
 use axum::routing::post;
 use axum::Router;
-use hivehost_server::helper_client::start_helper_client;
-use hivehost_server::project_action::{server_project_action, server_project_action_token};
-use hivehost_server::server_action::server_action;
-use hivehost_server::{AppState, ServerResult};
+use hivehost_server::{AppState, MultiplexServerHelperClient, MultiplexServerHostingClient, ServerResult};
 use moka::future::Cache;
 use secrecy::SecretString;
 use std::net::SocketAddr;
@@ -13,6 +10,8 @@ use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use hivehost_server::project_action::server_project_action_token;
+use hivehost_server::tcp_listener::run_tcp_server;
 
 #[tokio::main]
 async fn main() -> ServerResult<()> {
@@ -23,14 +22,24 @@ async fn main() -> ServerResult<()> {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
-    dotenvy::from_path(".env").expect("Failed to load .env file");
     let token_action_auth = SecretString::from(dotenvy::var("TOKEN_AUTH")?);
     let server_helper_socket_path = dotenvy::var("SERVER_HELPER_SOCKET_PATH")?;
+    let server_hosting_socket_path = dotenvy::var("SERVER_HOSTING_SOCKET_PATH")?;
     // build our application with a route
     let server_addr = dotenvy::var("SERVER_ADDR")?;
-    let addr = SocketAddr::from_str(&server_addr)?;
-
-    let helper_client = start_helper_client(server_helper_socket_path);
+    let server_addr_front = dotenvy::var("SERVER_ADDR_FRONT")?;
+    
+    
+    let helper_client = MultiplexServerHelperClient::new(
+        server_helper_socket_path,
+        None,
+        5
+    )?;
+    let hosting_client = MultiplexServerHostingClient::new(
+        server_hosting_socket_path,
+        None,
+        5
+    )?;
 
     let app_state = AppState {
         server_project_action_cache: Arc::new(
@@ -40,17 +49,25 @@ async fn main() -> ServerResult<()> {
         ),
         token_auth: token_action_auth,
         helper_client,
+        hosting_client,
     };
-    let app = Router::<AppState>::new()
-        .route("/server_project_action", post(server_project_action))
+
+    let tcp_addr = SocketAddr::from_str(&server_addr)?; // Or a different address/port if needed
+    let tcp_state = app_state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = run_tcp_server(tcp_state, tcp_addr).await {
+            eprintln!("TCP Server failed: {}", e);
+        }
+    });
+    
+    let app = Router::new()
         .route("/token/{token}", post(server_project_action_token))
-        .route("/server_action", post(server_action))
         .layer(CorsLayer::permissive())
         .with_state(app_state);
 
-    tracing::debug!("listening on {addr}");
     // run our app with hyper, listening globally on port 3000
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let tcp_addr_front = SocketAddr::from_str(&server_addr_front)?;
+    let listener = tokio::net::TcpListener::bind(tcp_addr_front).await?;
 
     axum::serve(listener, app).await?;
     Ok(())

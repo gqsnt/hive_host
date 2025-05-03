@@ -1,8 +1,7 @@
-use hivehost_website::AppResult;
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
-async fn main() -> AppResult<()> {
+async fn main() -> hivehost_website::AppResult<()> {
     use axum::{routing::get, Router};
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
@@ -25,13 +24,17 @@ async fn main() -> AppResult<()> {
     use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
-
+    use hivehost_website::ssr::MultiplexWebsiteToServer;
+    
     dotenvy::dotenv().ok();
 
     let database_url = dotenvy::var("DATABASE_URL")?;
     let token_action_auth = SecretString::from(dotenvy::var("TOKEN_AUTH")?);
     let website_addr = dotenvy::var("WEBSITE_ADDR")?;
     let server_url = dotenvy::var("SERVER_URL")?;
+    let server_url_front = dotenvy::var("SERVER_URL_FRONT")?;
+    let server_addr = dotenvy::var("SERVER_ADDR")?;
+    let server_addr_front = dotenvy::var("SERVER_ADDR_FRONT")?;
     let hosting_url = dotenvy::var("HOSTING_URL")?;
     let pool = PgPool::connect(database_url.as_str())
         .await
@@ -49,11 +52,17 @@ async fn main() -> AppResult<()> {
     let leptos_options = conf.leptos_options;
     // Generate the list of routes in your Leptos App
     let routes = generate_route_list(App);
-    let server_vars = ServerVars::new(token_action_auth, server_url, hosting_url);
+    let server_vars = ServerVars::new(
+        token_action_auth.clone(),
+        server_url,
+        server_url_front,
+        server_addr.clone(),
+        server_addr_front,
+        hosting_url
+    );
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
-
     let app_state = AppState {
         leptos_options: leptos_options.clone(),
         pool: pool.clone(),
@@ -65,6 +74,7 @@ async fn main() -> AppResult<()> {
                 .time_to_live(Duration::from_secs(900)) // 15 minutes
                 .build(),
         ),
+        multiplex_to_server:MultiplexWebsiteToServer::new(server_addr,Some(token_action_auth), 10)?,
     };
 
     let mut task_director = TaskDirector::default();

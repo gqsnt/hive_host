@@ -451,9 +451,9 @@ pub mod server_fns {
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::permission::ssr::handle_project_permission_request;
         use crate::api::ssr::{request_server_project_action, request_hosting_action};
-        use common::hosting_action::HostingAction;
-        use common::permission::Permission;
-        use common::server_project_action::snapshot::SnapshotAction;
+        use common::hosting::HostingAction;
+        use common::website_to_server::permission::Permission;
+        use common::website_to_server::server_project_action::snapshot::ServerProjectSnapshotAction;
         use crate::AppError;
     }}
 
@@ -523,7 +523,7 @@ pub mod server_fns {
 
                 request_server_project_action(
                     project_slug.clone(),
-                    SnapshotAction::Create { snapshot_name }.into()
+                    ServerProjectSnapshotAction::Create { snapshot_name }.into()
                 ).await?;
 
                 Ok(())
@@ -587,7 +587,7 @@ pub mod server_fns {
 
                 request_server_project_action(
                     project_slug.clone(),
-                    SnapshotAction::UnmountProd.into(),
+                    ServerProjectSnapshotAction::UnmountProd.into(),
                 )
                 .await?;
                 request_hosting_action(project_slug, HostingAction::StopServingProject).await?;
@@ -626,7 +626,7 @@ pub mod server_fns {
                     .fetch_optional(&pool)
                     .await?;
                 if let Some(snapshot) = snapshot{
-                    request_server_project_action(project_slug_obj.clone(), SnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
+                    request_server_project_action(project_slug_obj.clone(), ServerProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
                 }
 
                 Ok(())
@@ -669,7 +669,7 @@ pub mod server_fns {
                     if active_snapshot_id == snapshot.id {
                         return Err(AppError::Custom("Snapshot is already active.".to_string()));
                     }
-                    request_server_project_action(project_slug.clone(), SnapshotAction::UnmountProd.into()).await?;
+                    request_server_project_action(project_slug.clone(), ServerProjectSnapshotAction::UnmountProd.into()).await?;
                 }
 
 
@@ -681,7 +681,7 @@ pub mod server_fns {
                     .execute(&pool)
                     .await?;
 
-                request_server_project_action(project_slug.clone(), SnapshotAction::MountSnapshotProd { snapshot_name: snapshot.snapshot_name }.into()).await?;
+                request_server_project_action(project_slug.clone(), ServerProjectSnapshotAction::MountSnapshotProd { snapshot_name: snapshot.snapshot_name }.into()).await?;
                 request_hosting_action(project_slug.clone(), HostingAction::ServeReloadProject).await?;
 
                 Ok(())

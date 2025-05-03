@@ -1,1 +1,0 @@
-cargo build --bin hivehost_hosting --release && sudo -u hivehost_server  ./target/release/hivehost_hosting

@@ -89,8 +89,8 @@ pub mod server_fns {
         use crate::models::Project;
         use crate::security::utils::ssr::SANITIZED_REGEX;
         use crate::AppResult;
-        use common::permission::Permission;
-        use common::server_action::user_action::UserAction;
+        use common::website_to_server::permission::Permission;
+        use common::website_to_server::server_action::user_action::ServerUserAction;
         use common::Slug;
         use validator::{Validate, ValidationError};
 
@@ -147,7 +147,7 @@ pub mod server_fns {
             .execute(&pool)
             .await?;
             request_server_action(
-                UserAction::AddProject {
+                ServerUserAction::AddProject {
                     user_slug,
                     project_slug: Slug::new(project.id, project_form.name),
                 }

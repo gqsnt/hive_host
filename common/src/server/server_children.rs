@@ -1,21 +1,56 @@
-use crate::command::execute_command;
-use crate::ServerHelperResult;
-use common::server_helper::{
-    ServerHelperRequest, ServerHelperResponse, ServerHelperResponseStatus,
-};
+use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixStream;
+use tokio::net::{UnixListener, UnixStream};
 use tracing::{debug, error, info, warn};
+use crate::multiplex_protocol::{ActionTrait, GenericRequest, GenericResponse, ResponseTrait};
 
-pub async fn handle_connection(stream: UnixStream) {
-    info!("Handling new client connection");
-    match process_stream(stream).await {
-        Ok(_) => info!("Client connection handled successfully"),
-        Err(e) => error!("Error processing client connection: {:?}", e),
+#[derive(Debug, Error)]
+pub enum UnixStreamError{
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Serialization error: {0}")]
+    Serde(#[from] serde_json::Error),
+    #[error("Other error: {0}")]
+    Other(String),
+}
+
+
+pub async fn run_unix_socket<F,Fut,Action:ActionTrait,Response:ResponseTrait>(sock_path:String, handle_request:F)
+                                                                              ->Result<(), UnixStreamError>
+where
+    F: Fn(GenericRequest<Action>) -> Fut + Send + Sync + 'static + Clone,
+    Fut: Future<Output = GenericResponse<Response>> + Send+ 'static,
+{
+ 
+    let listener = UnixListener::bind(sock_path)?;
+    info!("Listening for connections on systemd socket...");
+    loop {
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                let handler_clone = handle_request.clone();
+                info!("Accepted connection from {:?}", stream.peer_addr());
+                tokio::spawn(process_stream(stream, handler_clone));
+            }
+            Err(e) => {
+                error!("Failed to accept connection: {}", e);
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        };
     }
 }
 
-async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
+
+pub type UnixStreamResult<T> = Result<T, UnixStreamError>;
+
+
+async fn process_stream<F,Fut, Action:ActionTrait,Response:ResponseTrait>(
+    stream: UnixStream,
+    handle_request: F,
+) -> UnixStreamResult<()>
+where 
+    F: Fn(GenericRequest<Action>) -> Fut + Send + Sync+ Clone + 'static,
+    Fut: Future<Output = GenericResponse<Response>> + Send+ 'static,
+{
     let (read_half, mut write_half) = tokio::io::split(stream);
     let mut reader = BufReader::new(read_half);
 
@@ -37,17 +72,11 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                     debug!("Received empty line, continuing read loop.");
                     continue;
                 }
-
-                // Deserialize request
-                let request: ServerHelperRequest = match serde_json::from_str(trimmed_line) {
-                    Ok(req) => req,
+                let response = match serde_json::from_str::<GenericRequest<Action>>(trimmed_line){
+                    Ok(req) => handle_request(req).await,
                     Err(e) => {
-                        error!("Failed to deserialize request: {e}. Raw: '{trimmed_line}'");
-                        let response = ServerHelperResponse {
-                            status: ServerHelperResponseStatus::Error(format!("Bad request: {e}")),
-                        };
-                        let response_json = serde_json::to_string(&response)? + "\n";
-                        // Try to send error back before potentially closing
+                        debug!("Failed to deserialize JSON: {}", e);
+                        let response_json = serde_json::to_string(&GenericResponse::<Response>::get_pong())? + "\n";
                         if write_half
                             .write_all(response_json.as_bytes())
                             .await
@@ -57,27 +86,11 @@ async fn process_stream(stream: UnixStream) -> ServerHelperResult<()> {
                                 "Failed to send deserialization error response to client (connection likely closed)."
                             );
                         }
-                        // Maybe close connection on bad request? Or just continue loop?
-                        // Let's continue for now, maybe client sends another request.
-                        continue; // Continue loop after sending error
+                        continue; 
                     }
                 };
-
-                // Execute command
-                let response_status = match execute_command(request.command).await {
-                    Ok(_) => ServerHelperResponseStatus::Success,
-                    Err(e) => {
-                        error!("Command execution failed: {:?}", e);
-                        ServerHelperResponseStatus::Error(format!("Command execution failed: {e}"))
-                    }
-                };
-
-                // Serialize and send response
-                let response = ServerHelperResponse {
-                    status: response_status,
-                };
+                
                 let response_json = serde_json::to_string(&response)? + "\n"; // Add newline delimiter
-
                 match write_half.write_all(response_json.as_bytes()).await {
                     Ok(_) => {
                         // Optional: Flush immediately if needed, though write_all often does enough buffering

@@ -1,17 +1,21 @@
-pub mod helper_client;
+
 pub mod project_action;
 pub mod server_action;
+pub mod tcp_listener;
 
-use crate::helper_client::HelperClient;
+
 use axum::extract::FromRef;
 use axum::http::StatusCode;
-use common::server_project_action::ServerProjectAction;
+use common::website_to_server::server_project_action::ServerProjectAction;
 use common::{ProjectId, ProjectSlugStr, UserId};
 use moka::future::Cache;
 use secrecy::SecretString;
 use std::path::StripPrefixError;
 use std::sync::Arc;
 use thiserror::Error;
+use common::multiplex_client::{ConnectionError, MultiplexClient};
+use common::server::server_to_helper::{ServerToHelperAction, ServerToHelperResponse};
+use common::server::server_to_hosting::{ServerToHostingAction, ServerToHostingResponse};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -25,8 +29,13 @@ pub enum ServerError {
     AddrParse(#[from] std::net::AddrParseError),
     #[error("StripPrefix error: {0}")]
     StripPrefixError(#[from] StripPrefixError),
-    #[error("Helper client error: {0}")]
-    HelperClientError(#[from] helper_client::HelperClientError),
+    #[error("Deserialization error: {0}")]
+    DeserializationError(#[from] serde_json::Error),
+    
+    #[error("Unix Socket error: {0}")]
+    UnixSocketError(#[from] ConnectionError),
+    #[error("Client error: {0}")]
+    ClientError(#[from] common::multiplex_client::ClientError),
     #[error("Command failed: {0}")]
     CommandFailed(String),
     #[error("Unauthorized")]
@@ -47,6 +56,8 @@ pub enum ServerError {
     PathNotAValidProjectPath,
     #[error("Cant read file name {0}")]
     CantReadFileName(String),
+    #[error("Invalid Message Length")]
+    InvalidMessageLength,
 }
 
 impl From<ServerError> for (StatusCode, String) {
@@ -79,11 +90,16 @@ impl From<ProjectId> for ServerProjectId {
     }
 }
 
+pub type MultiplexServerHostingClient = MultiplexClient<ServerToHostingAction, ServerToHostingResponse>;
+pub type MultiplexServerHelperClient = MultiplexClient<ServerToHelperAction, ServerToHelperResponse>;
+
+
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub token_auth: SecretString,
     pub server_project_action_cache: Arc<Cache<String, (ProjectSlugStr, ServerProjectAction)>>,
-    pub helper_client: HelperClient,
+    pub helper_client: MultiplexServerHelperClient,
+    pub hosting_client: MultiplexServerHostingClient,
 }
 
 #[macro_export]

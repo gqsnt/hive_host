@@ -2,7 +2,7 @@ use crate::app::components::select::FormSelectIcon;
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::IntoView;
 
-use common::permission::Permission;
+use common::website_to_server::permission::Permission;
 
 use crate::app::components::csrf_field::CSRFField;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
@@ -227,14 +227,14 @@ pub fn ProjectTeam() -> impl IntoView {
 
 pub mod server_fns {
     use crate::AppResult;
-    use common::permission::Permission;
+    use common::website_to_server::permission::Permission;
     use common::{ProjectId, ProjectSlugStr, UserId, UserSlugStr};
     use leptos::server;
     use serde::{Deserialize, Serialize};
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::api::ssr::request_server_project_action;
-        use common::server_project_action::permission::PermissionAction;
+        use common::website_to_server::server_project_action::permission::ServerProjectPermissionAction;
         use crate::security::permission::ssr::handle_project_permission_request;
        use validator::ValidationError;
            use std::borrow::Cow;
@@ -274,7 +274,7 @@ pub mod server_fns {
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     project_slug,
-                    PermissionAction::Revoke { user_slug }.into(),
+                    ServerProjectPermissionAction::Revoke { user_slug }.into(),
                 )
                 .await?;
                 Ok(())
@@ -317,7 +317,7 @@ pub mod server_fns {
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     project_slug,
-                    PermissionAction::Update {
+                    ServerProjectPermissionAction::Update {
                         user_slug,
                         permission,
                     }
@@ -376,7 +376,7 @@ pub mod server_fns {
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     project_slug,
-                    PermissionAction::Grant {
+                    ServerProjectPermissionAction::Grant {
                         user_slug,
                         permission,
                     }

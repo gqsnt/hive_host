@@ -198,15 +198,16 @@ pub mod server_fns {
     use common::ProjectSlugStr;
     use leptos::server;
 
+
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::api::ssr::request_server_project_action;
         use crate::security::permission::ssr::handle_project_permission_request;
         use crate::api::ssr::{request_server_action, request_hosting_action};
-        use common::permission::Permission;
-        use common::server_action::user_action::UserAction;
+        use common::website_to_server::permission::Permission;
+        use common::website_to_server::server_action::user_action::ServerUserAction;
         use common::Slug;
-            use common::server_project_action::snapshot::SnapshotAction;
-
+        use common::website_to_server::server_project_action::snapshot::ServerProjectSnapshotAction;
+        use common::hosting::HostingAction;
     }}
 
     #[server]
@@ -247,16 +248,16 @@ pub mod server_fns {
                     .await?
                     .active_snapshot_id;
                 if active_id.is_some() {
-                    request_server_project_action(project_slug.clone(), SnapshotAction::UnmountProd.into()).await?;
-                    request_hosting_action(project_slug.clone(), common::hosting_action::HostingAction::StopServingProject).await?;
+                    request_server_project_action(project_slug.clone(), ServerProjectSnapshotAction::UnmountProd.into()).await?;
+                    request_hosting_action(project_slug.clone(), HostingAction::StopServingProject).await?;
                 }
                 for snapshot in snapshot_names {
-                    request_server_project_action(project_slug.clone(), SnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
+                    request_server_project_action(project_slug.clone(), ServerProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
                 }
 
 
                 request_server_action(
-                    UserAction::RemoveProject {
+                    ServerUserAction::RemoveProject {
                         user_slugs,
                         project_slug,
                     }

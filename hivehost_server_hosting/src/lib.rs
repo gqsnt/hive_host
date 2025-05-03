@@ -1,43 +1,71 @@
+use common::PROD_ROOT_PATH_PREFIX;
+use std::convert::Infallible;
+use std::io;
+use std::net::{AddrParseError, SocketAddr};
+use std::sync::{Arc, LazyLock};
 use async_compression::tokio::bufread::BrotliEncoder;
-use common::hosting_action::{HostingAction, HostingActionRequest, HostingActionResponse};
-use common::{get_project_prod_path, ProjectSlugStr, Slug, PROD_ROOT_PATH_PREFIX};
 use dashmap::DashMap;
+use deadpool_postgres::{tokio_postgres, Pool};
 use deadpool_postgres::tokio_postgres::NoTls;
-use deadpool_postgres::{tokio_postgres, GenericClient, Pool};
+use http::{header, HeaderValue, Request, Response, StatusCode};
 use http::header::SERVER;
-use http::HeaderValue;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Empty, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
-use hyper::{header, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use quick_cache::sync::{Cache, DefaultLifecycle};
 use quick_cache::{DefaultHashBuilder, Weighter};
+use quick_cache::sync::{Cache, DefaultLifecycle};
 use socket2::{Domain, SockAddr, Socket};
-use std::convert::Infallible;
-use std::io;
-use std::net::{AddrParseError, SocketAddr};
-use std::str::FromStr;
-use std::sync::{Arc, LazyLock};
-use std::thread::available_parallelism;
 use thiserror::Error;
 use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncWriteExt as _, BufReader};
-use tokio::net::TcpListener;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::{runtime, task};
+use tokio::net::TcpListener;
 use tracing::{debug, error, info};
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 use walkdir::WalkDir;
+use common::{get_project_prod_path, ProjectSlugStr};
 
-static CACHE: LazyLock<DashMap<ProjectSlugStr, ProjectCache>> = LazyLock::new(DashMap::new);
+pub mod handler;
 
-static TOKEN: LazyLock<String> =
+
+
+pub static HOSTING_PREFIX: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        ".{}",
+        dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set")
+    )
+});
+
+pub type HostingResult<T> = Result<T, HostingError>;
+
+#[derive(Debug, Error)]
+pub enum HostingError {
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
+    #[error("Hyper error: {0}")]
+    Hyper(#[from] hyper::Error),
+    #[error("Http error: {0}")]
+    Http(#[from] http::Error),
+    #[error("Addr parse error: {0}")]
+    AddrParseError(#[from] AddrParseError),
+    #[error("Serde json error: {0}")]
+    SerdeJson(#[from] serde_json::Error),
+    #[error("DotEnv error: {0}")]
+    DotEnv(#[from] dotenvy::Error),
+    #[error("Tokio postgres error: {0}")]
+    TokioPostgres(#[from] tokio_postgres::Error),
+}
+
+
+
+pub static CACHE: LazyLock<DashMap<ProjectSlugStr, ProjectCache>> = LazyLock::new(DashMap::new);
+
+pub static TOKEN: LazyLock<String> =
     LazyLock::new(|| dotenvy::var("TOKEN_AUTH").expect("HOSTING_URL must be set"));
 
-static DB: LazyLock<Pool> = LazyLock::new(|| {
+pub static DB: LazyLock<Pool> = LazyLock::new(|| {
     let mut cfg = deadpool_postgres::Config::new();
     cfg.dbname = Some(dotenvy::var("DB_NAME").expect("DB_NAME must be set"));
     cfg.user = Some(dotenvy::var("DB_USER").expect("DB_USER must be set"));
@@ -52,10 +80,10 @@ static DB: LazyLock<Pool> = LazyLock::new(|| {
     cfg.create_pool(None, NoTls).expect("Failed to create pool")
 });
 
-static CONTENT_ENCODING_BR: HeaderValue = HeaderValue::from_static("br");
+pub static CONTENT_ENCODING_BR: HeaderValue = HeaderValue::from_static("br");
 
-static CACHE_HEADER: HeaderValue = HeaderValue::from_static("public, max-age=31536000");
-static SERVER_HEADER: HeaderValue = HeaderValue::from_static("localhost");
+pub static CACHE_HEADER: HeaderValue = HeaderValue::from_static("public, max-age=31536000");
+pub static SERVER_HEADER: HeaderValue = HeaderValue::from_static("localhost");
 
 #[derive(Clone)]
 pub struct BodyWeighter;
@@ -71,7 +99,7 @@ pub type BodyType = Bytes;
 pub type KeyType = String;
 
 pub type FileCacheType =
-    Cache<KeyType, BodyType, BodyWeighter, DefaultHashBuilder, DefaultLifecycle<KeyType, BodyType>>;
+Cache<KeyType, BodyType, BodyWeighter, DefaultHashBuilder, DefaultLifecycle<KeyType, BodyType>>;
 
 #[derive(Clone, Debug)]
 pub struct ProjectCache {
@@ -122,107 +150,12 @@ pub async fn cache_project_path(project_slug: ProjectSlugStr) {
         });
 }
 
-// static FILE_CACHE : LazyLock<Cache<String, Response<Body>>> = LazyLock::new(|| {
-//     Cache::new(5000)
-// });
 
-static HOSTING_PREFIX: LazyLock<String> = LazyLock::new(|| {
-    format!(
-        ".{}",
-        dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set")
-    )
-});
 
-pub type HostingResult<T> = Result<T, HostingError>;
 
-#[derive(Debug, Error)]
-pub enum HostingError {
-    #[error("I/O error: {0}")]
-    Io(#[from] io::Error),
-    #[error("Hyper error: {0}")]
-    Hyper(#[from] hyper::Error),
-    #[error("Http error: {0}")]
-    Http(#[from] http::Error),
-    #[error("Addr parse error: {0}")]
-    AddrParseError(#[from] AddrParseError),
-    #[error("Serde json error: {0}")]
-    SerdeJson(#[from] serde_json::Error),
-    #[error("DotEnv error: {0}")]
-    DotEnv(#[from] dotenvy::Error),
-    #[error("Tokio postgres error: {0}")]
-    TokioPostgres(#[from] tokio_postgres::Error),
-}
 
-pub fn main() -> HostingResult<()> {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| format!("{}=debug", env!("CARGO_CRATE_NAME")).into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-    dotenvy::from_path(".env").expect("dotenvy must be set");
-    LazyLock::force(&CACHE);
-    LazyLock::force(&TOKEN);
-    LazyLock::force(&DB);
-    let cpus = available_parallelism()?.get();
-    let runtime = runtime::Builder::new_multi_thread()
-        .enable_all()
-        .worker_threads(cpus)
-        .build()?;
-    runtime.block_on(serve(runtime.handle()))
-}
 
-async fn serve(handle: &runtime::Handle) -> HostingResult<()> {
-    let hosting_addr = dotenvy::var("HOSTING_ADDR")?;
-    let addr = SocketAddr::from_str(&hosting_addr)?;
-    let socket = create_socket(addr)?;
-
-    let db = DB.get().await.expect("DB must exist");
-    let query =
-        "SELECT id,name, active_snapshot_id FROM projects where active_snapshot_id is not null";
-    let statement = db.prepare_cached(query).await?;
-    let row = db.query(&statement, &[]).await?;
-    info!("Found {} projects", row.len());
-    for row in row {
-        let name = row.get::<_, String>("name");
-        let id = row.get::<_, i64>("id");
-        let project_slug = Slug::new(id, name);
-        let unix_slug = project_slug.to_string();
-        cache_project_path(unix_slug).await;
-    }
-
-    drop(db);
-
-    let listener = TcpListener::from_std(socket.into())?;
-    let addr = listener.local_addr()?;
-    info!("Listening on: {}", addr);
-
-    // spawn accept loop into a task so it is scheduled on the runtime with all the other tasks.
-    let accept_loop = accept_loop(handle.clone(), listener);
-    handle.spawn(accept_loop).await.unwrap()
-}
-
-async fn accept_loop(handle: runtime::Handle, listener: TcpListener) -> HostingResult<()> {
-    let mut http = http1::Builder::new();
-    http.pipeline_flush(true);
-
-    let service = service_fn(handle_request);
-    loop {
-        let (stream, _) = listener.accept().await?;
-        let http = http.clone();
-        handle.spawn(async move {
-            let io = TokioIo::new(stream);
-            if let Err(_e) = http.serve_connection(io, service).await {
-                // ignore errors until https://github.com/hyperium/hyper/pull/3863/ is merged
-                // This PR will allow us to filter out shutdown errors which are expected.
-                // warn!("Connection error (this may be normal during shutdown): {e}");
-            }
-        });
-    }
-}
-
-async fn handle_request(
+pub async fn handle_request(
     request: Request<Incoming>,
 ) -> HostingResult<Response<BoxBody<Bytes, Infallible>>> {
     let project_slug = request
@@ -232,30 +165,7 @@ async fn handle_request(
         .and_then(|s| s.strip_suffix(HOSTING_PREFIX.as_str()))
         .unwrap_or_default();
     if project_slug.is_empty() {
-        let auth = match request.headers().get("Authorization") {
-            Some(auth) => auth
-                .to_str()
-                .unwrap_or_default()
-                .strip_prefix("Bearer ")
-                .unwrap_or_default(),
-            None => return not_found_response(),
-        };
-        if !auth.eq(TOKEN.as_str()) {
-            return not_found_response();
-        }
-        let body: Vec<u8> = request.into_body().collect().await?.to_bytes().to_vec();
-        let request: HostingActionRequest = serde_json::from_slice(&body)?;
-        let project_slug = request.project_slug.clone();
-        match request.action {
-            HostingAction::ServeReloadProject => {
-                info!("Reloading project {}", project_slug);
-                cache_project_path(project_slug).await;
-            }
-            HostingAction::StopServingProject => {
-                CACHE.remove(&project_slug);
-            }
-        }
-        return ok_api_response();
+        return not_found_response();
     }
     let base_path = request.uri().path();
     let path = if base_path.is_empty() || base_path == "/" {
@@ -333,29 +243,21 @@ async fn handle_request(
         .map_err(HostingError::from)
 }
 
-fn not_found_response() -> HostingResult<Response<BoxBody<Bytes, Infallible>>> {
+pub fn not_found_response() -> HostingResult<Response<BoxBody<Bytes, Infallible>>> {
     Response::builder()
         .status(StatusCode::NOT_FOUND)
         .body(Empty::new().boxed())
         .map_err(HostingError::from)
 }
 
-fn ok_api_response() -> HostingResult<Response<BoxBody<Bytes, Infallible>>> {
-    let response = serde_json::to_vec(&HostingActionResponse::Ok)?;
-    let response_bytes = Bytes::from(response);
-    Response::builder()
-        .status(StatusCode::OK)
-        .body(Full::new(response_bytes).boxed())
-        .map_err(HostingError::from)
-}
-fn internal_error_response() -> HostingResult<Response<BoxBody<Bytes, Infallible>>> {
+pub fn internal_error_response() -> HostingResult<Response<BoxBody<Bytes, Infallible>>> {
     Response::builder()
         .status(StatusCode::INTERNAL_SERVER_ERROR)
         .body(Empty::new().boxed())
         .map_err(HostingError::from)
 }
 
-fn create_socket(addr: SocketAddr) -> HostingResult<Socket> {
+pub fn create_socket(addr: SocketAddr) -> HostingResult<Socket> {
     let domain = match addr {
         SocketAddr::V4(_) => Domain::IPV4,
         SocketAddr::V6(_) => Domain::IPV6,
@@ -372,4 +274,24 @@ fn create_socket(addr: SocketAddr) -> HostingResult<Socket> {
     socket.listen(backlog)?;
 
     Ok(socket)
+}
+
+
+pub async fn accept_loop(handle: runtime::Handle, listener: TcpListener) -> HostingResult<()> {
+    let mut http = http1::Builder::new();
+    http.pipeline_flush(true);
+
+    let service = service_fn(handle_request);
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let http = http.clone();
+        handle.spawn(async move {
+            let io = TokioIo::new(stream);
+            if let Err(_e) = http.serve_connection(io, service).await {
+                // ignore errors until https://github.com/hyperium/hyper/pull/3863/ is merged
+                // This PR will allow us to filter out shutdown errors which are expected.
+                // warn!("Connection error (this may be normal during shutdown): {e}");
+            }
+        });
+    }
 }

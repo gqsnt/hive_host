@@ -1,23 +1,19 @@
 [Unit]
-Description=HiveHost Privileged Server Helper Service
+Description=HiveHost Server Service
 After=network.target
 
 [Service]
 # Run the service as root to perform privileged operations
-User=root
+User=hivehost_server
 Group=hivehost_server
 
 # Path to the compiled helper binary
-ExecStart=/usr/local/bin/hivehost_server_helper
+ExecStart=/usr/local/bin/hivehost_server
 
 # Restart policy
 Restart=on-failure
 RestartSec=5
-
-RuntimeDirectory=hivehost_server_helper
-RuntimeDirectoryMode=0770
 EnvironmentFile=/home/canarit/projects/hive_host/.env
-
 
 [Install]
 WantedBy=multi-user.target

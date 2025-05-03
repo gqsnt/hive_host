@@ -8,7 +8,7 @@ axum = { workspace = true, features = ["macros", "json"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs", "process"] }
 tower-http = { workspace = true, features = ["fs", "compression-full", "cors"] }
 moka = { workspace = true, features = ["future"] }
-common = { path = "../common", features = ["website-to-server", "server"] }
+common = { path = "../common", features = ["website-to-server", "multiplex-protocol","server-to-helper", "server-to-hosting", "server-command", "multiplex-client", "multiplex-client-unix"] }
 dotenvy = { workspace = true }
 secrecy = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }

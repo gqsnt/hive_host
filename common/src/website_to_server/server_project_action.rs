@@ -2,24 +2,16 @@ pub mod io_action;
 pub mod permission;
 pub mod snapshot;
 
-use crate::permission::Permission;
-use crate::server_project_action::io_action::dir_action::DirActionLsResponse;
-use crate::server_project_action::io_action::file_action::FileInfo;
-use crate::Slug;
+use crate::website_to_server::permission::Permission;
+use crate::website_to_server::server_project_action::io_action::dir_action::ServerProjectIoDirActionLsResponse;
+use crate::website_to_server::server_project_action::io_action::file_action::FileInfo;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServerProjectActionRequest {
-    pub token: Option<String>,
-    pub project_slug: Slug,
-    pub action: ServerProjectAction,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum ServerProjectAction {
-    Io(io_action::IoAction),
-    Permission(permission::PermissionAction),
-    Snapshot(snapshot::SnapshotAction),
+    Io(io_action::ServerProjectIoAction),
+    Permission(permission::ServerProjectPermissionAction),
+    Snapshot(snapshot::ServerProjectSnapshotAction),
 }
 
 impl IsProjectServerAction for ServerProjectAction {
@@ -48,19 +40,13 @@ impl IsProjectServerAction for ServerProjectAction {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ServerProjectActionResponse {
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum ServerProjectResponse {
     Ok,
     Token(String),
     Content(String),
-    Ls(DirActionLsResponse),
+    Ls(ServerProjectIoDirActionLsResponse),
     File(FileInfo),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ProjectActionCreate {
-    pub project_slug: Slug,
-    pub owner_slug: Slug,
 }
 
 pub trait IsProjectServerAction {
