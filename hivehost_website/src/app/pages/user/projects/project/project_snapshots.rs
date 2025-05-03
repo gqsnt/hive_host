@@ -14,10 +14,7 @@ use time::format_description::well_known::Rfc3339;
 use web_sys::SubmitEvent;
 
 #[component]
-pub fn ProjectSnapshots(
-    set_active_snapshot_action: ServerAction<SetActiveProjectSnapshot>,
-    unset_active_snapshot_action: ServerAction<UnsetActiveProjectSnapshot>,
-) -> impl IntoView {
+pub fn ProjectSnapshots() -> impl IntoView {
     let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
 
@@ -41,7 +38,10 @@ pub fn ProjectSnapshots(
     // --- Actions ---
     let create_snapshot_action = ServerAction::<CreateProjectSnapshot>::new();
     let delete_snapshot_action = ServerAction::<DeleteProjectSnapshot>::new();
+    let set_active_snapshot_action = ServerAction::<SetActiveProjectSnapshot>::new();
+    let unset_active_snapshot_action = ServerAction::<UnsetActiveProjectSnapshot>::new();
 
+    
     // --- Resource for Snapshots List ---
     let snapshots_resource = Resource::new(
         move || {
@@ -121,6 +121,42 @@ pub fn ProjectSnapshots(
             set_unset_active_feedback.set("".to_string()); // Clear on potential refetch
         }
     });
+    
+    let on_set_active_submit = move |ev: SubmitEvent| {
+        let form = SetActiveProjectSnapshot::from_event(&ev);
+        ev.prevent_default();
+        if form.is_err(){
+            return;
+        }
+        let data = form.unwrap();
+        let snapshot_id = data.snapshot_id;
+        set_active_snapshot_action.dispatch(data);
+        global_state.project().update(|project_opt| {
+            match project_opt{
+                None => {}
+                Some((_,_,project)) => {
+                    project.active_snapshot_id = Some(snapshot_id);
+                }
+            }
+        });
+    };
+    let on_unset_active_submit = move |ev: SubmitEvent| {
+        let form = UnsetActiveProjectSnapshot::from_event(&ev);
+        ev.prevent_default();
+        if form.is_err(){
+            return;
+        }
+        unset_active_snapshot_action.dispatch(form.unwrap());
+        global_state.project().update(|project_opt| {
+            match project_opt{
+                None => {}
+                Some((_,_,project)) => {
+                    project.active_snapshot_id = None;
+                }
+            }
+        });
+    };
+    
 
     // --- Event Handlers ---
     let on_create_submit = move |ev: SubmitEvent| {
@@ -315,7 +351,7 @@ pub fn ProjectSnapshots(
                                                                                                     Either::Left(
 
                                                                                                         view! {
-                                                                                                            <ActionForm action=unset_active_snapshot_action>
+                                                                                                            <ActionForm action=unset_active_snapshot_action on:submit=on_unset_active_submit>
                                                                                                                 <CSRFField />
                                                                                                                 <input
                                                                                                                     type="hidden"
@@ -337,7 +373,7 @@ pub fn ProjectSnapshots(
                                                                                                 false => {
                                                                                                     Either::Right(
                                                                                                         view! {
-                                                                                                            <ActionForm action=set_active_snapshot_action>
+                                                                                                            <ActionForm action=set_active_snapshot_action on:submit=on_set_active_submit>
                                                                                                                 <CSRFField />
                                                                                                                 <input
                                                                                                                     type="hidden"

@@ -93,7 +93,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                     let(perm)
                                                 >
                                                     <tr>
-                                                        <td class="table-td">{perm.username.clone()}</td>
+                                                        <td class="table-td">{perm.slug.clone()}</td>
                                                         <td class="px-4 py-3">
                                                             <Show
                                                                 when=move || permission_signal().is_owner()
@@ -228,7 +228,7 @@ pub fn ProjectTeam() -> impl IntoView {
 pub mod server_fns {
     use crate::AppResult;
     use common::permission::Permission;
-    use common::{ProjectId, ProjectSlugStr, UserId};
+    use common::{ProjectId, ProjectSlugStr, UserId, UserSlugStr};
     use leptos::server;
     use serde::{Deserialize, Serialize};
 
@@ -401,7 +401,7 @@ pub mod server_fns {
                 let user_permissions = sqlx::query_as!(
                 UserPermissionPage,
                 r#"
-                    SELECT user_id,project_id, permission as "permission: Permission", u.username as username
+                    SELECT user_id,project_id, permission as "permission: Permission", u.username as username, u.slug as slug 
                     FROM permissions
                     INNER JOIN public.users u on u.id = permissions.user_id
                     WHERE project_id = $1"#,
@@ -427,5 +427,6 @@ pub mod server_fns {
         pub project_id: ProjectId,
         pub username: String,
         pub permission: Permission,
+        pub slug:UserSlugStr,
     }
 }

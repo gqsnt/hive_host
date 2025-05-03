@@ -1,5 +1,5 @@
 use leptos::prelude::{
-    expect_context, OnceResource, Read, ServerAction, Signal, Transition, Update,
+    expect_context, OnceResource, Read, Signal, Transition, Update,
 };
 use leptos::prelude::{AddAnyAttr, Suspend};
 use std::fmt::Display;
@@ -17,15 +17,11 @@ use leptos::{component, view, IntoView, Params};
 use leptos_router::hooks::{use_location, use_params};
 
 use crate::app::get_hosting_url;
-use crate::app::pages::user::projects::project::project_snapshots::server_fns::{
-    SetActiveProjectSnapshot, UnsetActiveProjectSnapshot,
-};
 use crate::app::pages::user::projects::project::server_fns::get_project;
-use crate::app::pages::GlobalState;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
-use leptos::server::Resource;
 use leptos_router::components::{Outlet, A};
 use leptos_router::params::{Params, ParamsError};
 use reactive_stores::Store;
@@ -101,8 +97,6 @@ pub struct ProjectSlugSignal(pub String);
 
 #[component]
 pub fn ProjectPage(
-    set_active_snapshot_action: ServerAction<SetActiveProjectSnapshot>,
-    unset_active_snapshot_action: ServerAction<UnsetActiveProjectSnapshot>,
 ) -> impl IntoView {
     let params: MemoProjectParams = use_params::<ProjectParams>();
     let project_slug = move || {
@@ -123,16 +117,7 @@ pub fn ProjectPage(
     provide_context(project_slug_signal);
 
     let global_state: Store<GlobalState> = expect_context();
-    let project_resource = Resource::new(
-        move || {
-            (
-                set_active_snapshot_action.version().get(),
-                unset_active_snapshot_action.version().get(),
-                project_slug(),
-            )
-        },
-        |(_, _, slug)| get_project(slug),
-    );
+    let project_resource = OnceResource::new(get_project(project_slug()));
 
     let hosting_url_resource = OnceResource::new(get_hosting_url());
 
@@ -191,21 +176,22 @@ pub fn ProjectPage(
                     match project {
                         Ok((permission, project)) => {
                             global_state
+                                .project()
                                 .update(|inner| {
-                                    inner.project = Some((project.get_slug(), permission, project));
+                                    *inner= Some((project.get_slug(), permission, project));
                                 });
                         }
                         Err(_) => {
-                            global_state.update(|inner| inner.project = None);
+                            global_state.project().update(|inner| *inner = None);
                         }
                     }
                     let hosting_url = hosting_url_resource.await;
                     match hosting_url {
                         Ok(hosting_url) => {
-                            global_state.update(|inner| inner.hosting_url = Some(hosting_url));
+                            global_state.hosting_url().update(|inner| *inner = Some(hosting_url));
                         }
                         Err(_) => {
-                            global_state.update(|inner| inner.hosting_url = None);
+                            global_state.hosting_url().update(|inner| *inner = None);
                         }
                     }
                     view! { <Outlet /> }

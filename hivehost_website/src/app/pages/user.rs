@@ -1,9 +1,9 @@
 use crate::app::components::csrf_field::generate_csrf;
-use crate::app::pages::GlobalState;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::models::User;
 use crate::security::{get_user, Logout};
 use leptos::form::ActionForm;
-use leptos::prelude::ElementChild;
+use leptos::prelude::{ElementChild, Read};
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, CustomAttribute, Signal, Suspend, Transition, Update};
@@ -234,6 +234,12 @@ pub fn UserPage() -> impl IntoView {
                                 </ul>
                             </li>
                             <div class="mt-auto -mx-2 space-y-1">
+                                <li class="text-sm/6 font-semibold text-gray-400">
+                                    Connected as 
+                                        <span class="text-white">
+                                            {global_store.user().read().as_ref().map(|u|u.0.to_string())}
+                                        </span>
+                                </li>
                                 <li>
                                      <A
                                         href=UserPageType::Settings.href()

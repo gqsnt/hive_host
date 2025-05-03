@@ -9,9 +9,6 @@ use crate::app::pages::user::projects::new_project::{server_fns::CreateProject, 
 use crate::app::pages::user::projects::project::project_dashboard::ProjectDashboard;
 use crate::app::pages::user::projects::project::project_files::ProjectFiles;
 use crate::app::pages::user::projects::project::project_settings::ProjectSettings;
-use crate::app::pages::user::projects::project::project_snapshots::server_fns::{
-    SetActiveProjectSnapshot, UnsetActiveProjectSnapshot,
-};
 use crate::app::pages::user::projects::project::project_snapshots::ProjectSnapshots;
 use crate::app::pages::user::projects::project::project_team::ProjectTeam;
 use crate::app::pages::user::projects::project::ProjectPage;
@@ -116,27 +113,17 @@ fn ProjectsRoutes() -> impl MatchNestedRoutes + Clone {
 
 #[component(transparent)]
 fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
-    let set_active_snapshot_action = ServerAction::<SetActiveProjectSnapshot>::new();
-    let unset_active_snapshot_action = ServerAction::<UnsetActiveProjectSnapshot>::new();
-
     view! {
         <ParentRoute
             path=path!(":project_slug")
-            view=move || {
-                view! { <ProjectPage set_active_snapshot_action unset_active_snapshot_action /> }
-            }
-        >
+            view=ProjectPage>
             <Route path=path!("") view=ProjectDashboard />
             <Route path=path!("settings") view=ProjectSettings />
             <Route path=path!("files/*path") view=ProjectFiles />
             <Route path=path!("team") view=ProjectTeam />
             <Route
                 path=path!("snapshots")
-                view=move || {
-                    view! {
-                        <ProjectSnapshots set_active_snapshot_action unset_active_snapshot_action />
-                    }
-                }
+                view=ProjectSnapshots
             />
         </ParentRoute>
     }

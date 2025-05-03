@@ -38,6 +38,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
         }
         None
     };
+    
     let location_path = use_location().pathname.get();
     let (project_id, set_project_id) = signal(get_project_slug(location_path));
 
@@ -54,8 +55,10 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
     };
     Effect::new(move || {
         let location = use_location().pathname.get();
-        let project_id = get_project_slug(location);
-        set_project_id(project_id.clone());
+        let location_project_id = get_project_slug(location);
+        if location_project_id != project_id(){
+            set_project_id(location_project_id.clone());
+        }
     });
 
     view! {
@@ -96,10 +99,10 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                                                         <option
                                                             value=project.slug.clone()
                                                             selected=move || {
-                                                                project.slug == project_id.get().unwrap_or_default()
+                                                                project.slug.clone() == project_id.get().unwrap_or_default()
                                                             }
                                                         >
-                                                            {project.name}
+                                                            {project.slug.clone()}
                                                         </option>
                                                     }
                                                 }
