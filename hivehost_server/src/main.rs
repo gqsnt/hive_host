@@ -10,8 +10,9 @@ use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use common::multiplex_listener::{run_server_tcp};
 use hivehost_server::project_action::server_project_action_token;
-use hivehost_server::tcp_listener::run_tcp_server;
+use hivehost_server::request_handler::{ServerRequestHandler};
 
 #[tokio::main]
 async fn main() -> ServerResult<()> {
@@ -52,11 +53,12 @@ async fn main() -> ServerResult<()> {
         hosting_client,
     };
 
-    let tcp_addr = SocketAddr::from_str(&server_addr)?; // Or a different address/port if needed
-    let tcp_state = app_state.clone();
+    let listener_addr = server_addr; // Or a different address/port if needed
+    let listener_state = app_state.clone();
     tokio::spawn(async move {
-        if let Err(e) = run_tcp_server(tcp_state, tcp_addr).await {
-            eprintln!("TCP Server failed: {}", e);
+        let handler = ServerRequestHandler { state: listener_state }; // Create handler
+        if let Err(e) = run_server_tcp(listener_addr, handler).await { // Use run_server
+            eprintln!("Multiplex Listener failed: {}", e);
         }
     });
     

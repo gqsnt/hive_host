@@ -22,6 +22,9 @@ pub mod hosting;
 #[cfg(feature = "multiplex-protocol")]
 pub mod multiplex_protocol;
 
+#[cfg(feature = "multiplex-listener")]
+pub mod multiplex_listener;
+
 use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 use std::str::FromStr;

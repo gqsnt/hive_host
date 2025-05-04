@@ -1,8 +1,5 @@
 
 
-#[cfg(feature = "server-children")]
-pub mod server_children;
-
 #[cfg(feature = "server-to-helper")]
 pub mod server_to_helper;
 

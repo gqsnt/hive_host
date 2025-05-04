@@ -7,10 +7,10 @@ use serde::de::DeserializeOwned;
 use crate::PING_PONG_ID;
 
 pub trait ActionTrait:
-Serialize + DeserializeOwned + Debug + Send + Sync + HasPing + 'static
+Serialize + DeserializeOwned + Debug + Send + Sync + HasPing + PartialEq + Eq + 'static
 {
 }
-impl<T: Serialize + DeserializeOwned + Debug + Send + Sync + HasPing + 'static> ActionTrait for T {}
+impl<T: Serialize + DeserializeOwned + Debug + Send + Sync + HasPing + PartialEq + Eq + 'static> ActionTrait for T {}
 
 pub trait ResponseTrait:
 Serialize + DeserializeOwned + Debug + Send + Sync + HasPong + PartialEq + 'static
@@ -21,13 +21,13 @@ ResponseTrait for T
 {
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct MultiplexRequest<Action> {
     pub id: u64,
     pub action: Action,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct MultiplexResponse<Response> {
     pub id: u64,
     pub action_response: Response,

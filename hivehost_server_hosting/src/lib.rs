@@ -277,7 +277,7 @@ pub fn create_socket(addr: SocketAddr) -> HostingResult<Socket> {
 }
 
 
-pub async fn accept_loop(handle: runtime::Handle, listener: TcpListener) -> HostingResult<()> {
+pub async fn accept_hosting_loop(handle: runtime::Handle, listener: TcpListener) -> HostingResult<()> {
     let mut http = http1::Builder::new();
     http.pipeline_flush(true);
 

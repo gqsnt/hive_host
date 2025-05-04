@@ -741,9 +741,9 @@ checksum = "186dce98367766de751c42c4f03970fc60fc012296e706ccbb9d5df9b6c1e271"
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "dashmap",
  "deadpool",
- "listenfd",
  "secrecy",
  "serde",
  "serde_json",
@@ -1619,6 +1619,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 name = "hivehost_server"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "chrono",
  "common",
@@ -1637,6 +1638,7 @@ dependencies = [
 name = "hivehost_server_helper"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "common",
  "dotenvy",
  "thiserror 2.0.12",
@@ -1650,6 +1652,7 @@ name = "hivehost_server_hosting"
 version = "0.1.0"
 dependencies = [
  "async-compression",
+ "async-trait",
  "common",
  "dashmap",
  "deadpool-postgres",
@@ -2466,17 +2469,6 @@ name = "linux-raw-sys"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd945864f07fe9f5371a27ad7b52a172b4b499999f1d97574c9fa68373937e12"
-
-[[package]]
-name = "listenfd"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b87bc54a4629b4294d0b3ef041b64c40c611097a677d9dc07b2c67739fe39dba"
-dependencies = [
- "libc",
- "uuid",
- "winapi",
-]
 
 [[package]]
 name = "litemap"

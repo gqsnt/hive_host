@@ -18,6 +18,5 @@ RuntimeDirectory=hivehost_server_hosting
 RuntimeDirectoryMode=0770
 EnvironmentFile=/home/canarit/projects/hive_host/.env
 
-
 [Install]
 WantedBy=multi-user.target

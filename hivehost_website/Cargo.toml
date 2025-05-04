@@ -28,7 +28,7 @@ common = { path = "../common", features = ["website-to-server", "hosting"] }
 
 tower = { workspace = true, optional = true }
 tower-http = { workspace = true, features = ["fs", "compression-full"], optional = true }
-sqlx = { version = "0.8.5", optional = true, features = ["postgres", "time", "runtime-tokio-rustls"] }
+sqlx = {  workspace = true, optional = true, features = ["postgres", "time", "runtime-tokio-rustls"] }
 serde = { workspace = true, features = ["derive"] }
 dotenvy = { workspace = true, optional = true }
 anyhow = { version = "1.0.97", optional = true }
@@ -87,7 +87,6 @@ ssr = [
     "common/website-ssr",
     "common/multiplex-client",
     "common/multiplex-client-tcp",
-    "common/multiplex-protocol",
     "dep:regex",
     "dep:validator",
     "dep:sqlx",

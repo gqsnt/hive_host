@@ -5,11 +5,12 @@ edition = "2024"
 
 [dependencies]
 tokio = { workspace = true, features = [
-    "rt",
     "rt-multi-thread",
     "net",
     "time",
-    "fs"
+    "fs",
+    "socket2",
+    "macros"
 ] }
 hyper = { workspace = true, features = ["server", "nightly", "http1"] }
 hyper-util = { version = "0.1.11", features = ["full"] }
@@ -26,5 +27,6 @@ socket2 = { version = "0.5.9", features = ["all"] }
 quick_cache = { version = "0.6.13" }
 deadpool-postgres = "0.14.1"
 async-compression = { version = "0.4.23", features = ["all"] }
-common = { path = "../common", features = ["server-to-hosting", "server-children" , "multiplex-protocol"] }
+common = { path = "../common", features = ["server-to-hosting", "multiplex-listener", "multiplex-listener-unix"] }
 serde_json = { workspace = true }
+async-trait = { workspace = true }

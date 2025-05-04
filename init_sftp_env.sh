@@ -9,6 +9,8 @@ SFTP_GROUP="sftp_users"
 BTRFS_MOUNT_POINT="/hivehost/dev"
 PROD_MOUNT_BASE="/hivehost/prod"
 USERS_BASE="/hivehost/users"
+SOCKETS_HELPER_DIR="/hivehost/sockets/helpers/"
+SOCKETS_HOSTING_DIR="/hivehost/sockets/hosting/"
 HIVEHOST_BASE="/hivehost"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -56,6 +58,15 @@ mkdir -p "$USERS_BASE"
 chown root:root "$USERS_BASE"
 chmod 755 "$USERS_BASE" # SFTP Chroot base
 
+mkdir -p "$SOCKETS_HELPER_DIR"
+chown root:root "$SOCKETS_HELPER_DIR"
+chmod 755 "$SOCKETS_HELPER_DIR" # Sockets dir
+
+mkdir -p "$SOCKETS_HOSTING_DIR"
+chown root:root "$SOCKETS_HOSTING_DIR"
+chmod 755 "$SOCKETS_HOSTING_DIR" # Sockets dir
+
+
 ### 5. Check/Verify ACLs on BTRFS_MOUNT_POINT
 echo "Checking ACL support on '$BTRFS_MOUNT_POINT'..."
 # Ensure the BTRFS filesystem itself is mounted with ACL support in /etc/fstab!
@@ -87,6 +98,22 @@ fi
 echo "Granting service user access to '$PROD_MOUNT_BASE'..."
 setfacl -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE"
 setfacl -d -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE" # Allow creating mount dirs
+
+# Grant service user access to manage user directories
+echo "Granting service user access to '$USERS_BASE'..."
+setfacl -m "u:$SERVICE_USER:rwx" "$USERS_BASE"
+setfacl -d -m "u:$SERVICE_USER:rwx" "$USERS_BASE" # Allow creating user dirs
+
+# Grant service user access to manage sockets
+echo "Granting service user access to '$SOCKETS_HELPER_DIR'..."
+setfacl -m "u:$SERVICE_USER:rwx" "$SOCKETS_HELPER_DIR"
+setfacl -d -m "u:$SERVICE_USER:rwx" "$SOCKETS_HELPER_DIR" # Allow creating socket dirs
+
+echo "Granting service user access to '$SOCKETS_HOSTING_DIR'..."
+setfacl -m "u:$SERVICE_USER:rwx" "$SOCKETS_HOSTING_DIR"
+setfacl -d -m "u:$SERVICE_USER:rwx" "$SOCKETS_HOSTING_DIR" # Allow creating socket dirs
+
+
 
 echo "✅ Initialization Script Completed."
 echo "Base directories created under '$HIVEHOST_BASE'."

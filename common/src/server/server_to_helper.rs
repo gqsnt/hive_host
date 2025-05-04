@@ -2,7 +2,7 @@ use crate::UserSlugStr;
 use serde::{Deserialize, Serialize};
 
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum ServerToHelperAction {
     Ping,
     CreateUser {

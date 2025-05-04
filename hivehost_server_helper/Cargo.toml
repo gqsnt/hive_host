@@ -9,4 +9,5 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 thiserror = { workspace = true }
 dotenvy = { workspace = true }
-common = { path = "../common", features = ["server-children", "server-to-helper", "server-command", "multiplex-protocol"] }
+common = { path = "../common", features = [  "server-to-helper","multiplex-listener", "multiplex-listener-unix","server-command"] }
+async-trait = { workspace = true }

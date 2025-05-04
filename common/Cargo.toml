@@ -5,19 +5,19 @@ edition = "2024"
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-sqlx = { version = "0.8.5", features = ["runtime-async-std", "postgres", "uuid", "chrono"], optional = true }
+sqlx = { workspace = true, features = ["runtime-async-std", "postgres", "uuid", "chrono"], optional = true }
 strum = { workspace = true, features = ["derive"] }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
 
-tokio = {workspace=true, optional = true, features = ["process", "net", "io-util", "rt-multi-thread", "time", "sync"]}
-serde_json = { version = "1.0.140", optional = true }
+tokio = {workspace=true, optional = true, features = ["process","fs", "net", "io-util", "rt-multi-thread", "time", "sync"]}
+serde_json = { workspace = true, optional = true }
 tracing = {workspace = true, optional = true}
 tracing-subscriber = {workspace = true, features = ["env-filter"], optional = true}
-listenfd = { version = "1.0.2" , optional = true }
-dashmap = {version = "6.1.0", optional = true}
+dashmap = {workspace = true, optional = true}
 deadpool = {version = "0.12.2", optional = true, features = ["rt_tokio_1"]}
 secrecy = { workspace = true, optional = true }
+async-trait = {workspace = true, optional = true}
 
 [features]
 website-ssr = ["dep:sqlx"]
@@ -25,9 +25,11 @@ website-to-server=[]
 hosting=[]
 server-to-helper=[]
 server-to-hosting=["hosting"]
-server-children=["dep:tokio", "dep:serde_json", "dep:tracing", "dep:tracing-subscriber", "multiplex-protocol", "dep:listenfd"]
 multiplex-protocol=[]
 server-command=["dep:tokio"]
 multiplex-client=["dep:tokio", "dep:secrecy", "dep:serde_json", "dep:tracing", "dep:tracing-subscriber", "dep:dashmap", "dep:deadpool", "multiplex-protocol"]
 multiplex-client-tcp=[]
 multiplex-client-unix=[]
+multiplex-listener=["dep:async-trait", "dep:secrecy", "dep:tokio", "dep:serde_json", "dep:tracing", "dep:tracing-subscriber", "multiplex-protocol"]
+multiplex-listener-tcp=[]
+multiplex-listener-unix=[]

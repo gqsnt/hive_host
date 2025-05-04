@@ -16,6 +16,8 @@ RestartSec=5
 
 RuntimeDirectory=hivehost_server_helper
 RuntimeDirectoryMode=0770
+UMask=0007
+
 EnvironmentFile=/home/canarit/projects/hive_host/.env
 
 

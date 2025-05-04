@@ -1,38 +1,232 @@
-
 use dashmap::DashMap;
 use deadpool::managed;
 use deadpool::managed::{Metrics, Pool, RecycleError, RecycleResult};
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use secrecy:: SecretString;
 
-use thiserror::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
+use crate::multiplex_protocol::{ActionTrait, GenericRequest, GenericResponse, ResponseTrait};
+use crate::PING_PONG_ID;
 #[cfg(feature = "multiplex-client-tcp")]
 use secrecy::ExposeSecret;
+use thiserror::Error;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 #[cfg(feature = "multiplex-client-tcp")]
-use tokio::net::{TcpStream};
+use tokio::net::TcpStream;
 #[cfg(feature = "multiplex-client-unix")]
-use tokio::net::{UnixStream};
+use tokio::net::UnixStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tracing::log::warn;
 use tracing::{debug, error, info};
-use crate::multiplex_protocol::{ActionTrait, GenericRequest, GenericResponse, ResponseTrait};
-use crate::PING_PONG_ID;
-
-
 
 type ResponseSender<Response> = oneshot::Sender<Result<GenericResponse<Response>, ClientError>>;
 type RequestMap<Response> = DashMap<u64, ResponseSender<Response>>;
 type CommandSender<Action, Response> =
-mpsc::Sender<(GenericRequest<Action>, ResponseSender<Response>)>;
+    mpsc::Sender<(GenericRequest<Action>, ResponseSender<Response>)>;
 type CommandReceiver<Action, Response> =
-mpsc::Receiver<(GenericRequest<Action>, ResponseSender<Response>)>;
+    mpsc::Receiver<(GenericRequest<Action>, ResponseSender<Response>)>;
+
+
+async fn read_task<R, Response>(mut rd: R, request_map: Arc<RequestMap<Response>>)
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    Response: ResponseTrait,
+{
+    let mut error_occurred = false;
+    loop {
+        // 1. Read Length
+        let len = match rd.read_u32().await {
+            Ok(0) => {
+                info!("Reader: Connection closed (read 0 length)");
+                break;
+            }
+            Ok(len) => len,
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                    info!("Reader: Connection closed cleanly (EOF reading length)");
+                } else {
+                    error!("Reader: Failed to read length: {}", e);
+                    error_occurred = true; // Mark error for cleanup notification
+                }
+                break;
+            }
+        };
+
+        // Basic sanity check
+        if len > 10 * 1024 * 1024 {
+            // e.g., 10MB limit
+            error!("Reader: Received invalid length: {}", len);
+            error_occurred = true;
+            break;
+        }
+        if len == 0 {
+            info!("Reader: Received zero length message body. Assuming EOF/closed.");
+            break; // Treat length 0 as connection closed after length read
+        }
+
+
+        // 2. Read Payload
+        let mut buffer = vec![0u8; len as usize];
+        if let Err(e) = rd.read_exact(&mut buffer).await {
+            error!("Reader: Failed to read payload: {}", e);
+            error_occurred = true;
+            break;
+        }
+
+        // 3. Deserialize Generic Response
+        let response: GenericResponse<Response> = match serde_json::from_slice(&buffer) {
+            Ok(resp) => resp,
+            Err(e) => {
+                error!("Reader: Failed to deserialize response: {}", e);
+                error_occurred = true;
+                // Breaking on deserialize error seems safer.
+                break;
+            }
+        };
+
+        debug!("Reader: Received Resp ID: {}", response.id);
+
+        // Handle Ping/Pong specially for recycling checks
+        if response.id == PING_PONG_ID {
+            if let Some((_id, sender)) = request_map.remove(&response.id) {
+                debug!("Reader: Found match for Ping Resp ID: {}", response.id);
+                if response.action_response == Response::get_pong() {
+                    debug!("Reader: Received valid Pong for ID {}", PING_PONG_ID);
+                    let _ = sender.send(Ok(response)); // Send Ok(Pong response)
+                } else {
+                    warn!(
+                        "Reader: Received non-Pong response for Ping ID {}: {:?}",
+                        PING_PONG_ID, response.action_response
+                    );
+                    let _ = sender.send(Err(ClientError::Connection(ConnectionError::InvalidPong)));
+                }
+            } else {
+                warn!( // Changed to warn!
+                    "Reader: Received Pong response for ID {} but no sender waiting?",
+                    PING_PONG_ID
+                );
+            }
+        } else {
+            // Handle regular responses
+            if let Some((_id, sender)) = request_map.remove(&response.id) {
+                debug!("Reader: Found match for Resp ID: {}", response.id);
+                let result = match response.action_response.get_error() {
+                    Some(err_msg) => Err(ClientError::Server(err_msg)),
+                    None => Ok(response), // Pass the full GenericResponse
+                };
+                if sender.send(result).is_err() {
+                    warn!( // Changed to warn!
+                        "Reader: Failed to send response back to caller (channel closed for ID: {})",
+                        _id
+                    );
+                }
+            } else {
+                warn!( // Changed to warn!
+                    "Reader: Received unexpected response ID: {}", response.id
+                );
+            }
+        }
+    }
+
+    info!("Reader task finished. Cleaning up outstanding requests.");
+    let err_type = if error_occurred {
+        ClientError::Connection(ConnectionError::Io(
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Reader task failed unexpectedly",
+            )
+                .to_string(),
+        ))
+    } else {
+        ClientError::Connection(ConnectionError::Closed)
+    };
+
+    // Notify all remaining waiters about the connection failure/closure
+    let keys_to_notify: Vec<u64> = request_map.iter().map(|entry| *entry.key()).collect();
+    for key in keys_to_notify {
+        if let Some((id, sender)) = request_map.remove(&key) {
+            info!(
+                "Reader: Notifying request ID {} of connection closure/error",
+                id
+            );
+            let _ = sender.send(Err(err_type.clone()));
+        }
+    }
+    info!("Reader task cleanup complete.");
+}
+
+
+async fn write_task<W, Action, Response>(
+    mut wr: W,
+    mut rx: CommandReceiver<Action, Response>,
+    request_map: Arc<RequestMap<Response>>, // Needed to store sender
+) where
+    W: AsyncWrite + Unpin + Send + 'static,
+    Action: ActionTrait,
+    Response: ResponseTrait,
+{
+    info!("Writer task started");
+    while let Some((request, sender)) = rx.recv().await {
+        let request_id = request.id;
+
+        // Store sender *before* attempting to write
+        if request_map.insert(request_id, sender).is_some() {
+            warn!("Writer: Duplicate request ID {} encountered!", request_id);
+        }
+        debug!("Writer: Stored sender for Req ID: {}", request_id);
+
+        // 1. Serialize Generic Request
+        let request_bytes = match serde_json::to_vec(&request) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!(
+                    "Writer: Failed to serialize request ID {}: {}",
+                    request_id, e
+                );
+                if let Some((_id, sender)) = request_map.remove(&request_id) {
+                    let _ = sender.send(Err(ClientError::Connection(
+                        ConnectionError::SerdeError(e.to_string()),
+                    )));
+                }
+                continue; // Skip to next request
+            }
+        };
+
+        // 2. Write Length Prefix
+        if let Err(e) = wr.write_u32(request_bytes.len() as u32).await {
+            error!(
+                "Writer: Failed to write length for Req ID {}: {}",
+                request_id, e
+            );
+            if let Some((_id, sender)) = request_map.remove(&request_id) {
+                let _ = sender.send(Err(ClientError::Connection(e.into())));
+            }
+            break; // Connection likely broken
+        }
+
+        // 3. Write Payload
+        if let Err(e) = wr.write_all(&request_bytes).await {
+            error!(
+                "Writer: Failed to write payload for Req ID {}: {}",
+                request_id, e
+            );
+            if let Some((_id, sender)) = request_map.remove(&request_id) {
+                let _ = sender.send(Err(ClientError::Connection(e.into())));
+            }
+            break; // Connection likely broken
+        }
+        debug!("Writer: Sent Req ID: {}", request_id);
+    }
+    info!("Writer task finished (channel closed or write error).");
+    // Attempt graceful shutdown of write half
+    let _ = wr.shutdown().await;
+}
+
 
 pub struct ConnectionHandler<Action: ActionTrait, Response: ResponseTrait> {
     tx: CommandSender<Action, Response>,
@@ -41,260 +235,65 @@ pub struct ConnectionHandler<Action: ActionTrait, Response: ResponseTrait> {
 }
 
 impl<Action: ActionTrait, Response: ResponseTrait> ConnectionHandler<Action, Response> {
-
-
     #[cfg(feature = "multiplex-client-unix")]
-    /// Establishes a connection and spawns background read/write tasks.
-    pub async fn new(addr: String, token:Option<SecretString>) -> Result<Self, ConnectionError> {
-        debug!("Attempting to connect to {}", addr);
+    /// Establishes a Unix socket connection and spawns background read/write tasks.
+    pub async fn new_unix(addr: String) -> Result<Self, ConnectionError> {
+        info!("Connecting to Unix socket: {}", addr);
         let stream = UnixStream::connect(&addr)
             .await
-            .map_err(|e| ConnectionError::Io(e.to_string()))?; // Map connection error
-        info!("Successfully connected to {}", addr);
-        let (rd, wr) = tokio::io::split(stream);
+            .map_err(|e| ConnectionError::Io(e.to_string()))?;
+        info!("Successfully connected to Unix socket: {}", addr);
+        let (rd, wr): (ReadHalf<UnixStream>, WriteHalf<UnixStream>) = tokio::io::split(stream);
 
-        let (tx, rx): (
-            CommandSender<Action, Response>,
-            CommandReceiver<Action, Response>,
-        ) = mpsc::channel(100);
-        let request_map = Arc::new(RequestMap::<Response>::new());
-
-        // Spawn reader task
-        let reader_map_clone = Arc::clone(&request_map);
-        tokio::spawn(Self::read_task(rd, reader_map_clone));
-
-        // Spawn writer task
-        tokio::spawn(Self::write_task(token, wr, rx, request_map));
-
-        Ok(ConnectionHandler {
-            tx,
-            _action_marker: PhantomData,
-            _response_marker: PhantomData,
-        })
-    }
-
-    #[cfg(feature = "multiplex-client-unix")]
-    /// Task to read responses from the socket and notify waiting callers.
-    async fn read_task(mut rd: ReadHalf<UnixStream>, request_map: Arc<RequestMap<Response>>) {
-        info!("Reader task started");
-        let mut error_occurred = false;
-        loop {
-            // 1. Read Length
-            let len = match rd.read_u32().await {
-                Ok(0) => {
-                    info!("Reader: Connection closed (read 0 length)");
-                    break;
-                }
-                Ok(len) => len,
-                Err(e) => {
-                    if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                        info!("Reader: Connection closed cleanly (EOF reading length)");
-                    } else {
-                        error!("Reader: Failed to read length: {}", e);
-                        error_occurred = true; // Mark error for cleanup notification
-                    }
-                    break;
-                }
-            };
-
-            // Basic sanity check
-            if len == 0 || len > 10 * 1024 * 1024 {
-                // e.g., 10MB limit
-                error!("Reader: Received invalid length: {}", len);
-                error_occurred = true;
-                break;
-            }
-
-            // 2. Read Payload
-            let mut buffer = vec![0u8; len as usize];
-            if let Err(e) = rd.read_exact(&mut buffer).await {
-                error!("Reader: Failed to read payload: {}", e);
-                error_occurred = true;
-                break;
-            }
-
-            // 3. Deserialize Generic Response
-            let response: GenericResponse<Response> = match serde_json::from_slice(&buffer) {
-                Ok(resp) => resp,
-                Err(e) => {
-                    error!("Reader: Failed to deserialize response: {}", e);
-                    error_occurred = true;
-                    // Don't break necessarily, maybe log and try next message?
-                    // For now, breaking on deserialize error seems safer.
-                    break;
-                }
-            };
-
-            debug!("Reader: Received Resp ID: {}", response.id);
-
-            // Handle Ping/Pong specially for recycling checks
-            if response.id == PING_PONG_ID {
-                // We still need to notify the sender waiting in `recycle`
-                if let Some((_id, sender)) = request_map.remove(&response.id) {
-                    debug!("Reader: Found match for Ping Resp ID: {}", response.id);
-                    // Check if it's actually a Pong
-                    if response.action_response == Response::get_pong() {
-                        info!("Reader: Received valid Pong for ID {}", PING_PONG_ID);
-                        // Send Ok(response) back to the recycler
-                        let _ = sender.send(Ok(response));
-                    } else {
-                        warn!(
-                            "Reader: Received non-Pong response for Ping ID {}: {:?}",
-                            PING_PONG_ID, response.action_response
-                        );
-                        // Send error back to the recycler
-                        let _ =
-                            sender.send(Err(ClientError::Connection(ConnectionError::InvalidPong)));
-                    }
-                } else {
-                    // This shouldn't happen if recycle logic is correct
-                    warn!(
-                        "Reader: Received Pong response for ID {} but no sender waiting?",
-                        PING_PONG_ID
-                    );
-                }
-                continue; // Continue reading after handling pong
-            }
-
-            // 4. Match Regular Response to Request
-            if let Some((_id, sender)) = request_map.remove(&response.id) {
-                debug!("Reader: Found match for Resp ID: {}", response.id);
-
-                // Check if the *inner* response indicates an error
-                let result = match response.action_response.get_error() {
-                    Some(err_msg) => Err(ClientError::Server(err_msg)),
-                    None => Ok(response), // Pass the full GenericResponse<Response>
-                };
-
-                if sender.send(result).is_err() {
-                    // Caller might have timed out or dropped the request
-                    debug!(
-                        "Reader: Failed to send response back to caller (channel closed for ID: {})",
-                        _id
-                    );
-                }
-            } else {
-                warn!("Reader: Received unexpected response ID: {}", response.id);
-                // Potentially malicious or bug? Log and discard.
-            }
-        }
-
-        // --- Cleanup ---
-        info!("Reader task finished. Cleaning up outstanding requests.");
-        let err_type = if error_occurred {
-            ClientError::Connection(ConnectionError::Io(
-                std::io::Error::new(std::io::ErrorKind::Other, "Reader task failed unexpectedly")
-                    .to_string(),
-            ))
-        } else {
-            ClientError::Connection(ConnectionError::Closed)
-        };
-
-        // Notify all remaining pending requests
-        let keys_to_notify: Vec<u64> = request_map.iter().map(|entry| *entry.key()).collect();
-
-        for key in keys_to_notify {
-            // Attempt to remove the entry. It might already be gone if processed right before loop exit.
-            if let Some((id, sender)) = request_map.remove(&key) {
-                info!(
-                    "Reader: Notifying request ID {} of connection closure/error",
-                    id
-                );
-                let _ = sender.send(Err(err_type.clone()));
-            }
-        }
-        info!("Reader task cleanup complete.");
-    }
-
-    #[cfg(feature = "multiplex-client-unix")]
-    /// Task to write requests received from the client handle to the socket.
-    async fn write_task(
-        _token:Option<SecretString>,
-        mut wr: WriteHalf<UnixStream>,
-        mut rx: CommandReceiver<Action, Response>,
-        request_map: Arc<RequestMap<Response>>, // Needed to store sender
-    ) {
-        info!("Writer task started");
-        while let Some((request, sender)) = rx.recv().await {
-            let request_id = request.id;
-
-            // Store sender *before* attempting to write
-            if request_map.insert(request_id, sender).is_some() {
-                warn!("Writer: Duplicate request ID {} encountered!", request_id);
-                // Overwriting the previous sender. This indicates a bug in ID generation
-                // or extremely rapid requests. Let's log and continue for now.
-            }
-            debug!("Writer: Stored sender for Req ID: {}", request_id);
-
-            // 1. Serialize Generic Request
-            let request_bytes = match serde_json::to_vec(&request) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    error!(
-                        "Writer: Failed to serialize request ID {}: {}",
-                        request_id, e
-                    );
-                    if let Some((_id, sender)) = request_map.remove(&request_id) {
-                        let _ = sender.send(Err(ClientError::Connection(
-                            ConnectionError::SerdeError(e.to_string()),
-                        )));
-                    }
-                    continue; // Skip to next request
-                }
-            };
-
-            // 2. Write Length Prefix
-            if let Err(e) = wr.write_u32(request_bytes.len() as u32).await {
-                error!(
-                    "Writer: Failed to write length for Req ID {}: {}",
-                    request_id, e
-                );
-                if let Some((_id, sender)) = request_map.remove(&request_id) {
-                    let _ = sender.send(Err(ClientError::Connection(e.into())));
-                }
-                break; // Connection likely broken
-            }
-
-            // 3. Write Payload
-            if let Err(e) = wr.write_all(&request_bytes).await {
-                error!(
-                    "Writer: Failed to write payload for Req ID {}: {}",
-                    request_id, e
-                );
-                if let Some((_id, sender)) = request_map.remove(&request_id) {
-                    let _ = sender.send(Err(ClientError::Connection(e.into())));
-                }
-                break; // Connection likely broken
-            }
-            debug!("Writer: Sent Req ID: {}", request_id);
-        }
-        info!("Writer task finished (channel closed or write error).");
-        // Attempt graceful shutdown of write half
-        let _ = wr.shutdown().await;
+        Self::spawn_tasks(rd, wr)
     }
 
     #[cfg(feature = "multiplex-client-tcp")]
-    /// Establishes a connection and spawns background read/write tasks.
-    pub async fn new(addr: String, token:Option<SecretString>) -> Result<Self, ConnectionError> {
-        debug!("Attempting to connect to {}", addr);
-        let stream = TcpStream::connect(&addr)
+    /// Establishes a TCP connection, performs auth, and spawns background read/write tasks.
+    pub async fn new_tcp(addr: String, token: Option<SecretString>) -> Result<Self, ConnectionError> {
+        info!("Connecting to TCP socket: {}", addr);
+        let mut stream = TcpStream::connect(&addr)
             .await
-            .map_err(|e| ConnectionError::Io(e.to_string()))?; // Map connection error
-        info!("Successfully connected to {}", addr);
-        let (rd, wr) = tokio::io::split(stream);
+            .map_err(|e| ConnectionError::Io(e.to_string()))?;
+        info!("Successfully connected to TCP socket: {}", addr);
 
+        // --- Perform Authentication ---
+        let auth_token = token.ok_or(ConnectionError::AuthRequired)?;
+        let auth_request = GenericRequest::<Action>::get_auth(auth_token.expose_secret().to_string())
+            .ok_or(ConnectionError::AuthNotSupported)?; // Assuming get_auth returns Option
+
+        let auth_bytes = serde_json::to_vec(&auth_request)
+            .map_err(|e| ConnectionError::SerdeError(e.to_string()))?;
+
+        stream.write_u32(auth_bytes.len() as u32).await?;
+        stream.write_all(&auth_bytes).await?;
+        info!("Sent authentication token to {}", addr);
+        // Note: This assumes the server doesn't send an immediate auth confirmation response.
+        // If it does, you'd need to read it here *before* splitting the stream.
+
+        let (rd, wr): (ReadHalf<TcpStream>, WriteHalf<TcpStream>) = tokio::io::split(stream);
+
+        Self::spawn_tasks(rd, wr)
+    }
+
+    fn spawn_tasks<R, W>(rd: R, wr: W) -> Result<Self, ConnectionError>
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
         let (tx, rx): (
             CommandSender<Action, Response>,
             CommandReceiver<Action, Response>,
         ) = mpsc::channel(100);
+
         let request_map = Arc::new(RequestMap::<Response>::new());
 
-        // Spawn reader task
+        // Spawn generic reader task
         let reader_map_clone = Arc::clone(&request_map);
-        tokio::spawn(Self::read_task(rd, reader_map_clone));
+        tokio::spawn(read_task(rd, reader_map_clone));
 
-        // Spawn writer task
-        tokio::spawn(Self::write_task(token, wr, rx, request_map));
+        // Spawn generic writer task
+        tokio::spawn(write_task(wr, rx, request_map));
 
         Ok(ConnectionHandler {
             tx,
@@ -302,225 +301,6 @@ impl<Action: ActionTrait, Response: ResponseTrait> ConnectionHandler<Action, Res
             _response_marker: PhantomData,
         })
     }
-
-    #[cfg(feature = "multiplex-client-tcp")]
-    /// Task to read responses from the socket and notify waiting callers.
-    async fn read_task(mut rd: ReadHalf<TcpStream>, request_map: Arc<RequestMap<Response>>) {
-        info!("Reader task started");
-        let mut error_occurred = false;
-        loop {
-            // 1. Read Length
-            let len = match rd.read_u32().await {
-                Ok(0) => {
-                    info!("Reader: Connection closed (read 0 length)");
-                    break;
-                }
-                Ok(len) => len,
-                Err(e) => {
-                    if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                        info!("Reader: Connection closed cleanly (EOF reading length)");
-                    } else {
-                        error!("Reader: Failed to read length: {}", e);
-                        error_occurred = true; // Mark error for cleanup notification
-                    }
-                    break;
-                }
-            };
-
-            // Basic sanity check
-            if len == 0 || len > 10 * 1024 * 1024 {
-                // e.g., 10MB limit
-                error!("Reader: Received invalid length: {}", len);
-                error_occurred = true;
-                break;
-            }
-
-            // 2. Read Payload
-            let mut buffer = vec![0u8; len as usize];
-            if let Err(e) = rd.read_exact(&mut buffer).await {
-                error!("Reader: Failed to read payload: {}", e);
-                error_occurred = true;
-                break;
-            }
-
-            // 3. Deserialize Generic Response
-            let response: GenericResponse<Response> = match serde_json::from_slice(&buffer) {
-                Ok(resp) => resp,
-                Err(e) => {
-                    error!("Reader: Failed to deserialize response: {}", e);
-                    error_occurred = true;
-                    // Don't break necessarily, maybe log and try next message?
-                    // For now, breaking on deserialize error seems safer.
-                    break;
-                }
-            };
-
-            debug!("Reader: Received Resp ID: {}", response.id);
-
-            // Handle Ping/Pong specially for recycling checks
-            if response.id == PING_PONG_ID {
-                // We still need to notify the sender waiting in `recycle`
-                if let Some((_id, sender)) = request_map.remove(&response.id) {
-                    debug!("Reader: Found match for Ping Resp ID: {}", response.id);
-                    // Check if it's actually a Pong
-                    if response.action_response == Response::get_pong() {
-                        info!("Reader: Received valid Pong for ID {}", PING_PONG_ID);
-                        // Send Ok(response) back to the recycler
-                        let _ = sender.send(Ok(response));
-                    } else {
-                        warn!(
-                            "Reader: Received non-Pong response for Ping ID {}: {:?}",
-                            PING_PONG_ID, response.action_response
-                        );
-                        // Send error back to the recycler
-                        let _ =
-                            sender.send(Err(ClientError::Connection(ConnectionError::InvalidPong)));
-                    }
-                } else {
-                    // This shouldn't happen if recycle logic is correct
-                    warn!(
-                        "Reader: Received Pong response for ID {} but no sender waiting?",
-                        PING_PONG_ID
-                    );
-                }
-                continue; // Continue reading after handling pong
-            }
-
-            // 4. Match Regular Response to Request
-            if let Some((_id, sender)) = request_map.remove(&response.id) {
-                debug!("Reader: Found match for Resp ID: {}", response.id);
-
-                // Check if the *inner* response indicates an error
-                let result = match response.action_response.get_error() {
-                    Some(err_msg) => Err(ClientError::Server(err_msg)),
-                    None => Ok(response), // Pass the full GenericResponse<Response>
-                };
-
-                if sender.send(result).is_err() {
-                    // Caller might have timed out or dropped the request
-                    debug!(
-                        "Reader: Failed to send response back to caller (channel closed for ID: {})",
-                        _id
-                    );
-                }
-            } else {
-                warn!("Reader: Received unexpected response ID: {}", response.id);
-                // Potentially malicious or bug? Log and discard.
-            }
-        }
-
-        // --- Cleanup ---
-        info!("Reader task finished. Cleaning up outstanding requests.");
-        let err_type = if error_occurred {
-            ClientError::Connection(ConnectionError::Io(
-                std::io::Error::new(std::io::ErrorKind::Other, "Reader task failed unexpectedly")
-                    .to_string(),
-            ))
-        } else {
-            ClientError::Connection(ConnectionError::Closed)
-        };
-
-        // Notify all remaining pending requests
-        let keys_to_notify: Vec<u64> = request_map.iter().map(|entry| *entry.key()).collect();
-
-        for key in keys_to_notify {
-            // Attempt to remove the entry. It might already be gone if processed right before loop exit.
-            if let Some((id, sender)) = request_map.remove(&key) {
-                info!(
-                    "Reader: Notifying request ID {} of connection closure/error",
-                    id
-                );
-                let _ = sender.send(Err(err_type.clone()));
-            }
-        }
-        info!("Reader task cleanup complete.");
-    }
-
-    #[cfg(feature = "multiplex-client-tcp")]
-    /// Task to write requests received from the client handle to the socket.
-    async fn write_task(
-        token:Option<SecretString>,
-        mut wr: WriteHalf<TcpStream>,
-        mut rx: CommandReceiver<Action, Response>,
-        request_map: Arc<RequestMap<Response>>, // Needed to store sender
-    ) {
-        info!("Writer task started");
-        let request_bytes=  serde_json::to_vec(&GenericRequest::<Action>::get_auth(token.expect("Token Should be present for tcp auth").expose_secret().to_string())).expect("Failed to serialize auth request");
-        if let Err(e) = wr.write_u32(request_bytes.len() as u32).await {
-            error!(
-                "Writer: Failed to write length for Req ID {}: {}",
-                PING_PONG_ID, e
-            );
-            return;
-        }
-        if let Err(e) = wr.write_all(&request_bytes).await {
-            error!(
-                "Writer: Failed to write payload for Req ID {}: {}",
-                PING_PONG_ID, e
-            );
-            return;
-        }
-
-        while let Some((request, sender)) = rx.recv().await {
-            let request_id = request.id;
-
-            // Store sender *before* attempting to write
-            if request_map.insert(request_id, sender).is_some() {
-                warn!("Writer: Duplicate request ID {} encountered!", request_id);
-                // Overwriting the previous sender. This indicates a bug in ID generation
-                // or extremely rapid requests. Let's log and continue for now.
-            }
-            debug!("Writer: Stored sender for Req ID: {}", request_id);
-
-            // 1. Serialize Generic Request
-            let request_bytes = match serde_json::to_vec(&request) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    error!(
-                        "Writer: Failed to serialize request ID {}: {}",
-                        request_id, e
-                    );
-                    if let Some((_id, sender)) = request_map.remove(&request_id) {
-                        let _ = sender.send(Err(ClientError::Connection(
-                            ConnectionError::SerdeError(e.to_string()),
-                        )));
-                    }
-                    continue; // Skip to next request
-                }
-            };
-
-            // 2. Write Length Prefix
-            if let Err(e) = wr.write_u32(request_bytes.len() as u32).await {
-                error!(
-                    "Writer: Failed to write length for Req ID {}: {}",
-                    request_id, e
-                );
-                if let Some((_id, sender)) = request_map.remove(&request_id) {
-                    let _ = sender.send(Err(ClientError::Connection(e.into())));
-                }
-                break; // Connection likely broken
-            }
-
-            // 3. Write Payload
-            if let Err(e) = wr.write_all(&request_bytes).await {
-                error!(
-                    "Writer: Failed to write payload for Req ID {}: {}",
-                    request_id, e
-                );
-                if let Some((_id, sender)) = request_map.remove(&request_id) {
-                    let _ = sender.send(Err(ClientError::Connection(e.into())));
-                }
-                break; // Connection likely broken
-            }
-            debug!("Writer: Sent Req ID: {}", request_id);
-        }
-        info!("Writer task finished (channel closed or write error).");
-        // Attempt graceful shutdown of write half
-        let _ = wr.shutdown().await;
-    }
-
-
-
 
     /// Internal method used by the connection manager for recycling.
     async fn send_ping_internal(&self) -> Result<GenericResponse<Response>, ClientError> {
@@ -556,19 +336,27 @@ impl<Action: ActionTrait, Response: ResponseTrait> ConnectionHandler<Action, Res
 
 struct ConnectionManager<Action: ActionTrait, Response: ResponseTrait> {
     addr: String,
-    token: Option<SecretString>,
+    _token: Option<SecretString>,
     _marker: PhantomData<(Action, Response)>, // Use PhantomData for unused generics
 }
 
 impl<Action: ActionTrait, Response: ResponseTrait> managed::Manager
-for ConnectionManager<Action, Response>
+    for ConnectionManager<Action, Response>
 {
     type Type = ConnectionHandler<Action, Response>; // The managed type
     type Error = ConnectionError; // The error type for connection issues
 
     async fn create(&self) -> Result<Self::Type, Self::Error> {
         // Creates a new connection handler
-        ConnectionHandler::new(self.addr.clone(), self.token.clone()).await
+        info!("Creating new pooled connection to {}", self.addr);
+        #[cfg(feature = "multiplex-client-unix")]
+        {
+            ConnectionHandler::new_unix(self.addr.clone()).await
+        }
+        #[cfg(feature = "multiplex-client-tcp")]
+        {
+            ConnectionHandler::new_tcp(self.addr.clone(), self._token.clone()).await
+        }
     }
 
     async fn recycle(
@@ -576,24 +364,18 @@ for ConnectionManager<Action, Response>
         conn: &mut Self::Type,
         _metrics: &Metrics,
     ) -> RecycleResult<Self::Error> {
-        // Recycles an existing connection handler by sending a Ping
-        debug!("Recycling connection...");
-        let recycle_timeout = Duration::from_millis(500); // Increased timeout slightly
-
+        debug!("Recycling connection to {}", self.addr);
+        let recycle_timeout = Duration::from_millis(500);
         match timeout(recycle_timeout, conn.send_ping_internal()).await {
-            // Ping timed out
             Err(_) => {
                 warn!("Recycle failed: Ping timed out for {}", self.addr);
                 Err(RecycleError::Backend(ConnectionError::PingTimeout))
             }
-            // Got a result within timeout
             Ok(ping_result) => match ping_result {
-                // Successfully received a response for the Ping
                 Ok(response) => {
-                    // Use the ResponseTrait's HasPong constraint to check
                     if response.action_response == Response::get_pong() {
                         debug!("Recycle successful (Pong received) for {}", self.addr);
-                        Ok(()) // Connection is healthy
+                        Ok(())
                     } else {
                         warn!(
                             "Recycle failed: Invalid Pong received from {}: {:?}",
@@ -602,13 +384,12 @@ for ConnectionManager<Action, Response>
                         Err(RecycleError::Backend(ConnectionError::InvalidPong))
                     }
                 }
-                // send_ping_internal failed (ConnectionError or other ClientError variants)
                 Err(ClientError::Connection(e)) => {
                     warn!(
                         "Recycle failed: Connection error during Ping to {}: {:?}",
                         self.addr, e
                     );
-                    Err(RecycleError::Backend(e)) // Propagate the specific connection error
+                    Err(RecycleError::Backend(e))
                 }
                 Err(ClientError::Server(e)) => {
                     // This shouldn't happen for a Ping/Pong
@@ -616,21 +397,14 @@ for ConnectionManager<Action, Response>
                         "Recycle failed: Server returned error for Ping to {}: {}",
                         self.addr, e
                     );
-                    Err(RecycleError::Message(std::borrow::Cow::from(format!(
-                        "Server error on ping: {}",
-                        e
-                    ))))
+                    Err(RecycleError::Message(format!("Server error on ping: {e}").into()))
                 }
                 Err(e) => {
-                    // Catch-all for other ClientError variants
                     error!(
                         "Recycle failed: Unexpected client error during Ping to {}: {:?}",
                         self.addr, e
                     );
-                    Err(RecycleError::Message(std::borrow::Cow::from(format!(
-                        "Unexpected Ping Error: {}",
-                        e
-                    ))))
+                    Err(RecycleError::Message(format!("Unexpected Ping Error: {e}").into()))
                 }
             },
         }
@@ -648,10 +422,25 @@ pub struct MultiplexClient<Action: ActionTrait, Response: ResponseTrait> {
 
 impl<Action: ActionTrait, Response: ResponseTrait> MultiplexClient<Action, Response> {
     /// Creates a new client with a connection pool.
-    pub fn new(addr: String, token:Option<SecretString>, max_size: usize) -> Result<Self, ConnectionError> {
+    pub fn new(
+        addr: String,
+        _token: Option<SecretString>,
+        max_size: usize,
+    ) -> Result<Self, ConnectionError> {
+
+        #[cfg(all(feature = "multiplex-client-unix", feature = "multiplex-client-tcp"))]
+        compile_error!("Features 'multiplex-client-unix' and 'multiplex-client-tcp' are mutually exclusive.");
+
+        #[cfg(not(any(feature="multiplex-client-unix", feature="multiplex-client-tcp")))]
+        compile_error!("Either 'multiplex-client-unix' or 'multiplex-client-tcp' feature must be enabled for MultiplexClient");
+
+        #[cfg(feature = "multiplex-client-tcp")]
+        if _token.is_none() {
+            return Err(ConnectionError::AuthRequired);
+        }
         let manager = ConnectionManager {
             addr,
-            token,
+            _token,
             _marker: PhantomData,
         };
         let pool = Pool::builder(manager)
@@ -673,16 +462,10 @@ impl<Action: ActionTrait, Response: ResponseTrait> MultiplexClient<Action, Respo
         debug!("Got connection handler from pool");
 
         // 2. Generate unique request ID (ensure it's not PING_PONG_ID)
-        let request_id = loop {
-            let id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
-            // Handle potential wrap-around to 0, although very unlikely with u64
-            if id != PING_PONG_ID {
-                break id;
-            } else {
-                warn!("Generated PING_PONG_ID, incrementing again.");
-                // Fetch-add again if we hit the reserved ID
-                self.next_request_id.fetch_add(1, Ordering::Relaxed);
-            }
+        let request_id = if action == Action::get_ping() {
+            PING_PONG_ID
+        } else {
+            self.next_request_id.fetch_add(1, Ordering::Relaxed)
         };
 
         // 3. Create Request wrapper and oneshot channel
@@ -759,7 +542,11 @@ pub enum ConnectionError {
     #[error("Invalid Pong received")]
     InvalidPong,
     #[error("Connection Unhealthy (Recycle Failed)")]
-    Unhealthy, // General recycle failure
+    Unhealthy,
+    #[error("Authentication required")]
+    AuthRequired,
+    #[error("Authentication not supported")]
+    AuthNotSupported,
 }
 
 impl From<serde_json::Error> for ConnectionError {

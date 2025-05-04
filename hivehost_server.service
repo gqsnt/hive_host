@@ -13,6 +13,11 @@ ExecStart=/usr/local/bin/hivehost_server
 # Restart policy
 Restart=on-failure
 RestartSec=5
+
+
+RuntimeDirectory=hivehost_server
+RuntimeDirectoryMode=0770
+
 EnvironmentFile=/home/canarit/projects/hive_host/.env
 
 [Install]
