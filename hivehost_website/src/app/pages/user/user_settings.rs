@@ -1,23 +1,25 @@
 use leptos::control_flow::For;
 use leptos::either::Either;
 
-use crate::app::components::csrf_field::CSRFField;
-use leptos::prelude::ElementChild;
-use leptos::prelude::IntoAnyAttribute;
+use leptos::prelude::{expect_context, ElementChild, NodeRef, NodeRefAttribute, OnAttribute};
 use leptos::prelude::IntoMaybeErased;
-use leptos::prelude::{signal, AddAnyAttr, Effect, Set};
-use leptos::prelude::{ActionForm, ClassAttribute, Get, Resource, ServerAction, Signal, Suspense};
+use leptos::prelude::{signal, Effect, Set};
+use leptos::prelude::{ClassAttribute, Get, Resource, ServerAction, Signal, Suspense};
 use leptos::text_prop::TextProp;
 use leptos::{component, view, IntoView};
+use leptos::html::{Input, Textarea};
+use reactive_stores::Store;
 use web_sys::SubmitEvent;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 
 #[component]
 pub fn UserSettingsPage() -> impl IntoView {
+    let global_state: Store<GlobalState> = expect_context();
     let delete_ssh_action = ServerAction::<server_fns::DeleteSshKey>::new();
     let add_ssh_action = ServerAction::<server_fns::AddSshKey>::new();
     let update_password_action = ServerAction::<server_fns::UpdatePassword>::new();
 
-    let ssh_keys_resource = Resource::new(
+    let ssh_keys_resource = Resource::new_bitcode(
         move || {
             (
                 delete_ssh_action.version().get(),
@@ -26,6 +28,75 @@ pub fn UserSettingsPage() -> impl IntoView {
         },
         |_| server_fns::get_ssh_keys(),
     );
+
+
+    let old_password_ref = NodeRef::<Input>::default();
+    let new_password_ref = NodeRef::<Input>::default();
+    let new_password_confirm_ref = NodeRef::<Input>::default();
+
+    let add_ssh_key_name_ref = NodeRef::<Input>::default();
+    let add_ssh_key_value_ref = NodeRef::<Textarea>::default();
+
+
+    let on_password_update = move |event: SubmitEvent| {
+        event.prevent_default();
+        update_password_action.dispatch(server_fns::UpdatePassword {
+            csrf: global_state.csrf().get().unwrap_or_default(),
+            old_password: old_password_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+            new_password: new_password_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+            new_password_confirm: new_password_confirm_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+        });
+    };
+
+
+
+    let on_delete_ssh_click = move |event: SubmitEvent, ssh_key_id:i64, key_name:String| {
+        event.prevent_default();
+        let confirmed = if let Some(window) = web_sys::window() {
+            window
+                .confirm_with_message(
+                    &format!(
+                        "Are you sure you want to delete the key '{key_name}'?",
+                    ),
+                )
+                .unwrap_or(false)
+        } else {
+            false
+        };
+        if confirmed {
+            delete_ssh_action.dispatch(server_fns::DeleteSshKey {
+                csrf: global_state.csrf().get().unwrap_or_default(),
+                ssh_key_id,
+            });
+        }
+
+    };
+
+    let add_ssh_key = move |event: SubmitEvent| {
+        event.prevent_default();
+        add_ssh_action.dispatch(server_fns::AddSshKey {
+            csrf: global_state.csrf().get().unwrap_or_default(),
+            ssh_key_name: add_ssh_key_name_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+            ssh_key_value: add_ssh_key_value_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+        });
+    };
+
+
 
     let (new_ssh_key_result, set_new_ssh_key_result) = signal(" ".to_string());
     let (password_change_result, set_password_change_result) = signal(" ".to_string());
@@ -64,8 +135,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                 <p class="section-desc">"Update your account password."</p>
 
                 // Separate form for password change for clarity
-                <ActionForm action=update_password_action>
-                    <CSRFField />
+                <form on:submit=on_password_update>
                     <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
                         <div class="sm:col-span-4">
                             <label for="old_password" class="form-label">
@@ -75,6 +145,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                 <input
                                     type="password"
                                     name="old_password"
+                                    node_ref=old_password_ref
                                     required
                                     class="form-input"
                                 />
@@ -88,6 +159,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                             <div class="mt-2">
                                 <input
                                     type="password"
+                                    node_ref=new_password_ref
                                     name="new_password"
                                     required
                                     class="form-input"
@@ -103,6 +175,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                 <input
                                     type="password"
                                     name="new_password_confirm"
+                                    node_ref=new_password_confirm_ref
                                     required
                                     class="form-input"
                                 />
@@ -122,7 +195,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                             "Change Password"
                         </button>
                     </div>
-                </ActionForm>
+                </form>
 
             </div>
             <div class="section-border">
@@ -182,22 +255,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                     // Using children prop syntax
                                                                                     children=move |key| {
                                                                                         let key_name_to_delete = key.name.clone();
-                                                                                        let on_delete_click = move |ev: SubmitEvent| {
-                                                                                            let confirmed = if let Some(window) = web_sys::window() {
-                                                                                                window
-                                                                                                    .confirm_with_message(
-                                                                                                        &format!(
-                                                                                                            "Are you sure you want to delete the key '{key_name_to_delete}'?",
-                                                                                                        ),
-                                                                                                    )
-                                                                                                    .unwrap_or(false)
-                                                                                            } else {
-                                                                                                false
-                                                                                            };
-                                                                                            if !confirmed {
-                                                                                                ev.prevent_default();
-                                                                                            }
-                                                                                        };
 
                                                                                         view! {
                                                                                             <tr>
@@ -210,12 +267,11 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                                         <span class="truncate">{key.name}</span>
 
                                                                                                         // Delete Button on the right
-                                                                                                        <ActionForm
-                                                                                                            action=delete_ssh_action
-                                                                                                            on:submit=on_delete_click
-                                                                                                        >
-                                                                                                            <CSRFField />
-                                                                                                            <input type="hidden" name="ssh_key_id" value=key.id />
+                                                                                                        <form on:submit=move |e| on_delete_ssh_click(
+                                                                                                            e,
+                                                                                                            key.id,
+                                                                                                            key_name_to_delete.clone(),
+                                                                                                        )>
                                                                                                             <button
                                                                                                                 type="submit"
                                                                                                                 class="btn btn-danger"
@@ -223,7 +279,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                                             >
                                                                                                                 "Delete"
                                                                                                             </button>
-                                                                                                        </ActionForm>
+                                                                                                        </form>
 
                                                                                                     </div>
                                                                                                 </td>
@@ -271,8 +327,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                     // Add padding left on medium+ to visually separate from border
                     <div class="flex-1 md:pl-2">
                         <h3 class="text-base font-medium text-white mb-4">"Add New SSH Key"</h3>
-                        <ActionForm action=add_ssh_action>
-                            <CSRFField />
+                        <form on:submit=add_ssh_key>
                             // Keep grid for form layout
                             <div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-6">
                                 // Adjust span if needed based on parent width
@@ -284,6 +339,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                         <input
                                             type="text"
                                             name="ssh_key_name"
+                                            node_ref=add_ssh_key_name_ref
                                             required
                                             placeholder="e.g., My Work Laptop"
                                             class="form-input"
@@ -301,6 +357,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                             // Adjust rows as needed for space
                                             rows="5"
                                             required
+                                            node_ref=add_ssh_key_value_ref
                                             placeholder="Begins with ssh-rsa, ssh-ed25519, etc."
                                             class="block w-full rounded-md bg-white/5 px-3 py-1.5 text-base text-white outline-1 -outline-offset-1 outline-white/10 placeholder:text-gray-500 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-500 sm:text-sm/6"
                                         ></textarea>
@@ -320,7 +377,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                             </div>
                             <div>{new_ssh_key_result}</div>
 
-                        </ActionForm>
+                        </form>
                     // End Right Side
                     </div>
 
@@ -398,6 +455,7 @@ pub mod server_fns {
     use crate::models::SshKeyInfo;
     use crate::AppResult;
     use leptos::server;
+    use leptos::server_fn::codec::Bitcode;
 
     #[cfg(feature = "ssr")]
     mod ssr {
@@ -418,7 +476,7 @@ pub mod server_fns {
         }
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn get_ssh_keys() -> AppResult<Vec<SshKeyInfo>> {
         let auth = auth(false)?;
         let pool = pool()?;
@@ -434,7 +492,7 @@ pub mod server_fns {
         .await?)
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn delete_ssh_key(csrf: String, ssh_key_id: i64) -> AppResult<()> {
         let auth = auth(false)?;
         let pool = pool()?;
@@ -490,7 +548,7 @@ pub mod server_fns {
         Ok(())
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn update_password(
         csrf: String,
         old_password: String,

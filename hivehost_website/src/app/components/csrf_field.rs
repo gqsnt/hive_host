@@ -1,10 +1,11 @@
+use bitcode::{Decode, Encode};
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::AppResult;
 use leptos::prelude::Get;
 use leptos::prelude::{expect_context, Signal};
 use leptos::{component, server, view, IntoView};
+use leptos::server_fn::codec::Bitcode;
 use reactive_stores::Store;
-use serde::{Deserialize, Serialize};
 
 pub type CsrfSignal = Signal<Option<CsrfValue>>;
 
@@ -20,7 +21,7 @@ pub fn CSRFField() -> impl IntoView {
     }
 }
 
-#[server]
+#[server(input=Bitcode, output=Bitcode)]
 pub async fn generate_csrf() -> AppResult<String> {
     use crate::security::utils::ssr::gen_easy_hash;
 
@@ -33,5 +34,5 @@ pub async fn generate_csrf() -> AppResult<String> {
     ))
 }
 
-#[derive(Default, Deserialize, Clone, Debug, Serialize)]
+#[derive(Default, Encode, Clone, Debug, Decode)]
 pub struct CsrfValue(pub String);

@@ -79,7 +79,7 @@ pub fn ProjectFiles() -> impl IntoView {
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
 
     let server_project_action = get_action_server_project_action();
-    let file_list_resource = Resource::new(
+    let file_list_resource = Resource::new_bitcode(
         move || {
             (
                 current_path.get(),

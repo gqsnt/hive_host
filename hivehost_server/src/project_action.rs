@@ -206,7 +206,7 @@ pub async fn handle_server_project_action_dir(
                 .await
                 .map_err(ServerError::from)?;
             if !output.status.success() {
-                return Err(ServerError::CommandFailed("tar".to_string()).into());
+                return Err(ServerError::CommandFailed("tar".to_string()));
             }
             let tar_file = tokio::fs::File::open(tar_path)
                 .await

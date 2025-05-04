@@ -1,14 +1,15 @@
-use crate::{AppResult, BoolInput};
+use crate::{AppResult};
 use leptos::server;
+use leptos::server_fn::codec::Bitcode;
 
-#[server(Signup, "/api")]
+#[server(Signup, "/api", input=Bitcode, output=Bitcode)]
 pub async fn signup(
     csrf: String,
     email: String,
     username: String,
     password: String,
     password_confirmation: String,
-    remember: Option<BoolInput>,
+    remember: bool,
 ) -> AppResult<()> {
     use crate::app::pages::user::projects::new_project::server_fns::ssr::create_project;
     use crate::models::RoleType;
@@ -81,8 +82,7 @@ pub async fn signup(
         handle: Handle::current(),
     };
     form.validate_with_args(&context)?;
-
-    let remember = remember.unwrap_or_default().into();
+    
     let password = secrecy::SecretString::from(password.as_str());
     let user = sqlx::query!(
         r#"INSERT INTO users (email, password, role, username) VALUES ($1, $2, $3, $4) returning id"#,

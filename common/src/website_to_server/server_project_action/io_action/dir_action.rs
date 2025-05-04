@@ -2,9 +2,9 @@ use crate::impl_chain_from;
 use crate::website_to_server::permission::Permission;
 use crate::website_to_server::server_project_action::io_action::ServerProjectIoAction;
 use crate::website_to_server::server_project_action::{IsProjectServerAction, ServerProjectAction};
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Encode,Decode, Debug, Clone, PartialEq, Eq)]
 pub enum ServerProjectIoDirAction {
     Create { path: String },
     Rename { path: String, new_name: String },
@@ -43,12 +43,12 @@ impl IsProjectServerAction for ServerProjectIoDirAction {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
 pub struct ServerProjectIoDirActionLsResponse {
     pub inner: Vec<LsElement>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
 pub struct LsElement {
     pub name: String,
     pub is_dir: bool,

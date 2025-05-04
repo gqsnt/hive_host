@@ -5,9 +5,9 @@ pub mod snapshot;
 use crate::website_to_server::permission::Permission;
 use crate::website_to_server::server_project_action::io_action::dir_action::ServerProjectIoDirActionLsResponse;
 use crate::website_to_server::server_project_action::io_action::file_action::FileInfo;
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Decode, Encode, Debug, Clone, PartialEq, Eq)]
 pub enum ServerProjectAction {
     Io(io_action::ServerProjectIoAction),
     Permission(permission::ServerProjectPermissionAction),
@@ -40,7 +40,7 @@ impl IsProjectServerAction for ServerProjectAction {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Decode, Encode, Debug, Clone, PartialEq, Eq)]
 pub enum ServerProjectResponse {
     Ok,
     Token(String),

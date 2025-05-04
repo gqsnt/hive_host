@@ -28,5 +28,4 @@ quick_cache = { version = "0.6.13" }
 deadpool-postgres = "0.14.1"
 async-compression = { version = "0.4.23", features = ["all"] }
 common = { path = "../common", features = ["server-to-hosting", "multiplex-listener", "multiplex-listener-unix"] }
-serde_json = { workspace = true }
 async-trait = { workspace = true }

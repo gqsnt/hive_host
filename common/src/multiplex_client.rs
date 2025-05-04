@@ -2,7 +2,7 @@ use dashmap::DashMap;
 use deadpool::managed;
 use deadpool::managed::{Metrics, Pool, RecycleError, RecycleResult};
 use secrecy::SecretString;
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -79,7 +79,7 @@ where
         }
 
         // 3. Deserialize Generic Response
-        let response: GenericResponse<Response> = match serde_json::from_slice(&buffer) {
+        let response: GenericResponse<Response> = match bitcode::decode(&buffer) {
             Ok(resp) => resp,
             Err(e) => {
                 error!("Reader: Failed to deserialize response: {}", e);
@@ -107,8 +107,7 @@ where
                 }
             } else {
                 warn!( // Changed to warn!
-                    "Reader: Received Pong response for ID {} but no sender waiting?",
-                    PING_PONG_ID
+                    "Reader: Received Pong response for ID {PING_PONG_ID} but no sender waiting?"
                 );
             }
         } else {
@@ -121,8 +120,7 @@ where
                 };
                 if sender.send(result).is_err() {
                     warn!( // Changed to warn!
-                        "Reader: Failed to send response back to caller (channel closed for ID: {})",
-                        _id
+                        "Reader: Failed to send response back to caller (channel closed for ID: {_id})",
                     );
                 }
             } else {
@@ -136,8 +134,7 @@ where
     info!("Reader task finished. Cleaning up outstanding requests.");
     let err_type = if error_occurred {
         ClientError::Connection(ConnectionError::Io(
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
+            std::io::Error::other(
                 "Reader task failed unexpectedly",
             )
                 .to_string(),
@@ -176,27 +173,12 @@ async fn write_task<W, Action, Response>(
 
         // Store sender *before* attempting to write
         if request_map.insert(request_id, sender).is_some() {
-            warn!("Writer: Duplicate request ID {} encountered!", request_id);
+            warn!("Writer: Duplicate request ID {request_id} encountered!");
         }
-        debug!("Writer: Stored sender for Req ID: {}", request_id);
+        debug!("Writer: Stored sender for Req ID: {request_id}");
 
         // 1. Serialize Generic Request
-        let request_bytes = match serde_json::to_vec(&request) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                error!(
-                    "Writer: Failed to serialize request ID {}: {}",
-                    request_id, e
-                );
-                if let Some((_id, sender)) = request_map.remove(&request_id) {
-                    let _ = sender.send(Err(ClientError::Connection(
-                        ConnectionError::SerdeError(e.to_string()),
-                    )));
-                }
-                continue; // Skip to next request
-            }
-        };
-
+        let request_bytes = bitcode::encode(&request);
         // 2. Write Length Prefix
         if let Err(e) = wr.write_u32(request_bytes.len() as u32).await {
             error!(
@@ -262,8 +244,7 @@ impl<Action: ActionTrait, Response: ResponseTrait> ConnectionHandler<Action, Res
         let auth_request = GenericRequest::<Action>::get_auth(auth_token.expose_secret().to_string())
             .ok_or(ConnectionError::AuthNotSupported)?; // Assuming get_auth returns Option
 
-        let auth_bytes = serde_json::to_vec(&auth_request)
-            .map_err(|e| ConnectionError::SerdeError(e.to_string()))?;
+        let auth_bytes = bitcode::encode(&auth_request);
 
         stream.write_u32(auth_bytes.len() as u32).await?;
         stream.write_all(&auth_bytes).await?;
@@ -523,7 +504,7 @@ impl<Action: ActionTrait, Response: ResponseTrait> MultiplexClient<Action, Respo
     }
 }
 
-#[derive(Debug, Error, Clone, Serialize, Deserialize)]
+#[derive(Debug, Error, Clone, Encode, Decode)]
 pub enum ConnectionError {
     #[error("I/O error: {0}")]
     Io(String),
@@ -536,7 +517,7 @@ pub enum ConnectionError {
     #[error("Deadpool Error: {0}")]
     PoolError(String), // Wrap deadpool errors if needed
     #[error("Serialization error: {0}")]
-    SerdeError(String),
+    BitcodeError(String),
     #[error("Ping timed out")]
     PingTimeout,
     #[error("Invalid Pong received")]
@@ -549,9 +530,9 @@ pub enum ConnectionError {
     AuthNotSupported,
 }
 
-impl From<serde_json::Error> for ConnectionError {
-    fn from(err: serde_json::Error) -> Self {
-        ConnectionError::SerdeError(err.to_string())
+impl From<bitcode::Error> for ConnectionError {
+    fn from(err: bitcode::Error) -> Self {
+        ConnectionError::BitcodeError(err.to_string())
     }
 }
 
@@ -561,7 +542,7 @@ impl From<std::io::Error> for ConnectionError {
     }
 }
 
-#[derive(Debug, Error, Clone, Serialize, Deserialize)]
+#[derive(Debug, Error, Clone, Encode, Decode)]
 pub enum ClientError {
     #[error("Connection Error: {0}")]
     Connection(#[from] ConnectionError), // Errors from connection layer

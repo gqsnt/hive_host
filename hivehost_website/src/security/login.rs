@@ -1,12 +1,13 @@
-use crate::{AppResult, BoolInput};
+use crate::{AppResult};
 use leptos::server;
+use leptos::server_fn::codec::Bitcode;
 
-#[server(Login, "/api")]
+#[server(Login, "/api",input=Bitcode, output=Bitcode)]
 pub async fn login(
     csrf: String,
     email: String,
     password: String,
-    remember: Option<BoolInput>,
+    remember: bool,
 ) -> AppResult<()> {
     use crate::models::User;
     use crate::security::utils::ssr::verify_easy_hash;
@@ -21,7 +22,6 @@ pub async fn login(
         csrf,
     )?;
 
-    let remember = remember.unwrap_or_default().into();
     let password = secrecy::SecretString::from(password.as_str());
     let pool = crate::ssr::pool()?;
 

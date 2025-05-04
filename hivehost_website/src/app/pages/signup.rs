@@ -1,19 +1,28 @@
 use crate::app::components::csrf_field::{generate_csrf, CSRFField};
-use crate::app::pages::GlobalState;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::security::signup::Signup;
-use leptos::prelude::IntoAnyAttribute;
+use leptos::prelude::{IntoAnyAttribute, NodeRef, NodeRefAttribute, OnAttribute};
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, AddAnyAttr, OnceResource, Suspend, Transition, Update};
 use leptos::prelude::{signal, Effect, ElementChild, Get, Set};
-use leptos::prelude::{ActionForm, ClassAttribute, ServerAction};
+use leptos::prelude::{ClassAttribute, ServerAction};
 use leptos::{component, view, IntoView};
+use leptos::html::Input;
 use leptos_router::components::A;
 use reactive_stores::Store;
+use web_sys::SubmitEvent;
+use leptos::prelude::CustomAttribute;
 
 #[component]
 pub fn SignupPage() -> impl IntoView {
     let global_store: Store<GlobalState> = expect_context();
-    let csrf_resource = OnceResource::new(generate_csrf());
+    let csrf_resource = OnceResource::new_bitcode(generate_csrf());
+    
+    let email_ref = NodeRef::<Input>::default();
+    let password_ref = NodeRef::<Input>::default();
+    let username_ref = NodeRef::<Input>::default();
+    let password_confirmation_ref = NodeRef::<Input>::default();
+    let remember_ref = NodeRef::<Input>::default();
 
     let action = ServerAction::<Signup>::new();
     let (signup_result, set_signup_result) = signal(" ".to_string());
@@ -25,6 +34,33 @@ pub fn SignupPage() -> impl IntoView {
             _ => (),
         };
     });
+
+    let on_submit = move |event: SubmitEvent| {
+        event.prevent_default();
+        action.dispatch(Signup {
+            csrf: global_store.csrf().get().unwrap_or_default(),
+            email: email_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+            username: username_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+            password: password_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+            password_confirmation: password_confirmation_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+            remember: remember_ref
+                .get()
+                .expect("<input> should be mounted")
+                .checked(),
+        });
+    };
 
     view! {
         <div class="flex min-h-full flex-col justify-center px-6 py-12 lg:px-8">
@@ -40,7 +76,7 @@ pub fn SignupPage() -> impl IntoView {
             </div>
 
             <div class="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
-                <ActionForm action=action>
+                <form on:submit=on_submit>
                     <Transition>
                         {move || Suspend::new(async move {
                             let csrf = csrf_resource.await;
@@ -65,6 +101,7 @@ pub fn SignupPage() -> impl IntoView {
                                     autocomplete="email"
                                     required
                                     class="form-input"
+                                    node_ref=email_ref
                                 />
                             </div>
                         </label>
@@ -78,6 +115,7 @@ pub fn SignupPage() -> impl IntoView {
                                     autocomplete="username"
                                     required
                                     class="form-input"
+                                    node_ref=username_ref
                                 />
                             </div>
                         </label>
@@ -91,6 +129,7 @@ pub fn SignupPage() -> impl IntoView {
                                     name="password"
                                     required
                                     class="form-input"
+                                    node_ref=password_ref
                                 />
                             </div>
                         </label>
@@ -104,6 +143,7 @@ pub fn SignupPage() -> impl IntoView {
                                     name="password_confirmation"
                                     required
                                     class="form-input"
+                                    node_ref=password_confirmation_ref
                                 />
                             </div>
                         </label>
@@ -117,6 +157,7 @@ pub fn SignupPage() -> impl IntoView {
                                         name="remember"
                                         type="checkbox"
                                         checked
+                                        node_ref=remember_ref
                                         class="col-start-1 row-start-1 appearance-none rounded-sm border border-gray-300 bg-white checked:border-indigo-600 checked:bg-indigo-600 indeterminate:border-indigo-600 indeterminate:bg-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:border-gray-300 disabled:bg-gray-100 disabled:checked:bg-gray-100 forced-colors:appearance-auto"
                                     />
                                     <svg
@@ -149,7 +190,7 @@ pub fn SignupPage() -> impl IntoView {
                         </button>
                     </div>
                     <div>{signup_result}</div>
-                </ActionForm>
+                </form>
                 <p class="mt-10 text-center text-sm/6 text-gray-500">
                     Already a member?
                     <A

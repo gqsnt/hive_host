@@ -113,8 +113,7 @@ dependencies = [
 [[package]]
 name = "any_spawner"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1384d3fe1eecb464229fcf6eebb72306591c56bf27b373561489458a7c73027d"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "futures",
  "thiserror 2.0.12",
@@ -139,6 +138,12 @@ dependencies = [
  "cpufeatures",
  "password-hash",
 ]
+
+[[package]]
+name = "arrayvec"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "async-channel"
@@ -541,6 +546,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "89e25b6adfb930f02d1981565a6e5d9c547ac15a96606256d3b59040e5cd4ca3"
 
 [[package]]
+name = "bitcode"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf300f4aa6e66f3bdff11f1236a88c622fe47ea814524792240b4d554d9858ee"
+dependencies = [
+ "arrayvec",
+ "bitcode_derive",
+ "bytemuck",
+ "glam",
+ "serde",
+]
+
+[[package]]
+name = "bitcode_derive"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42b6b4cb608b8282dc3b53d0f4c9ab404655d562674c682db7e6c0458cc83c23"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -635,6 +664,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1628fb46dfa0b37568d12e5edd512553eccf6a22a78e8bde00bb4aed84d5bdbf"
 
 [[package]]
+name = "bytemuck"
+version = "1.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9134a6ef01ce4b366b50689c94f82c14bc72bc5d0386829828a2e2752ef7958c"
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -722,10 +757,10 @@ dependencies = [
 
 [[package]]
 name = "codee"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f18d705321923b1a9358e3fc3c57c3b50171196827fc7f5f10b053242aca627"
+version = "0.3.1"
+source = "git+https://github.com/gqsnt/codee_bitcode#48bba45fca7f9a1243574cf56da791b36e41e1c1"
 dependencies = [
+ "bitcode",
  "serde",
  "serde_json",
  "thiserror 2.0.12",
@@ -742,6 +777,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bitcode",
  "dashmap",
  "deadpool",
  "secrecy",
@@ -823,8 +859,7 @@ dependencies = [
 [[package]]
 name = "const_str_slice_concat"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f67855af358fcb20fac58f9d714c94e2b228fe5694c1c9b4ead4a366343eda1b"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 
 [[package]]
 name = "convert_case"
@@ -1135,8 +1170,7 @@ dependencies = [
 [[package]]
 name = "either_of"
 version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "216d23e0ec69759a17f05e1c553f3a6870e5ec73420fbb07807a6f34d5d1d5a4"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "paste",
  "pin-project-lite",
@@ -1495,6 +1529,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
 [[package]]
+name = "glam"
+version = "0.30.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b46b9ca4690308844c644e7c634d68792467260e051c8543e0c7871662b3ba7"
+
+[[package]]
 name = "gloo-net"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1626,7 +1666,6 @@ dependencies = [
  "dotenvy",
  "moka",
  "secrecy",
- "serde_json",
  "thiserror 2.0.12",
  "tokio",
  "tower-http 0.5.2",
@@ -1663,7 +1702,6 @@ dependencies = [
  "hyper-util",
  "mime_guess",
  "quick_cache",
- "serde_json",
  "socket2 0.5.9",
  "thiserror 2.0.12",
  "tokio",
@@ -1683,6 +1721,7 @@ dependencies = [
  "axum_session_auth",
  "axum_session_sqlx",
  "base64",
+ "bitcode",
  "blake2",
  "cfg-if",
  "chrono",
@@ -1812,8 +1851,7 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 [[package]]
 name = "hydration_context"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8714ae4adeaa846d838f380fbd72f049197de629948f91bf045329e0cf0a283"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "futures",
  "js-sys",
@@ -2185,8 +2223,7 @@ dependencies = [
 [[package]]
 name = "leptos"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ebeea243876c96655d064a28af6d9918f226fed14af9f781e3778bcf7fed66e"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "any_spawner",
  "base64",
@@ -2224,8 +2261,7 @@ dependencies = [
 [[package]]
 name = "leptos_axum"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3f8d2c491722887b532c7b352afe8fbd18beb75294f03f7f2d94f41151888b4"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "any_spawner",
  "axum",
@@ -2249,8 +2285,7 @@ dependencies = [
 [[package]]
 name = "leptos_config"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c811cf9507f4a0399f5eb5914e1e94f3b255a2ba3637de63fe68ddf42a47eff"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "config",
  "regex",
@@ -2262,8 +2297,7 @@ dependencies = [
 [[package]]
 name = "leptos_dom"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e50558217ef975ac3bec7d72a52bf95bc03c5dcc60d6f89ce15874e9d3c142c7"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "js-sys",
  "or_poisoned",
@@ -2277,8 +2311,7 @@ dependencies = [
 [[package]]
 name = "leptos_hot_reload"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f62f95f3deb52e84d008c68136f6f91a484cf75249d888e6cdda1ae8674ba2cc"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "anyhow",
  "camino",
@@ -2295,8 +2328,7 @@ dependencies = [
 [[package]]
 name = "leptos_integration_utils"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a300382bdbeeca4ac28d0db2ca3bf32e2dd75f035c02d5f6fc4a04ac9aaa48b"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "futures",
  "hydration_context",
@@ -2310,8 +2342,7 @@ dependencies = [
 [[package]]
 name = "leptos_macro"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a7905c8937da27d55cbfc6c5983bc166af7863c4ecdd6f1c5b9880dca1b1082"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "attribute-derive",
  "cfg-if",
@@ -2333,8 +2364,7 @@ dependencies = [
 [[package]]
 name = "leptos_meta"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e9f7283b9b203d93f8f9489aa284945888825815712a3fcba7ab29eb4031471"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "futures",
  "indexmap",
@@ -2349,8 +2379,7 @@ dependencies = [
 [[package]]
 name = "leptos_router"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0771d6ba21829a331f8f0f0ebfa8a58b8d2bb959295592e02b26445f08a3ce8d"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "any_spawner",
  "either_of",
@@ -2375,8 +2404,7 @@ dependencies = [
 [[package]]
 name = "leptos_router_macro"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "868cfbeac2500896687857aac6df6cbe81a6bf8f5aa2ab950f5f3d1513c1b127"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
@@ -2387,8 +2415,7 @@ dependencies = [
 [[package]]
 name = "leptos_server"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bfdc78e05acacb767c24ce87e5393b76467ae568d4eac181e20c04f434713bf"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "any_spawner",
  "base64",
@@ -2713,8 +2740,7 @@ dependencies = [
 [[package]]
 name = "next_tuple"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60993920e071b0c9b66f14e2b32740a4e27ffc82854dcd72035887f336a09a28"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 
 [[package]]
 name = "nonempty"
@@ -2807,11 +2833,10 @@ dependencies = [
 [[package]]
 name = "oco_ref"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64b94982fe39a861561cf67ff17a7849f2cedadbbad960a797634032b7abb998"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -2873,8 +2898,7 @@ dependencies = [
 [[package]]
 name = "or_poisoned"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c04f5d74368e4d0dfe06c45c8627c81bd7c317d52762d118fb9b3076f6420fd"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 
 [[package]]
 name = "overload"
@@ -3373,8 +3397,7 @@ dependencies = [
 [[package]]
 name = "reactive_graph"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72a2b7d6c997a1d0024142726a6a044cd061827dd25709429fdc99ca294dedc8"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "any_spawner",
  "async-lock 3.4.0",
@@ -3395,8 +3418,7 @@ dependencies = [
 [[package]]
 name = "reactive_stores"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a19194e9cd482f92fa24fac9b96e0b0295af0b519b1ebc2df9f048ea95fff1e9"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "dashmap",
  "guardian",
@@ -3412,8 +3434,7 @@ dependencies = [
 [[package]]
 name = "reactive_stores_macro"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69f5d6b557ce3b0ac9644faf1677b8f45253c02fa69e14acc55d9695955e4af9"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "convert_case 0.8.0",
  "proc-macro-error2",
@@ -3844,11 +3865,11 @@ dependencies = [
 [[package]]
 name = "server_fn"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e058e6709b0ffb2976e03230916219d1ad50746686681beaf9b42b1beca0e298"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "axum",
  "base64",
+ "bitcode",
  "bytes",
  "const-str",
  "const_format",
@@ -3884,8 +3905,7 @@ dependencies = [
 [[package]]
 name = "server_fn_macro"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24ed61a2cbd3d1fd9cd84b5eedcf9168ace43da68273b5e3055e5aafc0b0860a"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "const_format",
  "convert_case 0.8.0",
@@ -3899,8 +3919,7 @@ dependencies = [
 [[package]]
 name = "server_fn_macro_default"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36c87b8d55da875a8b16fbe4992cc0ab6d2524b1fb1a0e488f16922f7c46b82f"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "server_fn_macro",
  "syn",
@@ -4371,8 +4390,7 @@ dependencies = [
 [[package]]
 name = "tachys"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd309a35ec8282f0793ff8b58ebd4764779fd056f447c58a026331443b77ddae"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "any_spawner",
  "async-trait",
@@ -4475,8 +4493,7 @@ dependencies = [
 [[package]]
 name = "throw_error"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41e42a6afdde94f3e656fae18f837cb9bbe500a5ac5de325b09f3ec05b9c28e3"
+source = "git+https://github.com/gqsnt/leptos-bitcode?rev=881923d7eb496b5aa400f3687918875d1d572c37#881923d7eb496b5aa400f3687918875d1d572c37"
 dependencies = [
  "pin-project-lite",
 ]

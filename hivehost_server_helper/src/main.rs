@@ -38,7 +38,7 @@ async fn main() -> ServerHelperResult<()> {
         )
         .with(tracing_subscriber::fmt::layer().with_ansi(true))
         .init();
-    
+
     LazyLock::force(&BTRFS_DEVICE);
 
     let server_helper_socket_path = dotenvy::var("SERVER_HELPER_SOCKET_PATH").expect("HELPER_ADDR not set");

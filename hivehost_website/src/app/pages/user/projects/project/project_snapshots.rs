@@ -1,4 +1,3 @@
-use crate::app::components::csrf_field::CSRFField;
 use crate::app::pages::user::projects::project::project_snapshots::server_fns::{
     CreateProjectSnapshot, DeleteProjectSnapshot, SetActiveProjectSnapshot,
     UnsetActiveProjectSnapshot,
@@ -10,7 +9,6 @@ use leptos::either::{Either, EitherOf3};
 use leptos::html::{Input, Textarea};
 use leptos::prelude::*;
 use reactive_stores::Store;
-use time::format_description::well_known::Rfc3339;
 use web_sys::SubmitEvent;
 
 #[component]
@@ -43,7 +41,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
 
     
     // --- Resource for Snapshots List ---
-    let snapshots_resource = Resource::new(
+    let snapshots_resource = Resource::new_bitcode(
         move || {
             (
                 slug_signal.get(),
@@ -122,15 +120,13 @@ pub fn ProjectSnapshots() -> impl IntoView {
         }
     });
     
-    let on_set_active_submit = move |ev: SubmitEvent| {
-        let form = SetActiveProjectSnapshot::from_event(&ev);
+    let on_set_active_submit = move |ev: SubmitEvent, snapshot_id:i64| {
         ev.prevent_default();
-        if form.is_err(){
-            return;
-        }
-        let data = form.unwrap();
-        let snapshot_id = data.snapshot_id;
-        set_active_snapshot_action.dispatch(data);
+        set_active_snapshot_action.dispatch(SetActiveProjectSnapshot{
+            csrf: csrf_signal.get().unwrap_or_default(),
+            project_slug: slug_signal(),
+            snapshot_id,
+        });
         global_state.project().update(|project_opt| {
             match project_opt{
                 None => {}
@@ -141,12 +137,11 @@ pub fn ProjectSnapshots() -> impl IntoView {
         });
     };
     let on_unset_active_submit = move |ev: SubmitEvent| {
-        let form = UnsetActiveProjectSnapshot::from_event(&ev);
         ev.prevent_default();
-        if form.is_err(){
-            return;
-        }
-        unset_active_snapshot_action.dispatch(form.unwrap());
+        unset_active_snapshot_action.dispatch(UnsetActiveProjectSnapshot{
+            csrf: csrf_signal.get().unwrap_or_default(),
+            project_slug: slug_signal(),
+        });
         global_state.project().update(|project_opt| {
             match project_opt{
                 None => {}
@@ -163,8 +158,6 @@ pub fn ProjectSnapshots() -> impl IntoView {
         ev.prevent_default();
         let name = snapshot_name_ref.get().expect("name input exists").value();
         let description = snapshot_description_ref.get().map(|el| el.value());
-        let csrf = csrf_signal.get().unwrap_or_default();
-        let slug = slug_signal.get();
 
         if name.trim().is_empty() {
             set_create_feedback.set("Snapshot name cannot be empty.".to_string());
@@ -172,14 +165,15 @@ pub fn ProjectSnapshots() -> impl IntoView {
         }
         set_create_feedback.set("Creating...".to_string()); // Indicate processing
         create_snapshot_action.dispatch(CreateProjectSnapshot {
-            csrf,
-            project_slug: slug,
+            csrf:csrf_signal().unwrap_or_default(),
+            project_slug: slug_signal(),
             name,
             description: description.filter(|d| !d.trim().is_empty()),
         });
     };
 
-    let on_delete_submit = move |ev: SubmitEvent, snapshot_name: String| {
+    let on_delete_submit = move |ev: SubmitEvent, snapshot_name: String, snapshot_id:i64 | {
+        ev.prevent_default();
         let confirmed = if let Some(window) = web_sys::window() {
             window
                 .confirm_with_message(&format!(
@@ -189,8 +183,12 @@ pub fn ProjectSnapshots() -> impl IntoView {
         } else {
             false
         };
-        if !confirmed {
-            ev.prevent_default();
+        if confirmed {
+            delete_snapshot_action.dispatch(DeleteProjectSnapshot {
+                csrf: csrf_signal.get().unwrap_or_default(),
+                project_slug: slug_signal(),
+                snapshot_id,
+            });
         }
     };
 
@@ -201,7 +199,6 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 <h2 class="section-title">"Create New Snapshot"</h2>
                 <p class="section-desc">"Create a snapshot of the current project state."</p>
                 <form on:submit=on_create_submit class="mt-6 space-y-4">
-                    <CSRFField />
                     <div>
                         <label for="snapshot_name" class="form-label">
                             "Snapshot Name"
@@ -310,10 +307,6 @@ pub fn ProjectSnapshots() -> impl IntoView {
                                                                             let is_active = active_snapshot_id_signal.get()
                                                                                 == Some(snapshot.id);
                                                                             let (is_active_signal, _) = signal(is_active);
-                                                                            let created_at_formatted = snapshot
-                                                                                .created_at
-                                                                                .format(&Rfc3339)
-                                                                                .unwrap_or_default();
                                                                             let (name_signal, _) = signal(
                                                                                 snapshot.snapshot_name.clone(),
                                                                             );
@@ -338,7 +331,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                                                                                         {snapshot.description.clone().unwrap_or_default()}
                                                                                     </td>
                                                                                     <td class="table-td text-gray-400 whitespace-nowrap">
-                                                                                        {created_at_formatted}
+                                                                                        {snapshot.created_at}
                                                                                     </td>
                                                                                     <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-0">
                                                                                         <div
@@ -351,13 +344,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                                                                                                     Either::Left(
 
                                                                                                         view! {
-                                                                                                            <ActionForm action=unset_active_snapshot_action on:submit=on_unset_active_submit>
-                                                                                                                <CSRFField />
-                                                                                                                <input
-                                                                                                                    type="hidden"
-                                                                                                                    name="project_slug"
-                                                                                                                    value=slug_signal.get()
-                                                                                                                />
+                                                                                                            <form on:submit=on_unset_active_submit>
                                                                                                                 <button
                                                                                                                     class="btn btn-danger"
                                                                                                                     disabled=move || {
@@ -366,44 +353,34 @@ pub fn ProjectSnapshots() -> impl IntoView {
                                                                                                                 >
                                                                                                                     "Unset Active"
                                                                                                                 </button>
-                                                                                                            </ActionForm>
+                                                                                                            </form>
                                                                                                         },
                                                                                                     )
                                                                                                 }
                                                                                                 false => {
                                                                                                     Either::Right(
                                                                                                         view! {
-                                                                                                            <ActionForm action=set_active_snapshot_action on:submit=on_set_active_submit>
-                                                                                                                <CSRFField />
-                                                                                                                <input
-                                                                                                                    type="hidden"
-                                                                                                                    name="project_slug"
-                                                                                                                    value=slug_signal.get()
-                                                                                                                />
-                                                                                                                <input type="hidden" name="snapshot_id" value=snapshot.id />
+                                                                                                            <form on:submit=move |e| on_set_active_submit(
+                                                                                                                e,
+                                                                                                                snapshot.id,
+                                                                                                            )>
                                                                                                                 <button
                                                                                                                     class="btn btn-success"
                                                                                                                     disabled=move || set_active_snapshot_action.pending().get()
                                                                                                                 >
                                                                                                                     "Set Active"
                                                                                                                 </button>
-                                                                                                            </ActionForm>
+                                                                                                            </form>
                                                                                                         },
                                                                                                     )
                                                                                                 }
                                                                                             }}
                                                                                             // Delete Button (using form for potential future hidden fields)
-                                                                                            <ActionForm
-                                                                                                action=delete_snapshot_action
-                                                                                                on:submit=move |ev| on_delete_submit(ev, name_signal())
-                                                                                            >
-                                                                                                <CSRFField />
-                                                                                                <input
-                                                                                                    type="hidden"
-                                                                                                    name="project_slug"
-                                                                                                    value=slug_signal.get()
-                                                                                                />
-                                                                                                <input type="hidden" name="snapshot_id" value=snapshot.id />
+                                                                                            <form on:submit=move |ev| on_delete_submit(
+                                                                                                ev,
+                                                                                                name_signal(),
+                                                                                                snapshot.id,
+                                                                                            )>
                                                                                                 <button
                                                                                                     type="submit"
                                                                                                     class="btn btn-danger"
@@ -414,7 +391,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                                                                                                 >
                                                                                                     "Delete"
                                                                                                 </button>
-                                                                                            </ActionForm>
+                                                                                            </form>
                                                                                         </div>
                                                                                     </td>
                                                                                 </tr>
@@ -443,7 +420,8 @@ pub fn ProjectSnapshots() -> impl IntoView {
 // --- Server Functions ---
 pub mod server_fns {
     use leptos::server;
-
+    use leptos::server_fn::codec::Bitcode;
+    
     use crate::models::ProjectSnapshot;
     use crate::AppResult;
     use common::ProjectSlugStr;
@@ -455,9 +433,10 @@ pub mod server_fns {
         use common::website_to_server::permission::Permission;
         use common::website_to_server::server_project_action::snapshot::ServerProjectSnapshotAction;
         use crate::AppError;
+        use time::format_description::well_known::Rfc3339;
     }}
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn get_project_snapshots(
         project_slug: ProjectSlugStr,
     ) -> AppResult<Vec<ProjectSnapshot>> {
@@ -466,23 +445,30 @@ pub mod server_fns {
             Permission::Read, // Reading snapshots requires read permission
             None,             // No CSRF needed for read
             |_, pool, project_slug_obj| async move {
-                // Fetch snapshots ordered by creation date, newest first
-                Ok(sqlx::query_as!(
-                    ProjectSnapshot,
+                let snapshots=  sqlx::query!(
                     "SELECT id, project_id, name,snapshot_name, description, created_at
                      FROM projects_snapshots
                      WHERE project_id = $1
                      ORDER BY created_at DESC", // Enforce limit
                     project_slug_obj.id
                 )
-                .fetch_all(&pool)
-                .await?)
+                    .fetch_all(&pool)
+                    .await?;
+
+                Ok(snapshots.into_iter().map(|s| ProjectSnapshot {
+                    id: s.id,
+                    project_id: s.project_id,
+                    name: s.name,
+                    snapshot_name: s.snapshot_name,
+                    description: s.description,
+                    created_at: s.created_at.format(&Rfc3339).unwrap_or_default(),
+                }).collect())
             },
         )
         .await
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn create_project_snapshot(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -532,34 +518,9 @@ pub mod server_fns {
             .await
     }
 
-    #[cfg(feature = "ssr")]
-    pub mod ssr {
-        use crate::{AppError, AppResult};
-        use common::Slug;
+    
 
-        pub async fn ensure_not_max_snapshots(
-            pool: &sqlx::PgPool,
-            project_slug: Slug,
-            max_snapshots: i64,
-        ) -> AppResult<()> {
-            // Check if the project has more than 20 snapshots
-            let count_result = sqlx::query!(
-                "SELECT COUNT(*) as count FROM projects_snapshots WHERE project_id = $1",
-                project_slug.id
-            )
-            .fetch_one(pool)
-            .await?;
-
-            let count: i64 = count_result.count.unwrap_or(0);
-            if count > max_snapshots {
-                Err(AppError::ToMuchSnapshots)
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn unset_active_project_snapshot(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -598,7 +559,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn delete_project_snapshot(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -635,7 +596,7 @@ pub mod server_fns {
             .await
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn set_active_project_snapshot(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -688,5 +649,32 @@ pub mod server_fns {
             },
         )
             .await
+    }
+
+    #[cfg(feature = "ssr")]
+    pub mod ssr {
+        use crate::{AppError, AppResult};
+        use common::Slug;
+
+        pub async fn ensure_not_max_snapshots(
+            pool: &sqlx::PgPool,
+            project_slug: Slug,
+            max_snapshots: i64,
+        ) -> AppResult<()> {
+            // Check if the project has more than 20 snapshots
+            let count_result = sqlx::query!(
+                "SELECT COUNT(*) as count FROM projects_snapshots WHERE project_id = $1",
+                project_slug.id
+            )
+                .fetch_one(pool)
+                .await?;
+
+            let count: i64 = count_result.count.unwrap_or(0);
+            if count > max_snapshots {
+                Err(AppError::ToMuchSnapshots)
+            } else {
+                Ok(())
+            }
+        }
     }
 }

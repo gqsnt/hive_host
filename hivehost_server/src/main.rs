@@ -58,7 +58,7 @@ async fn main() -> ServerResult<()> {
     tokio::spawn(async move {
         let handler = ServerRequestHandler { state: listener_state }; // Create handler
         if let Err(e) = run_server_tcp(listener_addr, handler).await { // Use run_server
-            eprintln!("Multiplex Listener failed: {}", e);
+            eprintln!("Multiplex Listener failed: {e}");
         }
     });
     

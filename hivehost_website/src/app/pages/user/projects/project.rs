@@ -117,9 +117,9 @@ pub fn ProjectPage(
     provide_context(project_slug_signal);
 
     let global_state: Store<GlobalState> = expect_context();
-    let project_resource = OnceResource::new(get_project(project_slug()));
+    let project_resource = OnceResource::new_bitcode(get_project(project_slug()));
 
-    let hosting_url_resource = OnceResource::new(get_hosting_url());
+    let hosting_url_resource = OnceResource::new_bitcode(get_hosting_url());
 
     let get_project_section = move |location: String| {
         let split = location.split("/").collect::<Vec<_>>();
@@ -178,7 +178,7 @@ pub fn ProjectPage(
                             global_state
                                 .project()
                                 .update(|inner| {
-                                    *inner= Some((project.get_slug(), permission, project));
+                                    *inner = Some((project.get_slug(), permission, project));
                                 });
                         }
                         Err(_) => {
@@ -233,12 +233,13 @@ pub mod server_fns {
     use common::website_to_server::permission::Permission;
     use common::ProjectSlugStr;
     use leptos::server;
+    use leptos::server_fn::codec::Bitcode;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::utils::ssr::get_auth_session_user_id;
     }}
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn get_project(project_slug: ProjectSlugStr) -> AppResult<(Permission, Project)> {
         crate::security::permission::ssr::handle_project_permission_request(
             project_slug,

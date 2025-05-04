@@ -24,5 +24,4 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
-serde_json = { workspace = true }
 async-trait = { workspace = true }

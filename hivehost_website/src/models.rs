@@ -1,9 +1,9 @@
+use bitcode::{Decode, Encode};
 use common::website_to_server::permission::Permission;
 use common::{ProjectId, ProjectSlugStr, Slug, UserId, UserSlugStr};
 use reactive_stores::Store;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Encode, Decode, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "ssr",
@@ -15,7 +15,7 @@ pub enum RoleType {
     Admin,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Store)]
+#[derive(Clone, Debug, Encode, Decode, Store)]
 pub struct User {
     pub id: UserId,
     pub role_type: RoleType,
@@ -48,7 +48,7 @@ impl Default for User {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Store)]
+#[derive(Debug, Clone, Encode, Decode, Default, PartialEq, Eq, Store)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Project {
     pub id: ProjectId,
@@ -57,15 +57,14 @@ pub struct Project {
     pub active_snapshot_id: Option<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq)]
 pub struct ProjectSnapshot {
     pub id: i64,
     pub project_id: ProjectId,
     pub name: String,
     pub snapshot_name: String,
     pub description: Option<String>,
-    pub created_at: time::PrimitiveDateTime,
+    pub created_at: String,
 }
 
 impl Project {
@@ -74,7 +73,7 @@ impl Project {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone,Encode, Decode, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct SshKeyInfo {
     pub id: i64,
@@ -82,7 +81,7 @@ pub struct SshKeyInfo {
     pub user_id: UserId,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone,Encode, Decode, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct UserPermission {
     pub user_id: UserId,

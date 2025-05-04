@@ -50,8 +50,6 @@ pub enum HostingError {
     Http(#[from] http::Error),
     #[error("Addr parse error: {0}")]
     AddrParseError(#[from] AddrParseError),
-    #[error("Serde json error: {0}")]
-    SerdeJson(#[from] serde_json::Error),
     #[error("DotEnv error: {0}")]
     DotEnv(#[from] dotenvy::Error),
     #[error("Tokio postgres error: {0}")]

@@ -1,15 +1,17 @@
-use crate::app::components::csrf_field::CSRFField;
-use leptos::form::ActionForm;
-
-use leptos::prelude::{signal, Effect, ElementChild, Get, Set};
+use leptos::prelude::{expect_context, signal, Effect, ElementChild, Get, NodeRef, NodeRefAttribute, OnAttribute, Set};
 use leptos::prelude::{ClassAttribute, IntoMaybeErased};
 use leptos::server::ServerAction;
 use leptos::{component, view, IntoView};
+use leptos::html::Input;
+use reactive_stores::Store;
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 
 #[component]
 pub fn NewProjectPage(
     create_project_action: ServerAction<server_fns::CreateProject>,
 ) -> impl IntoView {
+    let global_store: Store<GlobalState> = expect_context();
+
     let (new_project_result, set_new_project_result) = signal(" ".to_string());
     Effect::new(move |_| {
         create_project_action.version().get();
@@ -19,22 +21,39 @@ pub fn NewProjectPage(
             _ => (),
         };
     });
+    let project_name_ref= NodeRef::<Input>::default();
+    
+    let on_new_project = move |event: web_sys::SubmitEvent| {
+        event.prevent_default();
+        create_project_action.dispatch(server_fns::CreateProject {
+            csrf: global_store.csrf().get().unwrap_or_default(),
+            name: project_name_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+        });
+    };
+    
     view! {
         // Separator before New Project section
         <div class="section-border">
             <h2 class="section-title">"New Project"</h2>
             <p class="section-desc">"Create a new project."</p>
 
-            <ActionForm action=create_project_action>
-                <CSRFField />
-
+            <form on:submit=on_new_project>
                 <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
                     <div class="sm:col-span-4">
                         <label for="name" class="form-label">
                             "Project Name"
                         </label>
                         <div class="mt-2">
-                            <input type="text" name="name" required class="form-input" />
+                            <input
+                                type="text"
+                                node_ref=project_name_ref
+                                name="name"
+                                required
+                                class="form-input"
+                            />
                         </div>
                     </div>
                 </div>
@@ -45,7 +64,7 @@ pub fn NewProjectPage(
                     </button>
                 </div>
                 <div>{new_project_result}</div>
-            </ActionForm>
+            </form>
 
         </div>
     }
@@ -54,6 +73,7 @@ pub fn NewProjectPage(
 pub mod server_fns {
     use crate::AppResult;
     use leptos::server;
+    use leptos::server_fn::codec::Bitcode;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::utils::ssr::verify_easy_hash;
@@ -61,7 +81,7 @@ pub mod server_fns {
 
     }}
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn create_project(csrf: String, name: String) -> AppResult<()> {
         let auth = crate::ssr::auth(false)?;
         let server_vars = crate::ssr::server_vars()?;

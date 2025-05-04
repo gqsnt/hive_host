@@ -1,8 +1,8 @@
 use crate::website_to_server::server_action::ServerAction;
 use crate::{impl_chain_from, Slug};
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
 pub enum ServerUserAction {
     Create {
         user_slug: Slug,

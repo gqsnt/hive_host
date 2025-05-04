@@ -28,18 +28,17 @@ pub async fn handle_command(request:GenericRequest<ServerToHostingAction>) -> Ge
 pub async  fn execute_command(action:ServerToHostingAction) -> HostingResult<ServerToHostingResponse> {
     match action{
         ServerToHostingAction::HostingAction(project_slug_str, action) => {
+            
             match action {
                 HostingAction::ServeReloadProject => {
                     info!("Reloading project {}", project_slug_str);
-                    cache_project_path(project_slug_str).await;
+                    tokio::spawn(cache_project_path(project_slug_str));
                 }
                 HostingAction::StopServingProject => {
                     CACHE.remove(&project_slug_str);
-                    
                 }
             }
             Ok(ServerToHostingResponse::HostingActionResponse(HostingResponse::Ok))
-            
         }
         ServerToHostingAction::Ping => {
             Ok(ServerToHostingResponse::Pong)

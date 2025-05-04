@@ -1,9 +1,9 @@
 use crate::website_to_server::permission::Permission;
 use crate::website_to_server::server_project_action::{IsProjectServerAction, ServerProjectAction};
 use crate::{impl_chain_from, Slug};
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Decode, Encode, Debug, Clone, PartialEq, Eq)]
 pub enum ServerProjectPermissionAction {
     Grant {
         user_slug: Slug,

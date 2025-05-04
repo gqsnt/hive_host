@@ -19,7 +19,7 @@ pub fn FileContentView(
     csrf_signal: Signal<Option<String>>,
     permission_signal: Signal<Permission>,
 ) -> impl IntoView {
-    let file_content_resource = Resource::new(
+    let file_content_resource = Resource::new_bitcode(
         move || (selected_file.get(), slug.get()),
         |(file_path_opt, slug)| async move {
             match file_path_opt {

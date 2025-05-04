@@ -4,21 +4,22 @@ use crate::app::IntoView;
 
 use common::website_to_server::permission::Permission;
 
-use crate::app::components::csrf_field::CSRFField;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use leptos::either::EitherOf3;
 use leptos::logging::log;
-use leptos::prelude::CollectView;
+use leptos::prelude::{CollectView, NodeRef, NodeRefAttribute, OnAttribute};
 use leptos::prelude::ElementChild;
-use leptos::prelude::IntoAnyAttribute;
+
 use leptos::prelude::{
-    expect_context, ActionForm, ClassAttribute, For, Get, IntoMaybeErased, Resource, ServerAction,
+    expect_context, ClassAttribute, For, Get, IntoMaybeErased, Resource, ServerAction,
     Show, Suspend,
 };
-use leptos::prelude::{signal, AddAnyAttr, Effect, Read, Set, Signal, Transition};
+use leptos::prelude::{signal, Effect, Read, Set, Signal, Transition};
 use leptos::{component, view};
+use leptos::html::{Input, Select};
 use reactive_stores::Store;
 use strum::IntoEnumIterator;
+use common::UserId;
 
 #[component]
 pub fn ProjectTeam() -> impl IntoView {
@@ -29,6 +30,9 @@ pub fn ProjectTeam() -> impl IntoView {
     let add_member = ServerAction::<server_fns::AddProjectTeamPermission>::new();
     let delete_member = ServerAction::<server_fns::DeleteProjectTeamMember>::new();
 
+    let add_member_email_ref= NodeRef::<Input>::default();
+    let add_member_permission_ref= NodeRef::<Select>::default();
+
     let permission_signal = Signal::derive(move || {
         global_state
             .project()
@@ -37,7 +41,7 @@ pub fn ProjectTeam() -> impl IntoView {
             .unwrap_or_default()
     });
 
-    let team_res = Resource::new(
+    let team_res = Resource::new_bitcode(
         move || {
             (
                 update_member.version().get(),
@@ -48,6 +52,38 @@ pub fn ProjectTeam() -> impl IntoView {
         },
         move |(_, _, _, s)| server_fns::get_project_team(s),
     );
+
+    let on_update_member = move |event: web_sys::SubmitEvent, user_id: UserId, permission: String| {
+        event.prevent_default();
+        update_member.dispatch(server_fns::UpdateProjectTeamPermission {
+            csrf: global_state.csrf().get().unwrap_or_default(),
+            project_slug: slug(),
+            user_id,
+            permission: Permission::from(permission.as_str()),
+        });
+    };
+
+    let on_delete_member = move |event: web_sys::SubmitEvent, user_id: UserId| {
+        event.prevent_default();
+        delete_member.dispatch(server_fns::DeleteProjectTeamMember {
+            csrf: global_state.csrf().get().unwrap_or_default(),
+            project_slug: slug(),
+            user_id,
+        });
+    };
+
+    let on_add_member = move |event: web_sys::SubmitEvent| {
+        event.prevent_default();
+        add_member.dispatch(server_fns::AddProjectTeamPermission {
+            csrf: global_state.csrf().get().unwrap_or_default(),
+            project_slug: slug(),
+            email: add_member_email_ref
+                .get()
+                .expect("<input> should be mounted")
+                .value(),
+            permission: Permission::from(add_member_permission_ref.get().unwrap().value().as_str()),
+        });
+    };
 
     view! {
         <div>
@@ -92,59 +128,67 @@ pub fn ProjectTeam() -> impl IntoView {
                                                     key=|p| p.user_id
                                                     let(perm)
                                                 >
-                                                    <tr>
-                                                        <td class="table-td">{perm.slug.clone()}</td>
-                                                        <td class="px-4 py-3">
-                                                            <Show
-                                                                when=move || permission_signal().is_owner()
-                                                                fallback=move || {
-                                                                    view! {
-                                                                        <span class="text-gray-500">
-                                                                            {perm.permission.to_string()}
-                                                                        </span>
-                                                                    }
-                                                                }
-                                                            >
-                                                                <ActionForm action=update_member>
-                                                                    <input type="hidden" name="project_slug" value=slug() />
-                                                                    <input type="hidden" name="user_id" value=perm.user_id />
-                                                                    <CSRFField />
-                                                                    <div class="flex flex-col gap-y-2 lg:flex-row lg:items-center lg:gap-x-4">
-                                                                        <div class="relative">
-                                                                            <select name="permission" class="form-select">
-                                                                                {Permission::iter()
-                                                                                    .map(|p| {
-                                                                                        view! {
-                                                                                            <option value=p.to_string() selected=perm.permission == p>
-                                                                                                {p.label()}
-                                                                                            </option>
-                                                                                        }
-                                                                                    })
-                                                                                    .collect_view()}
-                                                                            </select>
-                                                                            <FormSelectIcon />
-                                                                        </div>
+                                                    {
+                                                        let permission_ref = NodeRef::<Select>::default();
+                                                        view! {
+                                                            <tr>
+                                                                <td class="table-td">{perm.slug.clone()}</td>
+                                                                <td class="px-4 py-3">
+                                                                    <Show
+                                                                        when=move || permission_signal().is_owner()
+                                                                        fallback=move || {
+                                                                            view! {
+                                                                                <span class="text-gray-500">
+                                                                                    {perm.permission.to_string()}
+                                                                                </span>
+                                                                            }
+                                                                        }
+                                                                    >
+                                                                        <form on:submit=move |e| on_update_member(
+                                                                            e,
+                                                                            perm.user_id,
+                                                                            permission_ref.get().unwrap().value(),
+                                                                        )>
+                                                                            <div class="flex flex-col gap-y-2 lg:flex-row lg:items-center lg:gap-x-4">
+                                                                                <div class="relative">
+                                                                                    <select
+                                                                                        name="permission"
+                                                                                        class="form-select"
+                                                                                        node_ref=permission_ref
+                                                                                    >
+                                                                                        {Permission::iter()
+                                                                                            .map(|p| {
+                                                                                                view! {
+                                                                                                    <option value=p.to_string() selected=perm.permission == p>
+                                                                                                        {p.label()}
+                                                                                                    </option>
+                                                                                                }
+                                                                                            })
+                                                                                            .collect_view()}
+                                                                                    </select>
+                                                                                    <FormSelectIcon />
+                                                                                </div>
 
-                                                                        <button type="submit" class="btn btn-primary">
-                                                                            "Update"
-                                                                        </button>
-                                                                    </div>
-                                                                </ActionForm>
-                                                            </Show>
-                                                        </td>
-                                                        <td class="px-4 py-3">
-                                                            <Show when=move || permission_signal().is_owner()>
-                                                                <ActionForm action=delete_member on:submit=move |_| {}>
-                                                                    <input type="hidden" name="project_slug" value=slug() />
-                                                                    <input type="hidden" name="user_id" value=perm.user_id />
-                                                                    <CSRFField />
-                                                                    <button type="submit" class="btn btn-danger">
-                                                                        "Remove"
-                                                                    </button>
-                                                                </ActionForm>
-                                                            </Show>
-                                                        </td>
-                                                    </tr>
+                                                                                <button type="submit" class="btn btn-primary">
+                                                                                    "Update"
+                                                                                </button>
+                                                                            </div>
+                                                                        </form>
+                                                                    </Show>
+                                                                </td>
+                                                                <td class="px-4 py-3">
+                                                                    <Show when=move || permission_signal().is_owner()>
+                                                                        <form on:submit=move |e| on_delete_member(e, perm.user_id)>
+                                                                            <button type="submit" class="btn btn-danger">
+                                                                                "Remove"
+                                                                            </button>
+                                                                        </form>
+                                                                    </Show>
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                    }
+
                                                 </For>
 
                                             </tbody>
@@ -153,9 +197,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                         <Show when=move || permission_signal().is_owner()>
                                             <div class="pt-6 section-border">
                                                 <h3 class="section-title">"Add Member"</h3>
-                                                <ActionForm action=add_member>
-                                                    <input type="hidden" name="project_slug" value=slug() />
-                                                    <CSRFField />
+                                                <form on:submit=on_add_member>
                                                     <div class="mt-4 flex flex-col gap-y-4">
                                                         <div class="flex flex-col gap-y-2 lg:flex-row lg:gap-x-6">
                                                             <div class="flex-1">
@@ -163,6 +205,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                                     "Email"
                                                                 </label>
                                                                 <input
+                                                                    node_ref=add_member_email_ref
                                                                     type="email"
                                                                     name="email"
                                                                     required
@@ -174,7 +217,11 @@ pub fn ProjectTeam() -> impl IntoView {
                                                                     "Permission"
                                                                 </label>
                                                                 <div class="relative">
-                                                                    <select name="permission" class="form-select">
+                                                                    <select
+                                                                        name="permission"
+                                                                        class="form-select"
+                                                                        node_ref=add_member_permission_ref
+                                                                    >
                                                                         {Permission::iter()
                                                                             .map(|p| {
                                                                                 view! {
@@ -199,7 +246,7 @@ pub fn ProjectTeam() -> impl IntoView {
                                                         </button>
                                                     </div>
                                                     <div>{add_member_result}</div>
-                                                </ActionForm>
+                                                </form>
                                             </div>
                                         </Show>
                                     </div>
@@ -226,11 +273,12 @@ pub fn ProjectTeam() -> impl IntoView {
 }
 
 pub mod server_fns {
+    use bitcode::{Decode, Encode};
     use crate::AppResult;
     use common::website_to_server::permission::Permission;
     use common::{ProjectId, ProjectSlugStr, UserId, UserSlugStr};
     use leptos::server;
-    use serde::{Deserialize, Serialize};
+    use leptos::server_fn::codec::Bitcode;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::api::ssr::request_server_project_action;
@@ -242,7 +290,7 @@ pub mod server_fns {
         use crate::ssr::permissions;
     }}
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn delete_project_team_member(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -283,7 +331,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn update_project_team_permission(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -330,7 +378,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn add_project_team_permission(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -389,7 +437,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server]
+    #[server(input=Bitcode, output=Bitcode)]
     pub async fn get_project_team(
         project_slug: ProjectSlugStr,
     ) -> AppResult<Vec<UserPermissionPage>> {
@@ -414,13 +462,13 @@ pub mod server_fns {
             .await
     }
 
-    #[derive(Clone, Deserialize, Debug, Serialize, Default)]
+    #[derive(Clone, Encode, Debug, Decode, Default)]
     pub struct ProjectTeamResponse {
         pub project_id: ProjectId,
         pub user_permissions: Vec<UserPermissionPage>,
     }
 
-    #[derive(Clone, Deserialize, Debug, Serialize)]
+    #[derive(Clone, Encode, Debug, Decode)]
     #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
     pub struct UserPermissionPage {
         pub user_id: UserId,

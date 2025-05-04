@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
 use std::fmt::Display;
 use strum_macros::EnumIter;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Decode, Encode, Default, EnumIter)]
 #[cfg_attr(feature = "website-ssr", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "website-ssr",

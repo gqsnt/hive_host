@@ -1,8 +1,8 @@
+use bitcode::{Decode, Encode};
 use crate::UserSlugStr;
-use serde::{Deserialize, Serialize};
 
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
 pub enum ServerToHelperAction {
     Ping,
     CreateUser {
@@ -57,7 +57,7 @@ pub enum ServerToHelperAction {
 }
 
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Encode,Decode, Debug, Clone, PartialEq, Eq)]
 pub enum ServerToHelperResponse {
     Ok,
     Pong,

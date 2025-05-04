@@ -2,13 +2,13 @@ use crate::{AppResult};
 use common::website_to_server::server_project_action::{ServerProjectAction, ServerProjectResponse};
 use common::ProjectSlugStr;
 use leptos::server;
-
+use leptos::server_fn::codec::Bitcode;
 
 pub fn token_url(server_url: &str, token: &str) -> String {
     format!("http://{server_url}/token/{token}")
 }
 
-#[server]
+#[server(input=Bitcode,output=Bitcode)]
 pub async fn request_server_project_action_front(
     project_slug: ProjectSlugStr,
     action: ServerProjectAction,

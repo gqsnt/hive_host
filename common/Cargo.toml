@@ -18,6 +18,7 @@ dashmap = {workspace = true, optional = true}
 deadpool = {version = "0.12.2", optional = true, features = ["rt_tokio_1"]}
 secrecy = { workspace = true, optional = true }
 async-trait = {workspace = true, optional = true}
+bitcode={workspace = true,  features = ["derive"]}
 
 [features]
 website-ssr = ["dep:sqlx"]
@@ -27,9 +28,9 @@ server-to-helper=[]
 server-to-hosting=["hosting"]
 multiplex-protocol=[]
 server-command=["dep:tokio"]
-multiplex-client=["dep:tokio", "dep:secrecy", "dep:serde_json", "dep:tracing", "dep:tracing-subscriber", "dep:dashmap", "dep:deadpool", "multiplex-protocol"]
+multiplex-client=["dep:tokio", "dep:secrecy", "dep:tracing", "dep:tracing-subscriber", "dep:dashmap", "dep:deadpool", "multiplex-protocol"]
 multiplex-client-tcp=[]
 multiplex-client-unix=[]
-multiplex-listener=["dep:async-trait", "dep:secrecy", "dep:tokio", "dep:serde_json", "dep:tracing", "dep:tracing-subscriber", "multiplex-protocol"]
+multiplex-listener=["dep:async-trait", "dep:secrecy", "dep:tokio", "dep:tracing", "dep:tracing-subscriber", "multiplex-protocol"]
 multiplex-listener-tcp=[]
 multiplex-listener-unix=[]

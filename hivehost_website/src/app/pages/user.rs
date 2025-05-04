@@ -2,7 +2,6 @@ use crate::app::components::csrf_field::generate_csrf;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::models::User;
 use crate::security::{get_user, Logout};
-use leptos::form::ActionForm;
 use leptos::prelude::{ElementChild, Read};
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
@@ -15,6 +14,7 @@ use leptos::{component, view, IntoView};
 use leptos_router::components::{Outlet, A};
 use leptos_router::hooks::use_location;
 use reactive_stores::Store;
+use web_sys::MouseEvent;
 
 pub mod dashboard;
 pub mod projects;
@@ -75,8 +75,8 @@ pub type UserSignal = Signal<Option<User>>;
 pub fn UserPage() -> impl IntoView {
     let global_store: Store<GlobalState> = expect_context();
     let logout = ServerAction::<Logout>::new();
-    let user_resource = OnceResource::new(get_user());
-    let csrf_resource = OnceResource::new(generate_csrf());
+    let user_resource = OnceResource::new_bitcode(get_user());
+    let csrf_resource = OnceResource::new_bitcode(generate_csrf());
 
     let (mobile_sidebar_open, set_mobile_sidebar_open) = signal(false);
     let location = use_location();
@@ -87,6 +87,12 @@ pub fn UserPage() -> impl IntoView {
         let path = location.pathname.get();
         set_current_page(UserPageType::from(path.as_str()));
     });
+    
+    
+    let on_logout_click= move |event:MouseEvent| {
+        event.prevent_default();
+        logout.dispatch(Logout{});
+    };
 
     view! {
         // Add h-full if body/html are h-full
@@ -195,9 +201,8 @@ pub fn UserPage() -> impl IntoView {
                                             </A>
                                         </li>
                                          <li>
-                                            <ActionForm action=logout>
-                                                <button
-                                                    type="submit"
+                                             <button
+                                                    on:click=on_logout_click
                                                     class="group flex w-full gap-x-3 rounded-md p-2 text-sm/6 font-semibold text-gray-400 hover:bg-gray-800 hover:text-white"
                                                 >
                                                     <svg
@@ -208,7 +213,6 @@ pub fn UserPage() -> impl IntoView {
                                                     </svg>
                                                     "Log Out"
                                                 </button>
-                                            </ActionForm>
                                         </li>
                                     </div>
                                 </ul>
@@ -263,9 +267,8 @@ pub fn UserPage() -> impl IntoView {
                                     </A>
                                 </li>
                                 <li> // Logout Item
-                                    <ActionForm action=logout>
-                                        <button
-                                            type="submit"
+                                     <button
+                                            on:click=on_logout_click
                                             class="group cursor-pointer flex w-full gap-x-3 rounded-md p-2 text-sm/6 font-semibold text-gray-400 hover:bg-gray-800 hover:text-white"
                                         >
                                             <svg
@@ -276,7 +279,6 @@ pub fn UserPage() -> impl IntoView {
                                             </svg>
                                             "Log Out"
                                         </button>
-                                    </ActionForm>
                                 </li>
                             </div>
                         </ul>

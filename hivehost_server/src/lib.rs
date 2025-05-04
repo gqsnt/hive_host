@@ -29,9 +29,6 @@ pub enum ServerError {
     AddrParse(#[from] std::net::AddrParseError),
     #[error("StripPrefix error: {0}")]
     StripPrefixError(#[from] StripPrefixError),
-    #[error("Deserialization error: {0}")]
-    DeserializationError(#[from] serde_json::Error),
-    
     #[error("Unix Socket error: {0}")]
     UnixSocketError(#[from] ConnectionError),
     #[error("Client error: {0}")]

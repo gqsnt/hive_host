@@ -1,11 +1,11 @@
 use crate::website_to_server::permission::Permission;
 use crate::website_to_server::server_project_action::IsProjectServerAction;
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
 
 pub mod dir_action;
 pub mod file_action;
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug,Decode, Encode, Clone, PartialEq, Eq)]
 pub enum ServerProjectIoAction {
     Dir(dir_action::ServerProjectIoDirAction),
     File(file_action::ServerProjectIoFileAction),

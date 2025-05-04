@@ -6,7 +6,7 @@ pub mod server_project_action;
 pub mod permission;
 
 
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
 use crate::hosting::{HostingAction, HostingResponse};
 use crate::ProjectSlugStr;
 use crate::website_to_server::server_action::{ServerAction, ServerActionResponse};
@@ -15,7 +15,7 @@ use crate::website_to_server::server_project_action::{ServerProjectAction, Serve
 
 
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
 pub enum WebSiteToServerAction {
     ServerAction(ServerAction),
     ServerProjectAction(ProjectSlugStr, ServerProjectAction),
@@ -47,7 +47,7 @@ impl From<ServerAction> for WebSiteToServerAction {
 
 
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
 pub enum WebSiteToServerResponse {
     HostingActionResponse(HostingResponse),
     ServerActionResponse(ServerActionResponse),

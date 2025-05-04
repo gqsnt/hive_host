@@ -15,8 +15,8 @@ use tokio::net::UnixListener;
 pub enum MultiplexListenerError{
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("Serialization/Deserialization error: {0}")]
-    Serde(#[from] serde_json::Error),
+    #[error("Bitcode error: {0}")]
+    Serde(#[from] bitcode::Error),
     #[error("Failed to bind listener: {0}")]
     BindError(String),
     #[error("Listener configuration error: {0}")]
@@ -98,10 +98,7 @@ where
         if len > 10 * 1024 * 1024 { // e.g., 10MB limit
             error!("Received excessive length ({}) from {}", len, peer_desc);
             // Consider sending an error response before closing? Difficult without request ID.
-            return Err(MultiplexListenerError::ProcessingError(format!(
-                "Received excessive length: {}",
-                len
-            )));
+            return Err(MultiplexListenerError::ProcessingError(format!("Received excessive length: {len}")));
         }
         if len == 0 {
             info!("Received zero length message body from {}. Assuming EOF/closed.", peer_desc);
@@ -114,30 +111,25 @@ where
             error!("Failed to read payload from {}: {}", peer_desc, e);
             return Err(e.into());
         }
-
+        
+        
         // 3. Deserialize Request
-        let request: GenericRequest<Action> = match serde_json::from_slice(&buffer) {
+        let request: GenericRequest<Action> = match bitcode::decode(&buffer) {
             Ok(req) => req,
             Err(e) => {
                 error!("Failed to deserialize request from {}: {}", peer_desc, e);
                 // Attempt to send an error response back if possible
                 let error_response = GenericResponse::<Response>::make_error(
                     0, // No specific request ID known
-                    format!("Deserialization failed: {}", e),
+                    format!("Deserialization failed: {e}"),
                 );
-                match serde_json::to_vec(&error_response) {
-                    Ok(error_bytes) => {
-                        if writer.write_u32(error_bytes.len() as u32).await.is_ok() {
-                            if writer.write_all(&error_bytes).await.is_err() {
-                                warn!("Failed to send deserialization error response (write_all failed) to {}", peer_desc);
-                            }
-                        } else {
-                            warn!("Failed to send deserialization error response (write_u32 failed) to {}", peer_desc);
-                        }
+                let error_bytes =bitcode::encode(&error_response);
+                if writer.write_u32(error_bytes.len() as u32).await.is_ok() {
+                    if writer.write_all(&error_bytes).await.is_err() {
+                        warn!("Failed to send deserialization error response (write_all failed) to {}", peer_desc);
                     }
-                    Err(serr) => {
-                        error!("Failed to serialize the error response itself: {}", serr);
-                    }
+                } else {
+                    warn!("Failed to send deserialization error response (write_u32 failed) to {}", peer_desc);
                 }
                 // Continue processing other requests on this connection? Or close it?
                 // Let's close the connection on deserialization error for safety.
@@ -151,15 +143,7 @@ where
         let response = handler.handle_request(request, &mut conn_state).await;
 
         // 5. Serialize Response
-        let response_bytes = match serde_json::to_vec(&response) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                error!("Failed to serialize response ID {} for {}: {}", response.id, peer_desc, e);
-                // Don't close connection, just log and try next request?
-                // Or send a generic error response if possible? Difficult.
-                continue; // Let's attempt to continue
-            }
-        };
+        let response_bytes = bitcode::encode(&response);
 
         // 6. Write Length Prefix for Response
         if let Err(e) = writer.write_u32(response_bytes.len() as u32).await {
@@ -193,8 +177,8 @@ where
     Response: ResponseTrait,
 {
 
-    // #[cfg(all(feature = "multiplex-listener-unix", feature = "multiplex-listener-tcp"))]
-    // compile_error!("Features 'multiplex-listener-unix' and 'multiplex-listener-tcp' are mutually exclusive.");
+    #[cfg(all(feature = "multiplex-listener-unix", feature = "multiplex-listener-tcp"))]
+    compile_error!("Features 'multiplex-listener-unix' and 'multiplex-listener-tcp' are mutually exclusive.");
 
     let listener = TcpListener::bind(&addr)
         .await
@@ -235,8 +219,8 @@ where
     Response: ResponseTrait,
 {
 
-    // #[cfg(all(feature = "multiplex-listener-unix", feature = "multiplex-listener-tcp"))]
-    // compile_error!("Features 'multiplex-listener-unix' and 'multiplex-listener-tcp' are mutually exclusive.");
+    #[cfg(all(feature = "multiplex-listener-unix", feature = "multiplex-listener-tcp"))]
+    compile_error!("Features 'multiplex-listener-unix' and 'multiplex-listener-tcp' are mutually exclusive.");
 
     // Attempt to remove existing socket file before binding
     if let Err(e) = tokio::fs::remove_file(&path).await {
@@ -256,7 +240,7 @@ where
             Ok((stream, _addr)) => { // Unix addr is often less useful/standardized
                 let handler_clone = handler.clone();
                 // Use path for peer description for Unix sockets
-                let peer_desc = format!("unix:{}", path); // Use the bound path
+                let peer_desc = format!("unix:{path}"); // Use the bound path
                 info!("Unix socket connection accepted");
                 tokio::spawn(async move {
                     let (reader, writer) = tokio::io::split(stream);

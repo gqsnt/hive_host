@@ -1,1 +1,1 @@
-cargo build --bin hivehost_server && sudo systemctl stop hivehost_server.service && sudo cp ./target/debug/hivehost_server /usr/local/bin/ && sudo systemctl start hivehost_server.service  && sudo journalctl -u hivehost_server.service -f --output=cat
+cargo build --bin hivehost_server -p  hivehost_server && sudo systemctl stop hivehost_server.service && sudo cp ./target/debug/hivehost_server /usr/local/bin/ && sudo systemctl start hivehost_server.service  && sudo journalctl -u hivehost_server.service -f --output=cat

@@ -25,7 +25,8 @@ pub mod multiplex_protocol;
 #[cfg(feature = "multiplex-listener")]
 pub mod multiplex_listener;
 
-use serde::{Deserialize, Serialize};
+use bitcode::{Decode, Encode};
+
 use std::num::ParseIntError;
 use std::str::FromStr;
 use thiserror::Error;
@@ -93,13 +94,13 @@ pub type UserId = i64;
 
 pub type UserSlugStr = String;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Encode,Decode)]
 pub struct Slug {
     pub id: i64,
     pub slug: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Error, Encode,Decode)]
 pub enum ParseSlugError {
     #[error("Invalid slug format")]
     InvalidFormat,
@@ -154,7 +155,7 @@ impl FromStr for Slug {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode,Decode, Default)]
 pub struct StringContent {
     pub inner: Option<String>,
 }

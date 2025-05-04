@@ -1,11 +1,12 @@
+use std::str::FromStr;
 use common::ParseSlugError;
-use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
 #[cfg(feature = "ssr")]
 use axum_session::SessionError;
+use bitcode::{Decode, Encode};
 use leptos::prelude::{FromServerFnError, ServerFnErrorErr};
-use leptos::server_fn::codec::JsonEncoding;
+use leptos::server_fn::codec::{BitcodeEncoding};
 #[cfg(feature = "ssr")]
 use sqlx::migrate::MigrateError;
 #[cfg(feature = "ssr")]
@@ -32,7 +33,7 @@ pub fn hydrate() {
 pub type AppResult<T> = Result<T, AppError>;
 pub type ServerFnResult<T> = Result<T, AppError>;
 
-#[derive(Debug, Error, Deserialize, Serialize, Clone)]
+#[derive(Debug, Error, Encode, Decode, Clone)]
 pub enum AppError {
     #[cfg(feature = "ssr")]
     #[error("Reqwuest error {0}")]
@@ -72,12 +73,12 @@ pub enum AppError {
     ParseSlug(#[from] ParseSlugError),
     #[cfg(feature = "ssr")]
     #[error("Validation Error {0}")]
-    ValidationError(#[from] ValidationError),
+    ValidationError(String),
     #[cfg(feature = "ssr")]
     #[error("Validation Errors {0}")]
-    ValidationErrors(#[from] ValidationErrors),
+    ValidationErrors(String),
     #[error("ServerFnError {0}")]
-    ServerFnError(#[from] ServerFnErrorErr),
+    ServerFnError(String),
     #[error("Unauthorized Auth Access")]
     UnauthorizedAuthAccess,
     #[error("Unauthorized Project Access")]
@@ -98,7 +99,6 @@ pub enum AppError {
     CantDeleteActiveSnapshot,
     #[error("No Active snapshot")]
     NoActiveSnapshot,
-
     #[cfg(feature = "ssr")]
     #[error("Unix Socket error: {0}")]
     UnixSocketError(#[from] ConnectionError),
@@ -107,7 +107,6 @@ pub enum AppError {
     ClientError(#[from] common::multiplex_client::ClientError),
 }
 
-#[cfg(feature = "ssr")]
 macro_rules! impl_from_to_string {
     ($res:path, $from:ty) => {
         impl From<$from> for AppError {
@@ -130,15 +129,21 @@ impl_from_to_string!(AppError::DotEnv, dotenvy::Error);
 impl_from_to_string!(AppError::RequestError, reqwest::Error);
 #[cfg(feature = "ssr")]
 impl_from_to_string!(AppError::SqlxError, sqlx::Error);
+impl_from_to_string!(AppError::ServerFnError, ServerFnErrorErr);
+#[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::ValidationError, ValidationError);
+ #[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::ValidationErrors, ValidationErrors);
+
+
 
 impl FromServerFnError for AppError {
-    type Encoder = JsonEncoding;
+    type Encoder = BitcodeEncoding;
     fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
         value.into()
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct BoolInput(pub bool);
 
 impl From<BoolInput> for bool {
@@ -147,29 +152,18 @@ impl From<BoolInput> for bool {
     }
 }
 
-impl Serialize for BoolInput {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        if self.0 {
-            serializer.serialize_some("on")
-        } else {
-            serializer.serialize_none()
+impl FromStr for BoolInput {
+    type Err = AppError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "true" => Ok(BoolInput(true)),
+            "false" => Ok(BoolInput(false)),
+            _ => Err(AppError::Custom(format!("Invalid bool input: {s}"))),
         }
     }
 }
 
-impl<'de> Deserialize<'de> for BoolInput {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        // attend une Option<String>
-        let opt = Option::<String>::deserialize(deserializer)?;
-        Ok(BoolInput(matches!(opt.as_deref(), Some("on"))))
-    }
-}
 
 #[cfg(feature = "ssr")]
 pub mod ssr {

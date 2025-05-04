@@ -99,8 +99,7 @@ impl RequestHandler<WebSiteToServerAction, WebSiteToServerResponse> for ServerRe
                         ServerToHostingResponse::Error(e) => {
                             error!("Hosting service failed for ID {}: {}", request.id, e);
                             Ok(WebSiteToServerResponse::Error(format!(
-                                "Hosting service failed: {}",
-                                e
+                                "Hosting service failed: {e}"
                             )))
                         }
                         ServerToHostingResponse::Pong => {
@@ -110,7 +109,7 @@ impl RequestHandler<WebSiteToServerAction, WebSiteToServerResponse> for ServerRe
                     },
                     Err(e) => {
                         error!("Client error calling Hosting service for ID {}: {}", request.id, e);
-                        Ok(WebSiteToServerResponse::Error(format!("Failed to call hosting service: {}", e)))
+                        Ok(WebSiteToServerResponse::Error(format!("Failed to call hosting service: {e}")))
                     }
                 }
             }
