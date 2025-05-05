@@ -9,28 +9,18 @@ sqlx = { workspace = true, features = ["runtime-async-std", "postgres", "uuid", 
 strum = { workspace = true, features = ["derive"] }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
-
 tokio = {workspace=true, optional = true, features = ["process","fs", "net", "io-util", "rt-multi-thread", "time", "sync"]}
-serde_json = { workspace = true, optional = true }
-tracing = {workspace = true, optional = true}
-tracing-subscriber = {workspace = true, features = ["env-filter"], optional = true}
-dashmap = {workspace = true, optional = true}
-deadpool = {version = "0.12.2", optional = true, features = ["rt_tokio_1"]}
-secrecy = { workspace = true, optional = true }
-async-trait = {workspace = true, optional = true}
-bitcode={workspace = true,  features = ["derive"]}
+tarpc = { workspace = true, optional = true }
+tokio-serde = {version = "0.9.0", features = ["bincode", "serde"]}
+bincode = {version = "1.3"}
+
 
 [features]
 website-ssr = ["dep:sqlx"]
-website-to-server=[]
+tarpc-website-to-server=["dep:tarpc", "website-to-server"]
+tarpc-hosting=["dep:tarpc","hosting"]
+tarpc-server-to-helper=["dep:tarpc", "server-to-helper"]
+website-to-server=["hosting", "server-to-helper"]
 hosting=[]
 server-to-helper=[]
-server-to-hosting=["hosting"]
-multiplex-protocol=[]
 server-command=["dep:tokio"]
-multiplex-client=["dep:tokio", "dep:secrecy", "dep:tracing", "dep:tracing-subscriber", "dep:dashmap", "dep:deadpool", "multiplex-protocol"]
-multiplex-client-tcp=[]
-multiplex-client-unix=[]
-multiplex-listener=["dep:async-trait", "dep:secrecy", "dep:tokio", "dep:tracing", "dep:tracing-subscriber", "multiplex-protocol"]
-multiplex-listener-tcp=[]
-multiplex-listener-unix=[]

@@ -8,14 +8,16 @@ axum = { workspace = true, features = ["macros", "json"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs", "process"] }
 tower-http = { workspace = true, features = ["fs", "compression-full", "cors"] }
 moka = { workspace = true, features = ["future"] }
+tarpc = {workspace = true}
+futures = { workspace = true }
+
 common = { path = "../common", features = [
     "website-to-server",
+    "tarpc-website-to-server",
     "server-to-helper",
-    "server-to-hosting",
-    "multiplex-client",
-    "multiplex-client-unix",
-    "multiplex-listener",
-    "multiplex-listener-tcp",
+    "tarpc-server-to-helper",
+    "hosting",
+    "tarpc-hosting",
     "server-command",
 ] }
 dotenvy = { workspace = true }

@@ -2,37 +2,33 @@ use crate::{AppResult};
 use common::website_to_server::server_project_action::{ServerProjectAction, ServerProjectResponse};
 use common::ProjectSlugStr;
 use leptos::server;
-use leptos::server_fn::codec::Bitcode;
+use leptos::server_fn::codec::Bincode;
+
 
 pub fn token_url(server_url: &str, token: &str) -> String {
     format!("http://{server_url}/token/{token}")
 }
 
-#[server(input=Bitcode,output=Bitcode)]
+#[server(input=Bincode,output=Bincode)]
 pub async fn request_server_project_action_front(
     project_slug: ProjectSlugStr,
     action: ServerProjectAction,
     csrf: Option<String>,
 ) -> AppResult<ServerProjectResponse> {
-    use crate::AppError;
-    use common::website_to_server::{WebSiteToServerAction, WebSiteToServerResponse};
     use common::website_to_server::server_project_action::IsProjectServerAction;
+    use tarpc::context;
+    
     ssr::handle_project_permission_request(
         project_slug,
         action.permission(),
         action.require_csrf().then_some(csrf.unwrap_or_default()),
         |_, _, project_slug| async move {
-            let mc = crate::ssr::multiplexer_client().unwrap();
-            let response = mc.send(
-                WebSiteToServerAction::from_server_project_action(project_slug.to_string(),action)
-                ).await;
-
-            match response {
-                Ok(WebSiteToServerResponse::ServerProjectActionResponse(action_response)) => {
-                    Ok(action_response)
-                }
-                _=> Err(AppError::Custom("server action failed".to_string())),
-            }
+            let ws_client = crate::ssr::ws_client().unwrap();
+            ws_client.server_project_action(
+                context::current(),
+                project_slug.to_string(),
+                action.clone(),
+            ).await.map_err(Into::into)
         },
     )
     .await

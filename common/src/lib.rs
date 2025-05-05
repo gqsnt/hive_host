@@ -13,22 +13,20 @@ pub mod server;
 #[cfg(feature = "website-to-server")]
 pub mod website_to_server;
 
-#[cfg(feature = "multiplex-client")]
-pub mod multiplex_client;
-
 
 #[cfg(feature = "hosting")]
 pub mod hosting;
-#[cfg(feature = "multiplex-protocol")]
-pub mod multiplex_protocol;
 
-#[cfg(feature = "multiplex-listener")]
-pub mod multiplex_listener;
+#[cfg(feature = "tarpc-website-to-server")]
+pub mod tarpc_website_to_server;
 
-use bitcode::{Decode, Encode};
+#[cfg(feature = "tarpc-hosting")]
+pub mod tarpc_hosting;
+
 
 use std::num::ParseIntError;
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 
@@ -94,13 +92,13 @@ pub type UserId = i64;
 
 pub type UserSlugStr = String;
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode,Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize,Serialize)]
 pub struct Slug {
     pub id: i64,
     pub slug: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error, Encode,Decode)]
+#[derive(Debug, Clone, PartialEq, Eq, Error, Deserialize,Serialize)]
 pub enum ParseSlugError {
     #[error("Invalid slug format")]
     InvalidFormat,
@@ -122,7 +120,7 @@ impl Slug {
 
 impl std::fmt::Display for Slug {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}_{}", self.slug, self.id)
+        write!(f, "{}-{}", self.slug, self.id)
     }
 }
 
@@ -130,7 +128,7 @@ impl FromStr for Slug {
     type Err = ParseSlugError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.rsplit_once('_') {
+        match s.rsplit_once('-') {
             None => Err(ParseSlugError::InvalidFormat),
             Some((name, id)) => {
                 if id.is_empty() {
@@ -155,7 +153,7 @@ impl FromStr for Slug {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Encode,Decode, Default)]
+#[derive(Clone, Debug, PartialEq, Eq,Default)]
 pub struct StringContent {
     pub inner: Option<String>,
 }

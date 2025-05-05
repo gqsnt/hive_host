@@ -1,7 +1,6 @@
 pub mod components;
 pub mod pages;
 
-use bitcode::{Decode, Encode};
 use crate::app::pages::home::HomePage;
 use crate::app::pages::login::LoginPage;
 use crate::app::pages::signup::SignupPage;
@@ -20,7 +19,7 @@ use crate::app::pages::GlobalState;
 use crate::AppResult;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::*;
-use leptos::server_fn::codec::Bitcode;
+use leptos::server_fn::codec::Bincode;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::components::ParentRoute;
 use leptos_router::{
@@ -131,17 +130,15 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     .into_inner()
 }
 
-#[server(input=Bitcode, output=Bitcode)]
+#[server(input=Bincode, output=Bincode)]
 pub async fn get_server_url() -> AppResult<String> {
     use crate::ssr::server_vars;
     let server_vars = server_vars()?;
     Ok(server_vars.server_url.to_string())
 }
 
-#[derive(Clone, Debug, Encode, Decode)]
-pub struct HostingUrl(pub String);
 
-#[server(input=Bitcode, output=Bitcode)]
+#[server(input=Bincode, output=Bincode)]
 pub async fn get_hosting_url() -> AppResult<String> {
     use crate::ssr::server_vars;
     let server_vars = server_vars()?;

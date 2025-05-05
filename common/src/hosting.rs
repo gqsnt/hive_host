@@ -1,12 +1,16 @@
-use bitcode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
+
+
+
+#[derive(Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub enum HostingAction {
     ServeReloadProject,
     StopServingProject,
 }
 
-#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
+#[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub enum HostingResponse {
     Ok,
+    Error(String),
 }

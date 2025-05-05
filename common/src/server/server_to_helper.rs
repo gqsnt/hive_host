@@ -1,10 +1,11 @@
-use bitcode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use crate::UserSlugStr;
 
 
-#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
+
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize,Serialize)]
 pub enum ServerToHelperAction {
-    Ping,
     CreateUser {
         user_slug: UserSlugStr,
         user_path: String,
@@ -57,10 +58,10 @@ pub enum ServerToHelperAction {
 }
 
 
-#[derive(Encode,Decode, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize,Serialize)]
 pub enum ServerToHelperResponse {
     Ok,
-    Pong,
     Error(String),
 }
+
 

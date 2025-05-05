@@ -4,15 +4,14 @@ use thiserror::Error;
 
 #[cfg(feature = "ssr")]
 use axum_session::SessionError;
-use bitcode::{Decode, Encode};
 use leptos::prelude::{FromServerFnError, ServerFnErrorErr};
-use leptos::server_fn::codec::{BitcodeEncoding};
+use leptos::server_fn::codec::{BincodeEncoding};
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use sqlx::migrate::MigrateError;
 #[cfg(feature = "ssr")]
 use validator::{ValidationError, ValidationErrors};
-#[cfg(feature = "ssr")]
-use common::multiplex_client::ConnectionError;
+
 
 pub mod api;
 pub mod app;
@@ -33,7 +32,7 @@ pub fn hydrate() {
 pub type AppResult<T> = Result<T, AppError>;
 pub type ServerFnResult<T> = Result<T, AppError>;
 
-#[derive(Debug, Error, Encode, Decode, Clone)]
+#[derive(Debug, Error, Serialize, Deserialize, Clone)]
 pub enum AppError {
     #[cfg(feature = "ssr")]
     #[error("Reqwuest error {0}")]
@@ -45,6 +44,9 @@ pub enum AppError {
     #[error("Migrate error {0}")]
     MigrateError(String),
     #[cfg(feature = "ssr")]
+    #[error("Tarpc error {0}")]
+    RpcError(String),
+    #[cfg(feature = "ssr")]
     #[error("DotEnv error: {0}")]
     DotEnv(String),
     #[cfg(feature = "ssr")]
@@ -53,8 +55,6 @@ pub enum AppError {
     #[cfg(feature = "ssr")]
     #[error("AddrParse error: {0}")]
     AddrParse(String),
-    #[error("gloo_net error: {0}")]
-    GlooNet(String),
     #[error("Pool not found")]
     PoolNotFound,
     #[error("Server vars not found")]
@@ -62,7 +62,7 @@ pub enum AppError {
     #[error("Rate limiter not found")]
     RateLimiterNotFound,
     #[error("Multiplexer client not found")]
-    MultiplexerClientNotFound,
+    WebsiteToServerClientNotFound,
     #[error("Auth not found")]
     AuthNotFound,
     #[error("Permissions not found")]
@@ -73,12 +73,12 @@ pub enum AppError {
     ParseSlug(#[from] ParseSlugError),
     #[cfg(feature = "ssr")]
     #[error("Validation Error {0}")]
-    ValidationError(String),
+    ValidationError(#[from] ValidationError),
     #[cfg(feature = "ssr")]
     #[error("Validation Errors {0}")]
-    ValidationErrors(String),
+    ValidationErrors(#[from] ValidationErrors),
     #[error("ServerFnError {0}")]
-    ServerFnError(String),
+    ServerFnError(#[from] ServerFnErrorErr),
     #[error("Unauthorized Auth Access")]
     UnauthorizedAuthAccess,
     #[error("Unauthorized Project Access")]
@@ -100,13 +100,11 @@ pub enum AppError {
     #[error("No Active snapshot")]
     NoActiveSnapshot,
     #[cfg(feature = "ssr")]
-    #[error("Unix Socket error: {0}")]
-    UnixSocketError(#[from] ConnectionError),
-    #[cfg(feature = "ssr")]
-    #[error("Client error: {0}")]
-    ClientError(#[from] common::multiplex_client::ClientError),
+    #[error("Io error: {0}")]
+    Io(String),
 }
 
+#[cfg(feature = "ssr")]
 macro_rules! impl_from_to_string {
     ($res:path, $from:ty) => {
         impl From<$from> for AppError {
@@ -129,16 +127,16 @@ impl_from_to_string!(AppError::DotEnv, dotenvy::Error);
 impl_from_to_string!(AppError::RequestError, reqwest::Error);
 #[cfg(feature = "ssr")]
 impl_from_to_string!(AppError::SqlxError, sqlx::Error);
-impl_from_to_string!(AppError::ServerFnError, ServerFnErrorErr);
-#[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::ValidationError, ValidationError);
  #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::ValidationErrors, ValidationErrors);
+impl_from_to_string!(AppError::RpcError, tarpc::client::RpcError);
+#[cfg(feature = "ssr")]
+impl_from_to_string!(AppError::Io, std::io::Error);
+
 
 
 
 impl FromServerFnError for AppError {
-    type Encoder = BitcodeEncoding;
+    type Encoder = BincodeEncoding;
     fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
         value.into()
     }
@@ -190,12 +188,10 @@ pub mod ssr {
     use sqlx::PgPool;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
-    use common::multiplex_client::MultiplexClient;
-    use common::website_to_server::{WebSiteToServerAction, WebSiteToServerResponse};
+    use common::tarpc_website_to_server::WebsiteServerClient;
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
     
-    pub type MultiplexWebsiteToServer = MultiplexClient<WebSiteToServerAction, WebSiteToServerResponse>;
 
     #[derive(Clone, FromRef)]
     pub struct AppState {
@@ -205,7 +201,7 @@ pub mod ssr {
         pub permissions: Permissions,
         pub server_vars: ServerVars,
         pub rate_limiter: Arc<RateLimiter>,
-        pub multiplex_to_server :MultiplexWebsiteToServer
+        pub ws_client:WebsiteServerClient
     }
 
     #[derive(Debug, Clone)]
@@ -262,8 +258,8 @@ pub mod ssr {
     pub fn pool() -> AppResult<PgPool> {
         use_context::<PgPool>().ok_or(AppError::PoolNotFound)
     }
-    pub fn multiplexer_client() -> AppResult<MultiplexWebsiteToServer> {
-        use_context::<MultiplexWebsiteToServer>().ok_or(AppError::MultiplexerClientNotFound)
+    pub fn ws_client() -> AppResult<WebsiteServerClient> {
+        use_context::<WebsiteServerClient>().ok_or(AppError::WebsiteToServerClientNotFound)
     }
     
 
@@ -302,7 +298,7 @@ pub mod ssr {
                 provide_context(app_state.pool.clone());
                 provide_context(app_state.server_vars.clone());
                 provide_context(app_state.rate_limiter.clone());
-                provide_context(app_state.multiplex_to_server.clone());
+                provide_context(app_state.ws_client.clone());
             },
             request,
         )
@@ -323,7 +319,7 @@ pub mod ssr {
                 provide_context(app_state.permissions.clone());
                 provide_context(app_state.pool.clone());
                 provide_context(app_state.server_vars.clone());
-                provide_context(app_state.multiplex_to_server.clone());
+                provide_context(app_state.ws_client.clone());
                 
             },
             move || shell(app_state.leptos_options.clone()),

@@ -1,40 +1,23 @@
+use common::Slug;
+use futures::StreamExt;
+use hivehost_server_hosting::handler::ServerToHostingServer;
+use hivehost_server_hosting::{
+    accept_hosting_loop, cache_project_path, create_socket, HostingResult, CACHE, DB, TOKEN,
+};
+use std::future;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use std::thread::available_parallelism;
-use async_trait::async_trait;
+use tarpc::server;
+use tarpc::server::Channel;
+use tarpc::tokio_serde::formats::Bincode;
 use tokio::net::TcpListener;
 use tokio::runtime;
 use tracing::{error, info};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use common::multiplex_listener::{run_server_unix, RequestHandler};
-use common::multiplex_protocol::{GenericRequest, GenericResponse};
-use common::server::server_to_hosting::{ServerToHostingAction, ServerToHostingResponse};
-use common::Slug;
-use hivehost_server_hosting::{accept_hosting_loop, cache_project_path, create_socket, HostingResult, CACHE, DB, TOKEN};
-use hivehost_server_hosting::handler::{handle_command};
-
-
-#[derive(Clone)]
-struct HostingRequestHandler;
-
-#[derive(Default)]
-struct HostingConnectionState;
-
-#[async_trait]
-impl RequestHandler<ServerToHostingAction, ServerToHostingResponse> for HostingRequestHandler {
-    type ConnectionState = HostingConnectionState;
-
-    async fn handle_request(
-        &self,
-        request: GenericRequest<ServerToHostingAction>,
-        _conn_state: &mut Self::ConnectionState,
-    ) -> GenericResponse<ServerToHostingResponse> {
-        // Directly call the existing command handler logic
-        handle_command(request).await
-    }
-}
+use common::tarpc_hosting::ServerHosting;
 
 pub fn main() -> HostingResult<()> {
     tracing_subscriber::registry()
@@ -73,26 +56,40 @@ async fn serve(handle: &runtime::Handle) -> HostingResult<()> {
 
     let server_hosting_socket_path = dotenvy::var("SERVER_HOSTING_SOCKET_PATH")?;
     let _ = tokio::fs::remove_file(server_hosting_socket_path.clone()).await;
-    
+
     let hosting_addr = dotenvy::var("HOSTING_ADDR")?;
     let addr = SocketAddr::from_str(&hosting_addr)?;
     let socket = create_socket(addr).expect("Failed to create socket");
     let listener = TcpListener::from_std(socket.into())?;
     let accept_hosting_loop = accept_hosting_loop(handle.clone(), listener);
-    let accept_command_loop = run_server_unix(server_hosting_socket_path, HostingRequestHandler);
+    let mut listener =
+        tarpc::serde_transport::unix::listen(server_hosting_socket_path.clone(), Bincode::default)
+            .await?;
+    listener.config_mut().max_frame_length(usize::MAX);
     let (http_res, command_res) = tokio::join!(
         handle.spawn(accept_hosting_loop),
-        handle.spawn(accept_command_loop)
+        handle.spawn(
+            listener
+                .filter_map(|r| future::ready(r.ok()))
+                .map(server::BaseChannel::with_defaults)
+                .map(|channel| {
+                    let server = ServerToHostingServer;
+                    channel
+                        .execute(server.serve())
+                        .for_each(|response| async move {
+                            tokio::spawn(response);
+                        })
+                })
+                .buffer_unordered(10)
+                .for_each(|_| async {})
+        )
     );
     if let Err(e) = http_res {
         error!("HTTP accept loop task failed: {:?}", e);
     }
     match command_res {
-        Ok(Ok(())) => info!("Command listener finished gracefully."),
-        Ok(Err(e)) => error!("Command listener failed: {:?}", e),
+        Ok(_) => info!("Command listener finished gracefully."),
         Err(e) => error!("Command listener task failed: {:?}", e),
     }
     Ok(())
-    
 }
-

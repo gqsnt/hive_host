@@ -2,9 +2,10 @@ use crate::impl_chain_from;
 use crate::website_to_server::permission::Permission;
 use crate::website_to_server::server_project_action::io_action::ServerProjectIoAction;
 use crate::website_to_server::server_project_action::{IsProjectServerAction, ServerProjectAction};
-use bitcode::{Decode, Encode};
 
-#[derive(Encode,Decode, Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub enum ServerProjectIoDirAction {
     Create { path: String },
     Rename { path: String, new_name: String },
@@ -17,13 +18,14 @@ impl_chain_from!(ServerProjectAction , ServerProjectAction::Io | ServerProjectIo
 
 impl IsProjectServerAction for ServerProjectIoDirAction {
     fn with_token(&self) -> bool {
-        match self {
-            ServerProjectIoDirAction::Create { .. }
-            | ServerProjectIoDirAction::Rename { .. }
-            | ServerProjectIoDirAction::Delete { .. }
-            | ServerProjectIoDirAction::Ls { .. } => false,
-            ServerProjectIoDirAction::Download => true,
-        }
+        false
+        // match self {
+        //     ServerProjectIoDirAction::Create { .. }
+        //     | ServerProjectIoDirAction::Rename { .. }
+        //     | ServerProjectIoDirAction::Delete { .. }
+        //     | ServerProjectIoDirAction::Ls { .. } => false,
+        //     ServerProjectIoDirAction::Download => true,
+        // }
     }
 
     fn permission(&self) -> Permission {
@@ -43,12 +45,12 @@ impl IsProjectServerAction for ServerProjectIoDirAction {
     }
 }
 
-#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub struct ServerProjectIoDirActionLsResponse {
     pub inner: Vec<LsElement>,
 }
 
-#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub struct LsElement {
     pub name: String,
     pub is_dir: bool,

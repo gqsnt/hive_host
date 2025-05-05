@@ -1,47 +1,27 @@
-
-use tracing::{error, info};
+use crate::{cache_project_path, CACHE};
 use common::hosting::{HostingAction, HostingResponse};
-use common::multiplex_protocol::{GenericRequest, GenericResponse};
-use common::server::server_to_hosting::{ServerToHostingAction, ServerToHostingResponse};
-use crate::{cache_project_path, HostingResult, CACHE};
+use tracing::{info};
+use common::tarpc_hosting::ServerHosting;
 
-pub async fn handle_command(request:GenericRequest<ServerToHostingAction>) -> GenericResponse<ServerToHostingResponse> {
+#[derive(Clone)]
+pub struct ServerToHostingServer;
 
-    info!("Executing command: {:?}", request.action);
-    match execute_command(request.action).await{
-        Ok(action_response) => GenericResponse::<ServerToHostingResponse>{
-            id: request.id,
-            action_response,
-        },
-        Err(e) =>  {
-            error!("Error executing command: {:?}", e);
-            GenericResponse::<ServerToHostingResponse>{
-                id: request.id,
-                action_response: ServerToHostingResponse::Error(e.to_string()),
+impl ServerHosting for ServerToHostingServer {
+    async fn execute(
+        self,
+        _: tarpc::context::Context,
+        project_slug: String,
+        action: HostingAction,
+    ) -> HostingResponse {
+        match action {
+            HostingAction::ServeReloadProject => {
+                info!("Reloading project {}", project_slug);
+                tokio::spawn(cache_project_path(project_slug));
+            }
+            HostingAction::StopServingProject => {
+                CACHE.remove(&project_slug);
             }
         }
-    }
-}
-
-
-
-pub async  fn execute_command(action:ServerToHostingAction) -> HostingResult<ServerToHostingResponse> {
-    match action{
-        ServerToHostingAction::HostingAction(project_slug_str, action) => {
-            
-            match action {
-                HostingAction::ServeReloadProject => {
-                    info!("Reloading project {}", project_slug_str);
-                    tokio::spawn(cache_project_path(project_slug_str));
-                }
-                HostingAction::StopServingProject => {
-                    CACHE.remove(&project_slug_str);
-                }
-            }
-            Ok(ServerToHostingResponse::HostingActionResponse(HostingResponse::Ok))
-        }
-        ServerToHostingAction::Ping => {
-            Ok(ServerToHostingResponse::Pong)
-        }
+        HostingResponse::Ok
     }
 }

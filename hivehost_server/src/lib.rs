@@ -1,21 +1,26 @@
-
 pub mod project_action;
 pub mod server_action;
-pub mod request_handler;
 
-
+use crate::project_action::handle_server_project_action;
+use crate::server_action::handle_server_action;
 use axum::extract::FromRef;
 use axum::http::StatusCode;
-use common::website_to_server::server_project_action::ServerProjectAction;
+use common::hosting::{HostingAction, HostingResponse};
+use common::website_to_server::server_action::{ServerAction, ServerActionResponse};
+use common::website_to_server::server_project_action::{
+    ServerProjectAction, ServerProjectResponse,
+};
 use common::{ProjectId, ProjectSlugStr, UserId};
 use moka::future::Cache;
 use secrecy::SecretString;
 use std::path::StripPrefixError;
 use std::sync::Arc;
+use tarpc::context;
+use tarpc::context::Context;
 use thiserror::Error;
-use common::multiplex_client::{ConnectionError, MultiplexClient};
-use common::server::server_to_helper::{ServerToHelperAction, ServerToHelperResponse};
-use common::server::server_to_hosting::{ServerToHostingAction, ServerToHostingResponse};
+use common::server::tarpc_server_to_helper::ServerHelperClient;
+use common::tarpc_hosting::ServerHostingClient;
+use common::tarpc_website_to_server::WebsiteServer;
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -29,10 +34,8 @@ pub enum ServerError {
     AddrParse(#[from] std::net::AddrParseError),
     #[error("StripPrefix error: {0}")]
     StripPrefixError(#[from] StripPrefixError),
-    #[error("Unix Socket error: {0}")]
-    UnixSocketError(#[from] ConnectionError),
-    #[error("Client error: {0}")]
-    ClientError(#[from] common::multiplex_client::ClientError),
+    #[error("Rpc error: {0}")]
+    RpcError(#[from] tarpc::client::RpcError),
     #[error("Command failed: {0}")]
     CommandFailed(String),
     #[error("Unauthorized")]
@@ -87,31 +90,51 @@ impl From<ProjectId> for ServerProjectId {
     }
 }
 
-pub type MultiplexServerHostingClient = MultiplexClient<ServerToHostingAction, ServerToHostingResponse>;
-pub type MultiplexServerHelperClient = MultiplexClient<ServerToHelperAction, ServerToHelperResponse>;
-
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub token_auth: SecretString,
     pub server_project_action_cache: Arc<Cache<String, (ProjectSlugStr, ServerProjectAction)>>,
-    pub helper_client: MultiplexServerHelperClient,
-    pub hosting_client: MultiplexServerHostingClient,
+    pub helper_client: ServerHelperClient,
+    pub hosting_client: ServerHostingClient,
 }
 
-#[macro_export]
-macro_rules! ensure_authorization {
-    ($headers:expr, $state:expr, $success:block) => {{
-        if let Some(auth) = $headers.get(axum::http::header::AUTHORIZATION) {
-            if let Ok(auth_str) = auth.to_str() {
-                if auth_str
-                    .trim_start_matches("Bearer ")
-                    .eq($state.token_auth.expose_secret())
-                {
-                    return $success;
-                }
-            }
-        }
-        return Err(ServerError::Unauthorized.into());
-    }};
+#[derive(Clone)]
+pub struct WebsiteToServerServer(pub AppState);
+impl WebsiteServer for WebsiteToServerServer {
+    async fn server_action(self, _: Context, action: ServerAction) -> ServerActionResponse {
+        handle_server_action(self.0, action)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::error!("Error handling server action: {:?}", e);
+                ServerActionResponse::Error(e.to_string())
+            })
+    }
+
+    async fn server_project_action(
+        self,
+        _: Context,
+        project_slug: String,
+        action: ServerProjectAction,
+    ) -> ServerProjectResponse {
+        handle_server_project_action(self.0, project_slug, action)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::error!("Error handling server project action: {:?}", e);
+                ServerProjectResponse::Error(e.to_string())
+            })
+    }
+
+    async fn hosting_action(
+        self,
+        _: Context,
+        project_slug: String,
+        action: HostingAction,
+    ) -> HostingResponse {
+        self.0.hosting_client.execute(context::current(),project_slug, action).await
+            .unwrap_or_else(|e| {
+                tracing::error!("Error handling hosting action: {:?}", e);
+                HostingResponse::Error(e.to_string())
+            })
+    }
 }

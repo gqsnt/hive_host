@@ -1,14 +1,14 @@
 use crate::models::User;
 use crate::AppResult;
 use leptos::server;
-use leptos::server_fn::codec::Bitcode;
+use leptos::server_fn::codec::Bincode;
 
 pub mod login;
 pub mod permission;
 pub mod signup;
 pub mod utils;
 
-#[server(input=Bitcode, output=Bitcode)]
+#[server(input=Bincode, output=Bincode)]
 pub async fn logout() -> AppResult<()> {
     let auth = crate::ssr::auth(false)?;
     auth.logout_user();
@@ -16,7 +16,7 @@ pub async fn logout() -> AppResult<()> {
     Ok(())
 }
 
-#[server(input=Bitcode, output=Bitcode)]
+#[server(input=Bincode, output=Bincode)]
 pub async fn get_user() -> AppResult<User> {
     use crate::AppError;
     let auth = crate::ssr::auth(true)?;

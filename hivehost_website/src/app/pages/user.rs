@@ -75,8 +75,8 @@ pub type UserSignal = Signal<Option<User>>;
 pub fn UserPage() -> impl IntoView {
     let global_store: Store<GlobalState> = expect_context();
     let logout = ServerAction::<Logout>::new();
-    let user_resource = OnceResource::new_bitcode(get_user());
-    let csrf_resource = OnceResource::new_bitcode(generate_csrf());
+    let user_resource = OnceResource::new_bincode(get_user());
+    let csrf_resource = OnceResource::new_bincode(generate_csrf());
 
     let (mobile_sidebar_open, set_mobile_sidebar_open) = signal(false);
     let location = use_location();

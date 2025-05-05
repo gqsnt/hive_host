@@ -19,7 +19,7 @@ pub fn FileContentView(
     csrf_signal: Signal<Option<String>>,
     permission_signal: Signal<Permission>,
 ) -> impl IntoView {
-    let file_content_resource = Resource::new_bitcode(
+    let file_content_resource = Resource::new_bincode(
         move || (selected_file.get(), slug.get()),
         |(file_path_opt, slug)| async move {
             match file_path_opt {
@@ -27,7 +27,6 @@ pub fn FileContentView(
                     match crate::api::get_action_server_project_action_inner(
                         slug,
                         ServerProjectIoFileAction::View { path: file_path }.into(),
-                        None,
                         None,
                     )
                     .await
@@ -82,9 +81,9 @@ pub fn FileContentView(
                                                         slug.get(),
                                                         ServerProjectIoFileAction::Update {
                                                             path: path_clone.clone(),
+                                                            content: content_to_save,
                                                         }
                                                             .into(),
-                                                        Some(content_to_save),
                                                         Some(
                                                             csrf_signal
                                                                 .read()

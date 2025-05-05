@@ -1,8 +1,8 @@
 use crate::{AppResult};
 use leptos::server;
-use leptos::server_fn::codec::Bitcode;
+use leptos::server_fn::codec::Bincode;
 
-#[server(Login, "/api",input=Bitcode, output=Bitcode)]
+#[server(Login, "/api",input=Bincode, output=Bincode)]
 pub async fn login(
     csrf: String,
     email: String,

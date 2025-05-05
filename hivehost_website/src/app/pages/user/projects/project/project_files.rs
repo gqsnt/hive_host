@@ -79,7 +79,7 @@ pub fn ProjectFiles() -> impl IntoView {
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
 
     let server_project_action = get_action_server_project_action();
-    let file_list_resource = Resource::new_bitcode(
+    let file_list_resource = Resource::new_bincode(
         move || {
             (
                 current_path.get(),
@@ -91,7 +91,6 @@ pub fn ProjectFiles() -> impl IntoView {
             crate::api::get_action_server_project_action_inner(
                 slug,
                 ServerProjectIoDirAction::Ls { path }.into(),
-                None,
                 None,
             )
         },

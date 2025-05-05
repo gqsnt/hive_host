@@ -27,5 +27,6 @@ socket2 = { version = "0.5.9", features = ["all"] }
 quick_cache = { version = "0.6.13" }
 deadpool-postgres = "0.14.1"
 async-compression = { version = "0.4.23", features = ["all"] }
-common = { path = "../common", features = ["server-to-hosting", "multiplex-listener", "multiplex-listener-unix"] }
-async-trait = { workspace = true }
+common = { path = "../common", features = ["hosting", "tarpc-hosting"] }
+tarpc = {workspace = true}
+futures = {workspace = true}

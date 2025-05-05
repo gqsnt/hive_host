@@ -197,7 +197,7 @@ pub mod server_fns {
     use crate::AppResult;
     use common::ProjectSlugStr;
     use leptos::server;
-    use leptos::server_fn::codec::Bitcode;
+    use leptos::server_fn::codec::Bincode;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::api::ssr::request_server_project_action;
@@ -210,7 +210,7 @@ pub mod server_fns {
         use common::hosting::HostingAction;
     }}
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project(
         csrf: String,
         project_slug: ProjectSlugStr,

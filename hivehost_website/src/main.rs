@@ -2,6 +2,9 @@
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> hivehost_website::AppResult<()> {
+    use common::tarpc_website_to_server::WebsiteServerClient;
+    use tarpc::client;
+    use tarpc::tokio_serde::formats::Bincode;
     use axum::{routing::get, Router};
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
@@ -24,7 +27,6 @@ async fn main() -> hivehost_website::AppResult<()> {
     use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
-    use hivehost_website::ssr::MultiplexWebsiteToServer;
     
     dotenvy::dotenv().ok();
 
@@ -63,6 +65,8 @@ async fn main() -> hivehost_website::AppResult<()> {
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
+    let mut transport = tarpc::serde_transport::tcp::connect(server_addr, Bincode::default);
+    transport.config_mut().max_frame_length(usize::MAX);
     let app_state = AppState {
         leptos_options: leptos_options.clone(),
         pool: pool.clone(),
@@ -74,7 +78,7 @@ async fn main() -> hivehost_website::AppResult<()> {
                 .time_to_live(Duration::from_secs(900)) // 15 minutes
                 .build(),
         ),
-        multiplex_to_server:MultiplexWebsiteToServer::new(server_addr,Some(token_action_auth), 10)?,
+        ws_client:WebsiteServerClient::new(client::Config::default(), transport.await?).spawn(),
     };
 
     let mut task_director = TaskDirector::default();
@@ -138,8 +142,7 @@ async fn main() -> hivehost_website::AppResult<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .await
-    .unwrap();
+    .await?;
     Ok(())
 }
 

@@ -6,11 +6,9 @@ set -euo pipefail
 SERVICE_USER="hivehost_server"
 SERVICE_GROUP="hivehost_server"
 SFTP_GROUP="sftp_users"
-BTRFS_MOUNT_POINT="/hivehost/dev"
+BTRFS_DEV_MOUNT_POINT="/hivehost/dev"
 PROD_MOUNT_BASE="/hivehost/prod"
 USERS_BASE="/hivehost/users"
-SOCKETS_HELPER_DIR="/hivehost/sockets/helpers/"
-SOCKETS_HOSTING_DIR="/hivehost/sockets/hosting/"
 HIVEHOST_BASE="/hivehost"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -46,9 +44,9 @@ mkdir -p "$HIVEHOST_BASE"
 chown root:root "$HIVEHOST_BASE"
 chmod 755 "$HIVEHOST_BASE" # Or 711 if you prefer
 
-mkdir -p "$BTRFS_MOUNT_POINT"
-chown root:root "$BTRFS_MOUNT_POINT"
-chmod 711 "$BTRFS_MOUNT_POINT" # Restrict listing
+mkdir -p "$BTRFS_DEV_MOUNT_POINT"
+chown root:root "$BTRFS_DEV_MOUNT_POINT"
+chmod 711 "$BTRFS_DEV_MOUNT_POINT" # Restrict listing
 
 mkdir -p "$PROD_MOUNT_BASE"
 chown root:root "$PROD_MOUNT_BASE"
@@ -58,38 +56,32 @@ mkdir -p "$USERS_BASE"
 chown root:root "$USERS_BASE"
 chmod 755 "$USERS_BASE" # SFTP Chroot base
 
-mkdir -p "$SOCKETS_HELPER_DIR"
-chown root:root "$SOCKETS_HELPER_DIR"
-chmod 755 "$SOCKETS_HELPER_DIR" # Sockets dir
-
-mkdir -p "$SOCKETS_HOSTING_DIR"
-chown root:root "$SOCKETS_HOSTING_DIR"
-chmod 755 "$SOCKETS_HOSTING_DIR" # Sockets dir
 
 
-### 5. Check/Verify ACLs on BTRFS_MOUNT_POINT
-echo "Checking ACL support on '$BTRFS_MOUNT_POINT'..."
+### 5. Check/Verify ACLs on BTRFS_DEV_MOUNT_POINT
+echo "Checking ACL support on '$BTRFS_DEV_MOUNT_POINT'..."
 # Ensure the BTRFS filesystem itself is mounted with ACL support in /etc/fstab!
 # Example fstab: UUID=... /hivehost/dev btrfs defaults,acl 0 0
-if ! mount | grep -q " on $BTRFS_MOUNT_POINT .*acl"; then
-  echo "WARNING: Filesystem at '$BTRFS_MOUNT_POINT' might not be mounted with ACL support."
+if ! mount | grep -q " on $BTRFS_DEV_MOUNT_POINT .*acl"; then
+  echo "WARNING: Filesystem at '$BTRFS_DEV_MOUNT_POINT' might not be mounted with ACL support."
   echo "Please ensure 'acl' option is present in /etc/fstab for this mount point."
   # Attempting a remount might work temporarily but isn't persistent
-  # mount -o remount,acl "$BTRFS_MOUNT_POINT" || echo "Remount attempt failed."
+  # mount -o remount,acl "$BTRFS_DEV_MOUNT_POINT" || echo "Remount attempt failed."
 fi
 
 # Test ACL setting ability
-echo "Testing ACL functionality on '$BTRFS_MOUNT_POINT'..."
-if setfacl -m "u:$SERVICE_USER:rwx" "$BTRFS_MOUNT_POINT" >/dev/null 2>&1; then
+echo "Testing ACL functionality on '$BTRFS_DEV_MOUNT_POINT'..."
+if setfacl -m "u:$SERVICE_USER:rwx" "$BTRFS_DEV_MOUNT_POINT" >/dev/null 2>&1; then
   echo "ACL test successful. Granting service user base access."
-  # Grant service user ability to manage items *within* BTRFS_MOUNT_POINT
-  setfacl -m "u:$SERVICE_USER:rwx" "$BTRFS_MOUNT_POINT"
-  setfacl -d -m "u:$SERVICE_USER:rwx" "$BTRFS_MOUNT_POINT"
-  setfacl -m "u:root:rwx" "$BTRFS_MOUNT_POINT" # Ensure root retains full ACL control
+  # Grant service user ability to manage items *within* BTRFS_DEV_MOUNT_POINT
+  setfacl -m "u:$SERVICE_USER:rwx" "$BTRFS_DEV_MOUNT_POINT"
+  setfacl -d -m "u:$SERVICE_USER:rwx" "$BTRFS_DEV_MOUNT_POINT"
+  setfacl -m "u:root:rwx" "$BTRFS_DEV_MOUNT_POINT" # Ensure root retains full ACL control
+  setfacl -d -m "u:root:rwx" "$BTRFS_DEV_MOUNT_POINT" # Ensure root retains full ACL control
 else
   # Cleanup potential failed ACL test if it left an entry
-  setfacl -x "u:$SERVICE_USER" "$BTRFS_MOUNT_POINT" >/dev/null 2>&1 || true
-  echo "ERROR: Failed to set test ACL on '$BTRFS_MOUNT_POINT'."
+  setfacl -x "u:$SERVICE_USER" "$BTRFS_DEV_MOUNT_POINT" >/dev/null 2>&1 || true
+  echo "ERROR: Failed to set test ACL on '$BTRFS_DEV_MOUNT_POINT'."
   echo "Ensure the filesystem is mounted with 'acl' option and supports ACLs."
   exit 1 # ACLs are critical for this design
 fi
@@ -99,30 +91,18 @@ echo "Granting service user access to '$PROD_MOUNT_BASE'..."
 setfacl -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE"
 setfacl -d -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE" # Allow creating mount dirs
 
-# Grant service user access to manage user directories
-echo "Granting service user access to '$USERS_BASE'..."
-setfacl -m "u:$SERVICE_USER:rwx" "$USERS_BASE"
-setfacl -d -m "u:$SERVICE_USER:rwx" "$USERS_BASE" # Allow creating user dirs
 
-# Grant service user access to manage sockets
-echo "Granting service user access to '$SOCKETS_HELPER_DIR'..."
-setfacl -m "u:$SERVICE_USER:rwx" "$SOCKETS_HELPER_DIR"
-setfacl -d -m "u:$SERVICE_USER:rwx" "$SOCKETS_HELPER_DIR" # Allow creating socket dirs
-
-echo "Granting service user access to '$SOCKETS_HOSTING_DIR'..."
-setfacl -m "u:$SERVICE_USER:rwx" "$SOCKETS_HOSTING_DIR"
-setfacl -d -m "u:$SERVICE_USER:rwx" "$SOCKETS_HOSTING_DIR" # Allow creating socket dirs
 
 
 
 echo "✅ Initialization Script Completed."
 echo "Base directories created under '$HIVEHOST_BASE'."
 echo "Service user '$SERVICE_USER' and SFTP group '$SFTP_GROUP' ensured."
-echo "ACL support verified on '$BTRFS_MOUNT_POINT'."
+echo "ACL support verified on '$BTRFS_DEV_MOUNT_POINT'."
 echo "Base permissions set for '$SERVICE_USER'."
 echo "---"
 echo "Next Steps:"
-echo "1. Ensure your Btrfs volume is mounted at '$BTRFS_MOUNT_POINT' with 'acl' in /etc/fstab."
+echo "1. Ensure your Btrfs volume is mounted at '$BTRFS_DEV_MOUNT_POINT' with 'acl' in /etc/fstab."
 echo "2. Configure SSHD for SFTP Chroot (Match Group $SFTP_GROUP, ChrootDirectory $USERS_BASE/%u, ForceCommand internal-sftp, etc.)."
 echo "3. Ensure your backend service runs as/uses '$SERVICE_USER' (likely via sudo for helper commands)."
 

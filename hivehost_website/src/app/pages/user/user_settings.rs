@@ -19,7 +19,7 @@ pub fn UserSettingsPage() -> impl IntoView {
     let add_ssh_action = ServerAction::<server_fns::AddSshKey>::new();
     let update_password_action = ServerAction::<server_fns::UpdatePassword>::new();
 
-    let ssh_keys_resource = Resource::new_bitcode(
+    let ssh_keys_resource = Resource::new_bincode(
         move || {
             (
                 delete_ssh_action.version().get(),
@@ -455,7 +455,7 @@ pub mod server_fns {
     use crate::models::SshKeyInfo;
     use crate::AppResult;
     use leptos::server;
-    use leptos::server_fn::codec::Bitcode;
+    use leptos::server_fn::codec::Bincode;
 
     #[cfg(feature = "ssr")]
     mod ssr {
@@ -476,7 +476,7 @@ pub mod server_fns {
         }
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn get_ssh_keys() -> AppResult<Vec<SshKeyInfo>> {
         let auth = auth(false)?;
         let pool = pool()?;
@@ -492,7 +492,7 @@ pub mod server_fns {
         .await?)
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn delete_ssh_key(csrf: String, ssh_key_id: i64) -> AppResult<()> {
         let auth = auth(false)?;
         let pool = pool()?;
@@ -548,7 +548,7 @@ pub mod server_fns {
         Ok(())
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn update_password(
         csrf: String,
         old_password: String,

@@ -1,35 +1,33 @@
-use common::PROD_ROOT_PATH_PREFIX;
-use std::convert::Infallible;
-use std::io;
-use std::net::{AddrParseError, SocketAddr};
-use std::sync::{Arc, LazyLock};
 use async_compression::tokio::bufread::BrotliEncoder;
+use common::PROD_ROOT_PATH_PREFIX;
+use common::{get_project_prod_path, ProjectSlugStr};
 use dashmap::DashMap;
-use deadpool_postgres::{tokio_postgres, Pool};
 use deadpool_postgres::tokio_postgres::NoTls;
-use http::{header, HeaderValue, Request, Response, StatusCode};
+use deadpool_postgres::{tokio_postgres, Pool};
 use http::header::SERVER;
+use http::{header, HeaderValue, Request, Response, StatusCode};
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Empty, Full};
 use hyper::body::{Bytes, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use quick_cache::{DefaultHashBuilder, Weighter};
 use quick_cache::sync::{Cache, DefaultLifecycle};
+use quick_cache::{DefaultHashBuilder, Weighter};
 use socket2::{Domain, SockAddr, Socket};
+use std::convert::Infallible;
+use std::io;
+use std::net::{AddrParseError, SocketAddr};
+use std::sync::{Arc, LazyLock};
 use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
-use tokio::{runtime, task};
 use tokio::net::TcpListener;
+use tokio::{runtime, task};
 use tracing::{debug, error, info};
 use walkdir::WalkDir;
-use common::{get_project_prod_path, ProjectSlugStr};
 
 pub mod handler;
-
-
 
 pub static HOSTING_PREFIX: LazyLock<String> = LazyLock::new(|| {
     format!(
@@ -55,8 +53,6 @@ pub enum HostingError {
     #[error("Tokio postgres error: {0}")]
     TokioPostgres(#[from] tokio_postgres::Error),
 }
-
-
 
 pub static CACHE: LazyLock<DashMap<ProjectSlugStr, ProjectCache>> = LazyLock::new(DashMap::new);
 
@@ -97,7 +93,7 @@ pub type BodyType = Bytes;
 pub type KeyType = String;
 
 pub type FileCacheType =
-Cache<KeyType, BodyType, BodyWeighter, DefaultHashBuilder, DefaultLifecycle<KeyType, BodyType>>;
+    Cache<KeyType, BodyType, BodyWeighter, DefaultHashBuilder, DefaultLifecycle<KeyType, BodyType>>;
 
 #[derive(Clone, Debug)]
 pub struct ProjectCache {
@@ -147,11 +143,6 @@ pub async fn cache_project_path(project_slug: ProjectSlugStr) {
             });
         });
 }
-
-
-
-
-
 
 pub async fn handle_request(
     request: Request<Incoming>,
@@ -274,8 +265,10 @@ pub fn create_socket(addr: SocketAddr) -> HostingResult<Socket> {
     Ok(socket)
 }
 
-
-pub async fn accept_hosting_loop(handle: runtime::Handle, listener: TcpListener) -> HostingResult<()> {
+pub async fn accept_hosting_loop(
+    handle: runtime::Handle,
+    listener: TcpListener,
+) -> HostingResult<()> {
     let mut http = http1::Builder::new();
     http.pipeline_flush(true);
 

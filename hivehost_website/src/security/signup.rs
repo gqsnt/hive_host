@@ -1,8 +1,8 @@
 use crate::{AppResult};
 use leptos::server;
-use leptos::server_fn::codec::Bitcode;
+use leptos::server_fn::codec::Bincode;
 
-#[server(Signup, "/api", input=Bitcode, output=Bitcode)]
+#[server(Signup, "/api", input=Bincode, output=Bincode)]
 pub async fn signup(
     csrf: String,
     email: String,

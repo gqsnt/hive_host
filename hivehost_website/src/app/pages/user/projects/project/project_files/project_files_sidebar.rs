@@ -45,7 +45,6 @@ pub fn ProjectFilesSidebar(
                 path: format!("{}{}", current_path.get(), folder_name),
             }
             .into(),
-            None,
             Some(
                 csrf_signal
                     .read()
@@ -68,7 +67,6 @@ pub fn ProjectFilesSidebar(
                 path: format!("{}{}", current_path.get(), file_name),
             }
             .into(),
-            None,
             Some(
                 csrf_signal
                     .read()
@@ -307,7 +305,6 @@ pub fn ProjectFilesSidebarItem(
         server_project_action.dispatch((
             slug(),
             action,
-            None,
             Some(
                 csrf_signal
                     .read()
@@ -341,7 +338,6 @@ pub fn ProjectFilesSidebarItem(
         server_project_action.dispatch((
             slug(),
             action,
-            None,
             Some(
                 csrf_signal
                     .read()

@@ -9,7 +9,7 @@ create table if not exists users
     password text      not null,
     role     role_type not null,
     slug     TEXT
-        GENERATED ALWAYS AS (username || '_' || id::TEXT)
+        GENERATED ALWAYS AS (username || '-' || id::TEXT)
             STORED     not null
 );
 
@@ -20,7 +20,7 @@ create table if not exists projects
     id   bigserial primary key,
     name text      not null,
     slug TEXT
-        GENERATED ALWAYS AS (name || '_' || id::TEXT)
+        GENERATED ALWAYS AS (name || '-' || id::TEXT)
             STORED not null
 );
 

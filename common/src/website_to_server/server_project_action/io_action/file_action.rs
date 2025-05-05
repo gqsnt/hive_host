@@ -2,9 +2,10 @@ use crate::impl_chain_from;
 use crate::website_to_server::permission::Permission;
 use crate::website_to_server::server_project_action::io_action::ServerProjectIoAction;
 use crate::website_to_server::server_project_action::{IsProjectServerAction, ServerProjectAction};
-use bitcode::{Decode, Encode};
 
-#[derive(Debug, Decode,Encode, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug,  Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub enum ServerProjectIoFileAction {
     Create { path: String },
     Rename { path: String, new_name: String },
@@ -12,20 +13,21 @@ pub enum ServerProjectIoFileAction {
     Move { path: String, new_path: String },
     Copy { path: String, new_path: String },
     View { path: String },
-    Update { path: String },
+    Update { path: String, content: String },
 }
 
 impl_chain_from!(ServerProjectAction, ServerProjectAction::Io | ServerProjectIoAction::File => ServerProjectIoFileAction);
 
 impl IsProjectServerAction for ServerProjectIoFileAction {
     fn with_token(&self) -> bool {
-        match self {
-            ServerProjectIoFileAction::Rename { .. }
-            | ServerProjectIoFileAction::Delete { .. }
-            | ServerProjectIoFileAction::Move { .. }
-            | ServerProjectIoFileAction::Copy { .. } => false,
-            ServerProjectIoFileAction::Create { .. } | ServerProjectIoFileAction::View { .. } | ServerProjectIoFileAction::Update { .. } => true,
-        }
+        false
+        // match self {
+        //     ServerProjectIoFileAction::Rename { .. }
+        //     | ServerProjectIoFileAction::Delete { .. }
+        //     | ServerProjectIoFileAction::Move { .. }
+        //     | ServerProjectIoFileAction::Copy { .. } => false,
+        //     ServerProjectIoFileAction::Create { .. } | ServerProjectIoFileAction::View { .. } | ServerProjectIoFileAction::Update { .. } => true,
+        // }
     }
 
     fn permission(&self) -> Permission {
@@ -53,7 +55,7 @@ impl IsProjectServerAction for ServerProjectIoFileAction {
     }
 }
 
-#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq)]
+#[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub struct FileInfo {
     pub name: String,
     pub content: String,

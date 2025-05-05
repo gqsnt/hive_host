@@ -1,9 +1,9 @@
 use crate::impl_chain_from;
 use crate::website_to_server::permission::Permission;
 use crate::website_to_server::server_project_action::{IsProjectServerAction, ServerProjectAction};
-use bitcode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
-#[derive(Decode, Encode, Debug, Clone, PartialEq, Eq)]
+#[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub enum ServerProjectSnapshotAction {
     Create { snapshot_name: String },
     Delete { snapshot_name: String },

@@ -16,7 +16,7 @@ use leptos::prelude::CustomAttribute;
 #[component]
 pub fn SignupPage() -> impl IntoView {
     let global_store: Store<GlobalState> = expect_context();
-    let csrf_resource = OnceResource::new_bitcode(generate_csrf());
+    let csrf_resource = OnceResource::new_bincode(generate_csrf());
     
     let email_ref = NodeRef::<Input>::default();
     let password_ref = NodeRef::<Input>::default();

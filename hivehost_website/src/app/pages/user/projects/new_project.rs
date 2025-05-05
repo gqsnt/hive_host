@@ -73,7 +73,7 @@ pub fn NewProjectPage(
 pub mod server_fns {
     use crate::AppResult;
     use leptos::server;
-    use leptos::server_fn::codec::Bitcode;
+    use leptos::server_fn::codec::Bincode;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::utils::ssr::verify_easy_hash;
@@ -81,7 +81,7 @@ pub mod server_fns {
 
     }}
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn create_project(csrf: String, name: String) -> AppResult<()> {
         let auth = crate::ssr::auth(false)?;
         let server_vars = crate::ssr::server_vars()?;

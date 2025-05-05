@@ -77,7 +77,7 @@ pub mod ssr {
     }
 
     pub static SANITIZED_REGEX: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"[a-zA-Z0-9_]+$").unwrap());
+        LazyLock::new(|| Regex::new(r"[a-zA-Z0-9]+$").unwrap());
 
     pub struct AsyncValidationContext {
         pub pg_pool: PgPool,

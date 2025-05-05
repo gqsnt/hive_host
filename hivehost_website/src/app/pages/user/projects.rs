@@ -20,7 +20,7 @@ pub mod project;
 
 #[component]
 pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl IntoView {
-    let projects = Resource::new_bitcode(
+    let projects = Resource::new_bincode(
         move || create_project_action.version().get(),
         move |_| server_fns::get_projects(),
     );
@@ -135,14 +135,14 @@ pub mod server_fns {
     use crate::models::Project;
     use crate::AppResult;
     use leptos::server;
-    use leptos::server_fn::codec::Bitcode;
+    use leptos::server_fn::codec::Bincode;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
             use crate::security::utils::ssr::get_auth_session_user_id;
 
     }}
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn get_projects() -> AppResult<Vec<Project>> {
         let pool = crate::ssr::pool()?;
         let auth = crate::ssr::auth(false)?;

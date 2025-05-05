@@ -1,11 +1,30 @@
 use crate::{ServerHelperResult, BTRFS_DEVICE};
 use common::command::run_external_command;
+use common::server::server_to_helper::{
+    ServerToHelperAction, ServerToHelperResponse,
+};
 use common::{get_project_dev_path, get_project_prod_path, SERVICE_USER, USER_GROUP};
-use tracing::{error, info};
-use common::multiplex_protocol::{GenericRequest, GenericResponse};
-use common::server::server_to_helper::{ServerToHelperAction, ServerToHelperResponse};
+use tarpc::context::Context;
+use common::server::tarpc_server_to_helper::ServerHelper;
 
-pub async fn execute_command(action: ServerToHelperAction) -> ServerHelperResult<ServerToHelperResponse> {
+#[derive(Clone)]
+pub struct ServerHelperServer;
+
+impl ServerHelper for ServerHelperServer {
+    async fn execute(
+        self,
+        _: Context,
+        action: ServerToHelperAction,
+    ) -> ServerToHelperResponse {
+        execute_command(action)
+            .await
+            .unwrap_or_else(|e| ServerToHelperResponse::Error(e.to_string()))
+    }
+}
+
+pub async fn execute_command(
+    action: ServerToHelperAction,
+) -> ServerHelperResult<ServerToHelperResponse> {
     match action {
         ServerToHelperAction::CreateUser {
             user_slug,
@@ -27,7 +46,7 @@ pub async fn execute_command(action: ServerToHelperAction) -> ServerHelperResult
                     &user_slug,
                 ],
             )
-                .await?;
+            .await?;
 
             run_external_command("chown", &["root:root", &user_path]).await?;
             run_external_command("chmod", &["755", &user_path]).await?;
@@ -48,7 +67,7 @@ pub async fn execute_command(action: ServerToHelperAction) -> ServerHelperResult
             // 1. Create the main project Btrfs subvolume
             run_external_command("btrfs", &["subvolume", "create", &dev_path]).await?;
             run_external_command("chown", &["root:root", &dev_path]).await?;
-            run_external_command("chmod", &["770", &dev_path]).await?; // Start restrictive
+            run_external_command("chmod", &["700", &dev_path]).await?; // Start restrictive
 
             let user_acl_rwx_entry = format!("u:{service_user}:rwX");
             let service_acl_rwx_entry = format!("u:{SERVICE_USER}:rwX");
@@ -56,21 +75,11 @@ pub async fn execute_command(action: ServerToHelperAction) -> ServerHelperResult
             run_external_command("setfacl", &["-m", &user_acl_rwx_entry, &dev_path]).await?;
             run_external_command("setfacl", &["-d", "-m", &user_acl_rwx_entry, &dev_path]).await?;
             run_external_command("setfacl", &["-m", &service_acl_rwx_entry, &dev_path]).await?;
-            run_external_command("setfacl", &["-d", "-m", &service_acl_rwx_entry, &dev_path])
-                .await?;
+            run_external_command("setfacl", &["-d", "-m", &service_acl_rwx_entry, &dev_path]).await?;
 
             run_external_command("mkdir", &["-p", &prod_path]).await?;
             run_external_command("chown", &["root:root", &prod_path]).await?;
             run_external_command("chmod", &["755", &prod_path]).await?;
-
-            run_external_command("mkdir", &["-p", &dev_path]).await?;
-            run_external_command("chown", &["root:root", &dev_path]).await?;
-            run_external_command("chmod", &["770", &dev_path]).await?;
-            run_external_command("setfacl", &["-m", &user_acl_rwx_entry, &dev_path]).await?;
-            run_external_command("setfacl", &["-d", "-m", &user_acl_rwx_entry, &dev_path]).await?;
-            run_external_command("setfacl", &["-m", &service_acl_rwx_entry, &dev_path]).await?;
-            run_external_command("setfacl", &["-d", "-m", &service_acl_rwx_entry, &dev_path])
-                .await?;
         }
         ServerToHelperAction::DeleteProject {
             project_slug: project_slug_str,
@@ -100,8 +109,8 @@ pub async fn execute_command(action: ServerToHelperAction) -> ServerHelperResult
             target_path,
         } => {
             run_external_command("mkdir", &["-p", &target_path]).await?;
-            run_external_command("chown", &["root:root", &target_path]).await?;
-            run_external_command("chmod", &["755", &target_path]).await?;
+            // run_external_command("chown", &["root:root", &target_path]).await?;
+            // run_external_command("chmod", &["755", &target_path]).await?;
             run_external_command("mount", &["--bind", &source_path, &target_path]).await?;
         }
         ServerToHelperAction::UnmountUserProject { target_path } => {
@@ -125,7 +134,7 @@ pub async fn execute_command(action: ServerToHelperAction) -> ServerHelperResult
                     &snapshot_path,
                 ],
             )
-                .await?;
+            .await?;
         }
         ServerToHelperAction::DeleteSnapshot { snapshot_path } => {
             run_external_command("btrfs", &["subvolume", "delete", &snapshot_path]).await?;
@@ -143,34 +152,11 @@ pub async fn execute_command(action: ServerToHelperAction) -> ServerHelperResult
                     &path,
                 ],
             )
-                .await?;
+            .await?;
         }
         ServerToHelperAction::UnmountProd { path } => {
             run_external_command("umount", &[&path]).await?;
         }
-        ServerToHelperAction::Ping => { 
-            return Ok(ServerToHelperResponse::Pong)
-        }
     }
     Ok(ServerToHelperResponse::Ok)
-}
-
-
-
-pub async fn handle_command(request:GenericRequest<ServerToHelperAction>) -> GenericResponse<ServerToHelperResponse> {
-    
-    info!("Executing command: {:?}", request.action);
-    match execute_command(request.action).await{
-        Ok(action_response) => GenericResponse::<ServerToHelperResponse>{
-            id: request.id,
-            action_response,
-        },
-        Err(e) =>  {
-            error!("Error executing command: {:?}", e);
-            GenericResponse::<ServerToHelperResponse>{
-                id: request.id,
-                action_response: ServerToHelperResponse::Error(e.to_string()),
-            }
-        }
-    }
 }

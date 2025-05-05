@@ -1,9 +1,9 @@
-use bitcode::{Decode, Encode};
 use common::website_to_server::permission::Permission;
 use common::{ProjectId, ProjectSlugStr, Slug, UserId, UserSlugStr};
 use reactive_stores::Store;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Encode, Decode, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "ssr",
@@ -15,7 +15,7 @@ pub enum RoleType {
     Admin,
 }
 
-#[derive(Clone, Debug, Encode, Decode, Store)]
+#[derive(Clone, Debug, Store, Serialize, Deserialize)]
 pub struct User {
     pub id: UserId,
     pub role_type: RoleType,
@@ -48,7 +48,7 @@ impl Default for User {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode, Default, PartialEq, Eq, Store)]
+#[derive(Debug, Clone,Default, PartialEq, Eq, Store, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Project {
     pub id: ProjectId,
@@ -57,7 +57,7 @@ pub struct Project {
     pub active_snapshot_id: Option<i64>,
 }
 
-#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectSnapshot {
     pub id: i64,
     pub project_id: ProjectId,
@@ -73,7 +73,7 @@ impl Project {
     }
 }
 
-#[derive(Debug, Clone,Encode, Decode, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct SshKeyInfo {
     pub id: i64,
@@ -81,7 +81,7 @@ pub struct SshKeyInfo {
     pub user_id: UserId,
 }
 
-#[derive(Debug, Clone,Encode, Decode, Default)]
+#[derive(Debug, Clone,Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct UserPermission {
     pub user_id: UserId,

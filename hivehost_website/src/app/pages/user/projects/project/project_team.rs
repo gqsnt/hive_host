@@ -41,7 +41,7 @@ pub fn ProjectTeam() -> impl IntoView {
             .unwrap_or_default()
     });
 
-    let team_res = Resource::new_bitcode(
+    let team_res = Resource::new_bincode(
         move || {
             (
                 update_member.version().get(),
@@ -273,12 +273,12 @@ pub fn ProjectTeam() -> impl IntoView {
 }
 
 pub mod server_fns {
-    use bitcode::{Decode, Encode};
     use crate::AppResult;
     use common::website_to_server::permission::Permission;
     use common::{ProjectId, ProjectSlugStr, UserId, UserSlugStr};
     use leptos::server;
-    use leptos::server_fn::codec::Bitcode;
+    use leptos::server_fn::codec::Bincode;
+    use serde::{Deserialize, Serialize};
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::api::ssr::request_server_project_action;
@@ -290,7 +290,7 @@ pub mod server_fns {
         use crate::ssr::permissions;
     }}
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project_team_member(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -331,7 +331,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn update_project_team_permission(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -378,7 +378,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn add_project_team_permission(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -437,7 +437,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn get_project_team(
         project_slug: ProjectSlugStr,
     ) -> AppResult<Vec<UserPermissionPage>> {
@@ -462,13 +462,13 @@ pub mod server_fns {
             .await
     }
 
-    #[derive(Clone, Encode, Debug, Decode, Default)]
+    #[derive(Clone, Serialize, Debug, Deserialize, Default)]
     pub struct ProjectTeamResponse {
         pub project_id: ProjectId,
         pub user_permissions: Vec<UserPermissionPage>,
     }
 
-    #[derive(Clone, Encode, Debug, Decode)]
+    #[derive(Clone, Serialize, Debug, Deserialize)]
     #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
     pub struct UserPermissionPage {
         pub user_id: UserId,

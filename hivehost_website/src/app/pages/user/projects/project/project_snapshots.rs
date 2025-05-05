@@ -41,7 +41,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
 
     
     // --- Resource for Snapshots List ---
-    let snapshots_resource = Resource::new_bitcode(
+    let snapshots_resource = Resource::new_bincode(
         move || {
             (
                 slug_signal.get(),
@@ -420,7 +420,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
 // --- Server Functions ---
 pub mod server_fns {
     use leptos::server;
-    use leptos::server_fn::codec::Bitcode;
+    use leptos::server_fn::codec::Bincode;
     
     use crate::models::ProjectSnapshot;
     use crate::AppResult;
@@ -436,7 +436,7 @@ pub mod server_fns {
         use time::format_description::well_known::Rfc3339;
     }}
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn get_project_snapshots(
         project_slug: ProjectSlugStr,
     ) -> AppResult<Vec<ProjectSnapshot>> {
@@ -468,7 +468,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn create_project_snapshot(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -520,7 +520,7 @@ pub mod server_fns {
 
     
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn unset_active_project_snapshot(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -545,12 +545,10 @@ pub mod server_fns {
                 )
                 .execute(&pool)
                 .await?;
-
                 request_server_project_action(
                     project_slug.clone(),
                     ServerProjectSnapshotAction::UnmountProd.into(),
-                )
-                .await?;
+                ).await?;
                 request_hosting_action(project_slug, HostingAction::StopServingProject).await?;
 
                 Ok(())
@@ -559,7 +557,7 @@ pub mod server_fns {
         .await
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project_snapshot(
         csrf: String,
         project_slug: ProjectSlugStr,
@@ -596,7 +594,7 @@ pub mod server_fns {
             .await
     }
 
-    #[server(input=Bitcode, output=Bitcode)]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn set_active_project_snapshot(
         csrf: String,
         project_slug: ProjectSlugStr,
