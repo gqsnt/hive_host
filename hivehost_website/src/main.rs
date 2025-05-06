@@ -1,10 +1,12 @@
 
+
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> hivehost_website::AppResult<()> {
+    use leptos::logging::error;
+    use common::tarpc_client::TarpcClient;
     use common::tarpc_website_to_server::WebsiteServerClient;
-    use tarpc::client;
-    use tarpc::tokio_serde::formats::Bincode;
+    use hivehost_website::ssr::{connect_website_client};
     use axum::{routing::get, Router};
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
@@ -65,8 +67,13 @@ async fn main() -> hivehost_website::AppResult<()> {
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
-    let mut transport = tarpc::serde_transport::tcp::connect(server_addr, Bincode::default);
-    transport.config_mut().max_frame_length(usize::MAX);
+    let ws_client = Arc::new(TarpcClient::<WebsiteServerClient>::new(server_addr, connect_website_client));
+    let client_to_connect = ws_client.clone();
+    tokio::spawn(async move {
+        if let Err(e) = client_to_connect.connect().await {
+            error!("Initial WebsiteServerClient connection failed: {:?}", e);
+        }
+    });
     let app_state = AppState {
         leptos_options: leptos_options.clone(),
         pool: pool.clone(),
@@ -78,7 +85,7 @@ async fn main() -> hivehost_website::AppResult<()> {
                 .time_to_live(Duration::from_secs(900)) // 15 minutes
                 .build(),
         ),
-        ws_client:WebsiteServerClient::new(client::Config::default(), transport.await?).spawn(),
+        ws_client,
     };
 
     let mut task_director = TaskDirector::default();

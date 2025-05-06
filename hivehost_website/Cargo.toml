@@ -86,6 +86,7 @@ ssr = [
     "dep:memory-serve",
     "dep:reqwest",
     "common/website-ssr",
+    "common/tarpc-client",
     "common/tarpc-website-to-server",
     "dep:tarpc",
     "dep:regex",

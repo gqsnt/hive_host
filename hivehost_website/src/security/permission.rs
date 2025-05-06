@@ -16,7 +16,6 @@ pub async fn request_server_project_action_front(
     csrf: Option<String>,
 ) -> AppResult<ServerProjectResponse> {
     use common::website_to_server::server_project_action::IsProjectServerAction;
-    use tarpc::context;
     
     ssr::handle_project_permission_request(
         project_slug,
@@ -24,11 +23,9 @@ pub async fn request_server_project_action_front(
         action.require_csrf().then_some(csrf.unwrap_or_default()),
         |_, _, project_slug| async move {
             let ws_client = crate::ssr::ws_client().unwrap();
-            ws_client.server_project_action(
-                context::current(),
-                project_slug.to_string(),
-                action.clone(),
-            ).await.map_err(Into::into)
+            ws_client.execute(|c, cx| async move {
+                c.server_project_action(cx, project_slug.to_string(), action).await
+            }).await.map_err(Into::into)
         },
     )
     .await

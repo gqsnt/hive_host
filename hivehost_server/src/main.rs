@@ -1,6 +1,6 @@
 use axum::routing::post;
 use axum::Router;
-use hivehost_server::{AppState, ServerResult, WebsiteToServerServer};
+use hivehost_server::{connect_server_helper_client, connect_server_hosting_client, AppState, ServerResult, WebsiteToServerServer};
 use moka::future::Cache;
 use secrecy::SecretString;
 use std::net::SocketAddr;
@@ -8,14 +8,14 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use futures::{future, StreamExt};
-use tarpc::{client, server};
+use tarpc::{server};
 use tarpc::server::Channel;
 use tarpc::tokio_serde::formats::Bincode;
 use tower_http::cors::CorsLayer;
+use tracing::error;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use common::server::tarpc_server_to_helper::ServerHelperClient;
-use common::tarpc_hosting::ServerHostingClient;
+use common::tarpc_client::TarpcClient;
 use common::tarpc_website_to_server::WebsiteServer;
 use hivehost_server::project_action::server_project_action_token;
 
@@ -35,16 +35,24 @@ async fn main() -> ServerResult<()> {
     let server_helper_socket_path = dotenvy::var("SERVER_HELPER_SOCKET_PATH")?;
     let server_hosting_socket_path = dotenvy::var("SERVER_HOSTING_SOCKET_PATH")?;
     // build our application with a route
-
-    let server_addr_front = dotenvy::var("SERVER_ADDR_FRONT")?;
-
-    let mut helper_transport = tarpc::serde_transport::unix::connect(server_helper_socket_path, Bincode::default);
-    helper_transport.config_mut().max_frame_length(usize::MAX);
-    let helper_client = ServerHelperClient::new(client::Config::default(), helper_transport.await?).spawn();
     
-    let mut hosting_transport = tarpc::serde_transport::unix::connect(server_hosting_socket_path, Bincode::default);
-    hosting_transport.config_mut().max_frame_length(usize::MAX);
-    let hosting_client = ServerHostingClient::new(client::Config::default(), hosting_transport.await?).spawn();
+    
+    let server_helper_client = Arc::new(TarpcClient::new(server_helper_socket_path, connect_server_helper_client));
+    let server_helper_client_to_connect = server_helper_client.clone();
+    tokio::spawn(async move {
+        if let Err(e) = server_helper_client_to_connect.connect().await {
+            error!("Initial WebsiteServerClient connection failed: {:?}", e);
+        }
+    });
+    
+    
+    let server_hosting_client = Arc::new(TarpcClient::new(server_hosting_socket_path, connect_server_hosting_client));
+    let server_hosting_client_to_connect = server_hosting_client.clone();
+    tokio::spawn(async move {
+        if let Err(e) = server_hosting_client_to_connect.connect().await {
+            error!("Initial WebsiteServerClient connection failed: {:?}", e);
+        }
+    });
     
 
     let app_state = AppState {
@@ -54,8 +62,8 @@ async fn main() -> ServerResult<()> {
                 .build(),
         ),
         token_auth: token_action_auth,
-        helper_client,
-        hosting_client,
+        helper_client:server_helper_client,
+        hosting_client:server_hosting_client,
     };
 
     let listener_addr = dotenvy::var("SERVER_ADDR")?;
@@ -86,6 +94,8 @@ async fn main() -> ServerResult<()> {
         .route("/token/{token}", post(server_project_action_token))
         .layer(CorsLayer::permissive())
         .with_state(app_state);
+    
+    let server_addr_front = dotenvy::var("SERVER_ADDR_FRONT")?;
 
     // run our app with hyper, listening globally on port 3000
     let tcp_addr_front = SocketAddr::from_str(&server_addr_front)?;

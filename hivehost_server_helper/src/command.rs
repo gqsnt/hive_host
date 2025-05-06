@@ -5,6 +5,7 @@ use common::server::server_to_helper::{
 };
 use common::{get_project_dev_path, get_project_prod_path, SERVICE_USER, USER_GROUP};
 use tarpc::context::Context;
+use tracing::info;
 use common::server::tarpc_server_to_helper::ServerHelper;
 
 #[derive(Clone)]
@@ -16,6 +17,7 @@ impl ServerHelper for ServerHelperServer {
         _: Context,
         action: ServerToHelperAction,
     ) -> ServerToHelperResponse {
+        info!("Helper action: {:?}", action);
         execute_command(action)
             .await
             .unwrap_or_else(|e| ServerToHelperResponse::Error(e.to_string()))

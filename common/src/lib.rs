@@ -23,6 +23,8 @@ pub mod tarpc_website_to_server;
 #[cfg(feature = "tarpc-hosting")]
 pub mod tarpc_hosting;
 
+#[cfg(feature = "tarpc-client")]
+pub mod tarpc_client;
 
 use std::num::ParseIntError;
 use std::str::FromStr;

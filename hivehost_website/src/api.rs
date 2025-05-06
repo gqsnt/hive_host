@@ -6,7 +6,6 @@ use leptos::prelude::Action;
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use tarpc::context;
     use crate::{AppResult};
     use common::website_to_server::server_action::{ServerAction, ServerActionResponse};
     use common::website_to_server::server_project_action::{
@@ -20,9 +19,9 @@ pub mod ssr {
         action: HostingAction,
     ) -> AppResult<HostingResponse> {
         let ws_client = crate::ssr::ws_client()?;
-        ws_client.hosting_action(
-            context::current(),project_slug.to_string(), action,
-        ).await.map_err(Into::into)
+        ws_client.execute(|c, cx| async move {
+            c.hosting_action(cx, project_slug.to_string(), action).await
+        }).await.map_err(Into::into)
     }
 
     pub async fn request_server_project_action(
@@ -30,14 +29,16 @@ pub mod ssr {
         action: ServerProjectAction,
     ) -> AppResult<ServerProjectResponse> {
         let ws_client = crate::ssr::ws_client()?;
-        ws_client.server_project_action(
-            context::current(),project_slug.to_string(), action,
-        ).await.map_err(Into::into)
+        ws_client.execute(|c, cx| async move {
+            c.server_project_action(cx, project_slug.to_string(), action).await
+        }).await.map_err(Into::into)
     }
 
     pub async fn request_server_action(action: ServerAction) -> AppResult<ServerActionResponse> {
         let ws_client = crate::ssr::ws_client()?;
-        ws_client.server_action(context::current(),action).await.map_err(Into::into)
+        ws_client.execute(|c, cx| async move {
+            c.server_action(cx, action).await
+        }).await.map_err(Into::into)
     }
 }
 

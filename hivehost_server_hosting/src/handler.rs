@@ -13,6 +13,7 @@ impl ServerHosting for ServerToHostingServer {
         project_slug: String,
         action: HostingAction,
     ) -> HostingResponse {
+        info!("Hosting action: {:?}", action);
         match action {
             HostingAction::ServeReloadProject => {
                 info!("Reloading project {}", project_slug);

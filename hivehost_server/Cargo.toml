@@ -19,6 +19,7 @@ common = { path = "../common", features = [
     "hosting",
     "tarpc-hosting",
     "server-command",
+    "tarpc-client"
 ] }
 dotenvy = { workspace = true }
 secrecy = { workspace = true }

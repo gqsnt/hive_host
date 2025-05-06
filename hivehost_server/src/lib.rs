@@ -1,6 +1,7 @@
 pub mod project_action;
 pub mod server_action;
 
+
 use crate::project_action::handle_server_project_action;
 use crate::server_action::handle_server_action;
 use axum::extract::FromRef;
@@ -15,12 +16,14 @@ use moka::future::Cache;
 use secrecy::SecretString;
 use std::path::StripPrefixError;
 use std::sync::Arc;
-use tarpc::context;
+use tarpc::{client};
 use tarpc::context::Context;
+use tarpc::tokio_serde::formats::Bincode;
 use thiserror::Error;
 use common::server::tarpc_server_to_helper::ServerHelperClient;
+use common::tarpc_client::{TarpcClient, TarpcClientError};
 use common::tarpc_hosting::ServerHostingClient;
-use common::tarpc_website_to_server::WebsiteServer;
+use common::tarpc_website_to_server::{WebsiteServer};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -58,6 +61,9 @@ pub enum ServerError {
     CantReadFileName(String),
     #[error("Invalid Message Length")]
     InvalidMessageLength,
+    
+    #[error("Tarpc Client Error {0}")]
+    TarpcClientError(#[from] common::tarpc_client::TarpcClientError),
 }
 
 impl From<ServerError> for (StatusCode, String) {
@@ -91,12 +97,16 @@ impl From<ProjectId> for ServerProjectId {
 }
 
 
+
+pub type TarpcHelperClient = Arc<TarpcClient<ServerHelperClient>>;
+pub type TarpcHostingClient = Arc<TarpcClient<ServerHostingClient>>;
+
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub token_auth: SecretString,
     pub server_project_action_cache: Arc<Cache<String, (ProjectSlugStr, ServerProjectAction)>>,
-    pub helper_client: ServerHelperClient,
-    pub hosting_client: ServerHostingClient,
+    pub helper_client: TarpcHelperClient,
+    pub hosting_client: TarpcHostingClient,
 }
 
 #[derive(Clone)]
@@ -131,10 +141,32 @@ impl WebsiteServer for WebsiteToServerServer {
         project_slug: String,
         action: HostingAction,
     ) -> HostingResponse {
-        self.0.hosting_client.execute(context::current(),project_slug, action).await
+        tracing::info!("Hosting action: {:?}", action);
+        self.0.hosting_client.execute(|c, cx| async move {
+            c.execute(cx,project_slug, action).await
+        }).await
             .unwrap_or_else(|e| {
                 tracing::error!("Error handling hosting action: {:?}", e);
                 HostingResponse::Error(e.to_string())
             })
     }
+}
+
+
+pub async fn connect_server_hosting_client(addr: String) -> Result<ServerHostingClient, TarpcClientError> {
+    let mut transport = tarpc::serde_transport::unix::connect(addr, Bincode::default);
+    transport
+        .config_mut()
+        .max_frame_length(usize::MAX);
+    Ok(ServerHostingClient::new(client::Config::default(), transport.await?).spawn())
+
+}
+
+pub async fn connect_server_helper_client(addr: String) -> Result<ServerHelperClient, TarpcClientError> {
+    let mut transport = tarpc::serde_transport::unix::connect(addr, Bincode::default);
+    transport
+        .config_mut()
+        .max_frame_length(usize::MAX);
+    Ok(ServerHelperClient::new(client::Config::default(), transport.await?).spawn())
+
 }

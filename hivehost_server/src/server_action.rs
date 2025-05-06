@@ -6,13 +6,11 @@ use common::{
     ProjectSlugStr, UserSlugStr,
 };
 use std::path::Path;
-use tarpc::context;
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
 use common::server::server_to_helper::{ServerToHelperAction};
-use common::server::tarpc_server_to_helper::ServerHelperClient;
-use crate::{AppState, ServerResult};
+use crate::{AppState, ServerResult, TarpcHelperClient};
 
 pub async fn handle_server_action(
     state: AppState,
@@ -58,41 +56,43 @@ pub async fn handle_server_action(
     Ok(ServerActionResponse::Ok)
 }
 
-pub async fn create_user(helper_client: ServerHelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
+pub async fn create_user(helper_client: TarpcHelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
     let user_path = get_user_path(&user_slug);
     let user_projects_path = get_user_projects_path(&user_slug);
-    helper_client
-        .execute(context::current(), ServerToHelperAction::CreateUser {
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx, ServerToHelperAction::CreateUser {
             user_slug,
             user_path: user_path.clone(),
             user_projects_path: user_projects_path.clone(),
-        }).await?;
+        }).await
+    }).await?;
     Ok(())
 }
 
 pub async fn create_project(
-    helper_client: ServerHelperClient,
+    helper_client: TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
-
-    helper_client
-        .execute(context::current(),ServerToHelperAction::CreateProject {
-            project_slug: project_slug.clone(),
-            service_user: user_slug.clone(),
-        })
-        .await?;
+    let project_slug_clone = project_slug.clone();
+    let user_slug_clone = user_slug.clone();
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx,ServerToHelperAction::CreateProject {
+            project_slug: project_slug_clone,
+            service_user: user_slug_clone,
+        }).await
+    }).await?;
 
     let dev_path = get_project_dev_path(&project_slug);
 
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
-    helper_client
-        .execute(context::current(),
-                 ServerToHelperAction::BindMountUserProject {
-                     source_path: dev_path.clone(),
-                     target_path: user_project_path.clone(),
-                 })
-        .await?;
+    let dev_path_clone = dev_path.clone();
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx,ServerToHelperAction::BindMountUserProject {
+            source_path: dev_path_clone,
+            target_path: user_project_path.clone(),
+        }).await
+    }).await?;
     //add file index.html to project
     let index_file_path = format!("{dev_path}/index.html");
     let mut index_file = OpenOptions::new()
@@ -109,84 +109,80 @@ pub async fn create_project(
 }
 
 pub async fn add_user_to_project(
-    helper_client: ServerHelperClient,
+    helper_client: TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
     permission: Permission,
 ) -> ServerResult<()> {
     let project_path = get_project_dev_path(&project_slug);
-    helper_client
-        .execute(context::current(),ServerToHelperAction::SetAcl {
-            path: project_path.clone(),
-            user_slug: user_slug.clone(),
-            is_read_only: permission.is_read_only(),
-        }
-        )
-        .await?;
-   
+    let project_path_clone = project_path.clone();
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
-    helper_client
-        .execute(context::current(),ServerToHelperAction::BindMountUserProject {
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx,ServerToHelperAction::SetAcl {
+            path:project_path_clone,
+            user_slug,
+            is_read_only: permission.is_read_only(),
+        }).await
+    }).await?;
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx,ServerToHelperAction::BindMountUserProject {
             source_path: project_path,
             target_path: user_project_path,
-        }
-        )
-        .await?;
+        }).await
+    }).await?;
+    
     Ok(())
 }
 
 pub async fn update_user_in_project(
-    helper_client: ServerHelperClient,
+    helper_client: TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
     permission: Permission,
 ) -> ServerResult<()> {
-    helper_client
-        .execute(context::current(),ServerToHelperAction::SetAcl {
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx, ServerToHelperAction::SetAcl {
             path: get_project_dev_path(&project_slug),
             user_slug,
             is_read_only: permission.is_read_only(),
-        }
-        )
-        .await?;
+        }).await
+    }).await?;
     Ok(())
 }
 
 pub async fn remove_user_from_project(
-    helper_client: ServerHelperClient,
+    helper_client: TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
     let proj_path = get_project_dev_path(&project_slug);
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
-    helper_client
-        .execute(context::current(),ServerToHelperAction::RemoveAcl {
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx,ServerToHelperAction::RemoveAcl {
             path: proj_path.clone(),
             user_slug: user_slug.clone(),
-        }
-        )
-        .await?;
-    helper_client
-        .execute(context::current(),ServerToHelperAction::UnmountUserProject {
+        }).await
+    }).await?;
+    
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx,ServerToHelperAction::UnmountUserProject {
             target_path: user_project_path.clone(),
-        }
-        )
-        .await?;
+        }).await
+    }).await?;
     Ok(())
 }
 
 pub async fn remove_project(
-    helper_client: ServerHelperClient,
+    helper_client: TarpcHelperClient,
     project_slug: ProjectSlugStr,
 ) -> ServerResult<()> {
-    helper_client
-        .execute(context::current(),ServerToHelperAction::DeleteProject { project_slug }
-        )
-        .await?;
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx,ServerToHelperAction::DeleteProject { project_slug }).await
+    }).await?;
     Ok(())
 }
 
-pub async fn remove_user(helper_client: ServerHelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
+pub async fn remove_user(helper_client: TarpcHelperClient, user_slug: UserSlugStr) -> ServerResult<()> {
     let user_projects_path = get_user_projects_path(&user_slug);
     let path = Path::new(&user_projects_path);
 
@@ -195,23 +191,21 @@ pub async fn remove_user(helper_client: ServerHelperClient, user_slug: UserSlugS
         while let Some(entry) = read_dir.next_entry().await? {
             let submount = entry.path();
             if submount.is_dir() {
-                helper_client
-                    .execute(context::current(),
-                             ServerToHelperAction::UnmountUserProject {
-                                 target_path: submount.to_string_lossy().to_string(),
-                             }
-                    )
-                    .await?;
+
+                helper_client.execute(|c, cx|async move {
+                    c.execute(cx,ServerToHelperAction::UnmountUserProject {
+                        target_path: submount.to_string_lossy().to_string(),
+                    }).await
+                }).await?;
             }
         }
     }
-    helper_client
-        .execute(context::current(),
-                 ServerToHelperAction::DeleteUser {
-                     user_slug: user_slug.clone(),
-                 }
-        )
-        .await?;
+    let user_slug_clone = user_slug.clone();
+    helper_client.execute(|c, cx|async move {
+        c.execute(cx,ServerToHelperAction::DeleteUser {
+            user_slug: user_slug_clone,
+        }).await
+    }).await?;
     tokio::fs::remove_dir_all(get_user_path(&user_slug)).await?;
 
     Ok(())

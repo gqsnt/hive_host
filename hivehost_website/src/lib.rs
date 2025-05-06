@@ -102,6 +102,9 @@ pub enum AppError {
     #[cfg(feature = "ssr")]
     #[error("Io error: {0}")]
     Io(String),
+    #[cfg(feature = "ssr")]
+    #[error("TarpcClientError: {0}")]
+    TrpcClientError(#[from] common::tarpc_client::TarpcClientError)
 }
 
 #[cfg(feature = "ssr")]
@@ -127,8 +130,6 @@ impl_from_to_string!(AppError::DotEnv, dotenvy::Error);
 impl_from_to_string!(AppError::RequestError, reqwest::Error);
 #[cfg(feature = "ssr")]
 impl_from_to_string!(AppError::SqlxError, sqlx::Error);
- #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::RpcError, tarpc::client::RpcError);
 #[cfg(feature = "ssr")]
 impl_from_to_string!(AppError::Io, std::io::Error);
 
@@ -189,9 +190,12 @@ pub mod ssr {
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
     use common::tarpc_website_to_server::WebsiteServerClient;
+    use tarpc::client;
+    use tarpc::tokio_serde::formats::Bincode;
+    use common::tarpc_client::{TarpcClient, TarpcClientError};
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
-    
+    pub type WsClient =  Arc<TarpcClient<WebsiteServerClient>>;
 
     #[derive(Clone, FromRef)]
     pub struct AppState {
@@ -201,7 +205,7 @@ pub mod ssr {
         pub permissions: Permissions,
         pub server_vars: ServerVars,
         pub rate_limiter: Arc<RateLimiter>,
-        pub ws_client:WebsiteServerClient
+        pub ws_client:WsClient
     }
 
     #[derive(Debug, Clone)]
@@ -258,8 +262,8 @@ pub mod ssr {
     pub fn pool() -> AppResult<PgPool> {
         use_context::<PgPool>().ok_or(AppError::PoolNotFound)
     }
-    pub fn ws_client() -> AppResult<WebsiteServerClient> {
-        use_context::<WebsiteServerClient>().ok_or(AppError::WebsiteToServerClientNotFound)
+    pub fn ws_client() -> AppResult<WsClient> {
+        use_context::<WsClient>().ok_or(AppError::WebsiteToServerClientNotFound)
     }
     
 
@@ -325,5 +329,15 @@ pub mod ssr {
             move || shell(app_state.leptos_options.clone()),
         );
         handler(State(options), req).await.into_response()
+    }
+
+
+    pub async fn connect_website_client(addr: String) -> Result<WebsiteServerClient, TarpcClientError> {
+        let mut transport = tarpc::serde_transport::tcp::connect(addr, Bincode::default);
+        transport
+            .config_mut()
+            .max_frame_length(usize::MAX);
+        Ok(WebsiteServerClient::new(client::Config::default(), transport.await?).spawn())
+        
     }
 }
