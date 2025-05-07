@@ -1,61 +1,47 @@
 use crate::security::permission::{request_server_project_action_front};
 use crate::AppResult;
-use common::website_to_server::server_project_action::{ServerProjectAction, ServerProjectResponse};
+use common::server_action::project_action::{ProjectAction, ProjectResponse};
 use common::{ProjectSlugStr};
 use leptos::prelude::Action;
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
     use crate::{AppResult};
-    use common::website_to_server::server_action::{ServerAction, ServerActionResponse};
-    use common::website_to_server::server_project_action::{
-        ServerProjectAction, ServerProjectResponse,
+    use common::server_action::project_action::{
+        ProjectAction, ProjectResponse,
     };
     use common::Slug;
-    use common::hosting::{HostingAction, HostingResponse};
-
-    pub async fn request_hosting_action(
-        project_slug: Slug,
-        action: HostingAction,
-    ) -> AppResult<HostingResponse> {
-        let ws_client = crate::ssr::ws_client()?;
-        ws_client.execute(|c, cx| async move {
-            c.hosting_action(cx, project_slug.to_string(), action).await
-        }).await.map_err(Into::into)
-    }
+    use common::server_action::user_action::{ServerUserAction, ServerUserResponse};
+    
 
     pub async fn request_server_project_action(
         project_slug: Slug,
-        action: ServerProjectAction,
-    ) -> AppResult<ServerProjectResponse> {
+        action: ProjectAction,
+    ) -> AppResult<ProjectResponse> {
         let ws_client = crate::ssr::ws_client()?;
-        ws_client.execute(|c, cx| async move {
-            c.server_project_action(cx, project_slug.to_string(), action).await
-        }).await.map_err(Into::into)
+        ws_client.project_action( project_slug.to_string(), action).await.map_err(Into::into)
     }
 
-    pub async fn request_server_action(action: ServerAction) -> AppResult<ServerActionResponse> {
+    pub async fn request_user_action(action: ServerUserAction) -> AppResult<ServerUserResponse> {
         let ws_client = crate::ssr::ws_client()?;
-        ws_client.execute(|c, cx| async move {
-            c.server_action(cx, action).await
-        }).await.map_err(Into::into)
+        ws_client.user_action(action).await.map_err(Into::into)
     }
 }
 
 pub type ServerProjectActionFront = Action<
     (
         ProjectSlugStr,
-        ServerProjectAction,
+        ProjectAction,
         Option<String>,
     ),
-    AppResult<ServerProjectResponse>,
+    AppResult<ProjectResponse>,
 >;
 
 pub fn get_action_server_project_action() -> ServerProjectActionFront {
     Action::new(
         |input: &(
             ProjectSlugStr,
-            ServerProjectAction,
+            ProjectAction,
             Option<String>,
         )| {
             let (project_slug, action, csrf) = input.clone();
@@ -69,12 +55,12 @@ pub fn get_action_server_project_action() -> ServerProjectActionFront {
 
 pub async fn get_action_server_project_action_inner(
     project_slug: ProjectSlugStr,
-    action: ServerProjectAction,
+    action: ProjectAction,
     csrf: Option<String>,
-) -> AppResult<ServerProjectResponse> {
+) -> AppResult<ProjectResponse> {
     let response = request_server_project_action_front(project_slug, action, csrf).await?;
-    if let ServerProjectResponse::Token(_token) = response.clone() {
-        Ok(ServerProjectResponse::Ok)
+    if let ProjectResponse::Token(_token) = response.clone() {
+        Ok(ProjectResponse::Ok)
     } else {
         Ok(response)
     }

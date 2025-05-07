@@ -1,4 +1,4 @@
-use common::website_to_server::permission::Permission;
+use common::server_action::permission::Permission;
 use common::{ProjectId, ProjectSlugStr, Slug, UserId, UserSlugStr};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};

@@ -1,11 +1,10 @@
-
+use common::server_action::tarpc::WebsiteToServerClient;
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> hivehost_website::AppResult<()> {
     use leptos::logging::error;
     use common::tarpc_client::TarpcClient;
-    use common::tarpc_website_to_server::WebsiteServerClient;
     use hivehost_website::ssr::{connect_website_client};
     use axum::{routing::get, Router};
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
@@ -67,7 +66,7 @@ async fn main() -> hivehost_website::AppResult<()> {
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
-    let ws_client = Arc::new(TarpcClient::<WebsiteServerClient>::new(server_addr, connect_website_client));
+    let ws_client = Arc::new(TarpcClient::<WebsiteToServerClient>::new(server_addr, connect_website_client));
     let client_to_connect = ws_client.clone();
     tokio::spawn(async move {
         if let Err(e) = client_to_connect.connect().await {

@@ -15,8 +15,8 @@ use tower_http::cors::CorsLayer;
 use tracing::error;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
+use common::server_action::tarpc::WebsiteToServer;
 use common::tarpc_client::TarpcClient;
-use common::tarpc_website_to_server::WebsiteServer;
 use hivehost_server::project_action::server_project_action_token;
 
 

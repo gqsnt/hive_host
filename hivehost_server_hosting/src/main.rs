@@ -17,7 +17,7 @@ use tokio::runtime;
 use tracing::{error, info};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use common::tarpc_hosting::ServerHosting;
+use common::hosting_command::tarpc::ServerHosting;
 
 pub fn main() -> HostingResult<()> {
     tracing_subscriber::registry()

@@ -1,7 +1,7 @@
 use crate::api::ServerProjectActionFront;
-use common::website_to_server::permission::Permission;
-use common::website_to_server::server_project_action::io_action::dir_action::{ServerProjectIoDirAction, LsElement};
-use common::website_to_server::server_project_action::io_action::file_action::ServerProjectIoFileAction;
+use common::server_action::permission::Permission;
+use common::server_action::project_action::io_action::dir_action::{ProjectIoDirAction, LsElement};
+use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
 use leptos::callback::Callback;
 use leptos::either::Either;
 use leptos::html::Input;
@@ -41,7 +41,7 @@ pub fn ProjectFilesSidebar(
         }
         server_project_action.dispatch((
             slug(),
-            ServerProjectIoDirAction::Create {
+            ProjectIoDirAction::Create {
                 path: format!("{}{}", current_path.get(), folder_name),
             }
             .into(),
@@ -63,7 +63,7 @@ pub fn ProjectFilesSidebar(
         }
         server_project_action.dispatch((
             slug(),
-            ServerProjectIoFileAction::Create {
+            ProjectIoFileAction::Create {
                 path: format!("{}{}", current_path.get(), file_name),
             }
             .into(),
@@ -298,9 +298,9 @@ pub fn ProjectFilesSidebarItem(
     let on_delete_item_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         let action = if item.is_dir {
-            ServerProjectIoDirAction::Delete { path: item_path() }.into()
+            ProjectIoDirAction::Delete { path: item_path() }.into()
         } else {
-            ServerProjectIoFileAction::Delete { path: item_path() }.into()
+            ProjectIoFileAction::Delete { path: item_path() }.into()
         };
         server_project_action.dispatch((
             slug(),
@@ -323,13 +323,13 @@ pub fn ProjectFilesSidebarItem(
             return;
         }
         let action = if item.is_dir {
-            ServerProjectIoDirAction::Rename {
+            ProjectIoDirAction::Rename {
                 path: format!("{}{}", current_path.get(), old_name),
                 new_name,
             }
             .into()
         } else {
-            ServerProjectIoFileAction::Rename {
+            ProjectIoFileAction::Rename {
                 path: format!("{}{}", current_path.get(), old_name),
                 new_name,
             }

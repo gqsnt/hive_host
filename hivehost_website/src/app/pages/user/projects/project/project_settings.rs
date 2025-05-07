@@ -198,16 +198,16 @@ pub mod server_fns {
     use common::ProjectSlugStr;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
+    
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::api::ssr::request_server_project_action;
         use crate::security::permission::ssr::handle_project_permission_request;
-        use crate::api::ssr::{request_server_action, request_hosting_action};
-        use common::website_to_server::permission::Permission;
-        use common::website_to_server::server_action::user_action::ServerUserAction;
+        use crate::api::ssr::{request_user_action};
+        use common::server_action::permission::Permission;
         use common::Slug;
-        use common::website_to_server::server_project_action::snapshot::ServerProjectSnapshotAction;
-        use common::hosting::HostingAction;
+        use common::server_action::project_action::snapshot::ProjectSnapshotAction;
+        use common::server_action::user_action::ServerUserAction;
     }}
 
     #[server(input=Bincode, output=Bincode)]
@@ -248,20 +248,18 @@ pub mod server_fns {
                     .await?
                     .active_snapshot_id;
                 if active_id.is_some() {
-                    request_server_project_action(project_slug.clone(), ServerProjectSnapshotAction::UnmountProd.into()).await?;
-                    request_hosting_action(project_slug.clone(), HostingAction::StopServingProject).await?;
+                    request_server_project_action(project_slug.clone(), ProjectSnapshotAction::UnmountProd.into()).await?;
                 }
                 for snapshot in snapshot_names {
-                    request_server_project_action(project_slug.clone(), ServerProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
+                    request_server_project_action(project_slug.clone(), ProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
                 }
 
 
-                request_server_action(
+                request_user_action(
                     ServerUserAction::RemoveProject {
                         user_slugs,
                         project_slug,
-                    }
-                        .into(),
+                    },
                 )
                     .await?;
                 leptos_axum::redirect("/user/projects");

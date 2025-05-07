@@ -1,9 +1,8 @@
 use crate::{AppResult};
-use common::website_to_server::server_project_action::{ServerProjectAction, ServerProjectResponse};
+use common::server_action::project_action::{ProjectAction, ProjectResponse};
 use common::ProjectSlugStr;
 use leptos::server;
 use leptos::server_fn::codec::Bincode;
-
 
 pub fn token_url(server_url: &str, token: &str) -> String {
     format!("http://{server_url}/token/{token}")
@@ -12,10 +11,10 @@ pub fn token_url(server_url: &str, token: &str) -> String {
 #[server(input=Bincode,output=Bincode)]
 pub async fn request_server_project_action_front(
     project_slug: ProjectSlugStr,
-    action: ServerProjectAction,
+    action: ProjectAction,
     csrf: Option<String>,
-) -> AppResult<ServerProjectResponse> {
-    use common::website_to_server::server_project_action::IsProjectServerAction;
+) -> AppResult<ProjectResponse> {
+    use common::server_action::project_action::IsProjectServerAction;
     
     ssr::handle_project_permission_request(
         project_slug,
@@ -23,9 +22,7 @@ pub async fn request_server_project_action_front(
         action.require_csrf().then_some(csrf.unwrap_or_default()),
         |_, _, project_slug| async move {
             let ws_client = crate::ssr::ws_client().unwrap();
-            ws_client.execute(|c, cx| async move {
-                c.server_project_action(cx, project_slug.to_string(), action).await
-            }).await.map_err(Into::into)
+            ws_client.project_action(project_slug.to_string(), action).await.map_err(Into::into)
         },
     )
     .await
@@ -37,7 +34,7 @@ pub mod ssr {
     use crate::security::utils::ssr::{get_auth_session_user_id, verify_easy_hash};
     use crate::ssr::{permissions, pool, Permissions};
     use crate::{AppError, AppResult};
-    use common::website_to_server::permission::Permission;
+    use common::server_action::permission::Permission;
     use common::{ProjectId, ProjectSlugStr, Slug, UserId};
     use leptos::logging::log;
     use sqlx::PgPool;

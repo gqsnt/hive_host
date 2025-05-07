@@ -17,7 +17,7 @@ common = { path = "../common", features = [
     "server-to-helper",
     "tarpc-server-to-helper",
     "hosting",
-    "tarpc-hosting",
+    "tarpc-server-to-hosting",
     "server-command",
     "tarpc-client"
 ] }

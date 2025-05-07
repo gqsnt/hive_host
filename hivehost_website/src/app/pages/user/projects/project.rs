@@ -230,7 +230,7 @@ fn SectionNav(
 pub mod server_fns {
     use crate::models::Project;
     use crate::AppResult;
-    use common::website_to_server::permission::Permission;
+    use common::server_action::permission::Permission;
     use common::ProjectSlugStr;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;

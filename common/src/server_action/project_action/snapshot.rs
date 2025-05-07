@@ -1,19 +1,19 @@
 use crate::impl_chain_from;
-use crate::website_to_server::permission::Permission;
-use crate::website_to_server::server_project_action::{IsProjectServerAction, ServerProjectAction};
+use crate::server_action::permission::Permission;
+use crate::server_action::project_action::{IsProjectServerAction, ProjectAction};
 use serde::{Deserialize, Serialize};
 
 #[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
-pub enum ServerProjectSnapshotAction {
+pub enum ProjectSnapshotAction {
     Create { snapshot_name: String },
     Delete { snapshot_name: String },
-    MountSnapshotProd { snapshot_name: String },
+    MountSnapshotProd { snapshot_name: String, should_umount_first:bool },
     UnmountProd,
 }
 
-impl_chain_from!(ServerProjectAction, ServerProjectAction::Snapshot => ServerProjectSnapshotAction);
+impl_chain_from!(ProjectAction, ProjectAction::Snapshot => ProjectSnapshotAction);
 
-impl IsProjectServerAction for ServerProjectSnapshotAction {
+impl IsProjectServerAction for ProjectSnapshotAction {
     fn with_token(&self) -> bool {
         false
     }

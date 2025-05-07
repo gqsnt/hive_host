@@ -8,23 +8,22 @@
 #[cfg(feature = "server-command")]
 pub mod command;
 
-pub mod server;
 
 #[cfg(feature = "website-to-server")]
-pub mod website_to_server;
+pub mod server_action;
 
 
 #[cfg(feature = "hosting")]
-pub mod hosting;
+pub mod hosting_command;
 
-#[cfg(feature = "tarpc-website-to-server")]
-pub mod tarpc_website_to_server;
-
-#[cfg(feature = "tarpc-hosting")]
-pub mod tarpc_hosting;
 
 #[cfg(feature = "tarpc-client")]
 pub mod tarpc_client;
+
+
+
+#[cfg(feature = "server-to-helper")]
+pub mod helper_command;
 
 use std::num::ParseIntError;
 use std::str::FromStr;
@@ -85,6 +84,9 @@ macro_rules! impl_chain_from {
         $last($val)
     };
 }
+
+
+
 
 pub type ProjectId = i64;
 

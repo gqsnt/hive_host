@@ -428,10 +428,9 @@ pub mod server_fns {
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::permission::ssr::handle_project_permission_request;
-        use crate::api::ssr::{request_server_project_action, request_hosting_action};
-        use common::hosting::HostingAction;
-        use common::website_to_server::permission::Permission;
-        use common::website_to_server::server_project_action::snapshot::ServerProjectSnapshotAction;
+        use crate::api::ssr::{request_server_project_action};
+        use common::server_action::permission::Permission;
+        use common::server_action::project_action::snapshot::ProjectSnapshotAction;
         use crate::AppError;
         use time::format_description::well_known::Rfc3339;
     }}
@@ -509,7 +508,7 @@ pub mod server_fns {
 
                 request_server_project_action(
                     project_slug.clone(),
-                    ServerProjectSnapshotAction::Create { snapshot_name }.into()
+                    ProjectSnapshotAction::Create { snapshot_name }.into()
                 ).await?;
 
                 Ok(())
@@ -547,10 +546,8 @@ pub mod server_fns {
                 .await?;
                 request_server_project_action(
                     project_slug.clone(),
-                    ServerProjectSnapshotAction::UnmountProd.into(),
+                    ProjectSnapshotAction::UnmountProd.into(),
                 ).await?;
-                request_hosting_action(project_slug, HostingAction::StopServingProject).await?;
-
                 Ok(())
             },
         )
@@ -585,7 +582,7 @@ pub mod server_fns {
                     .fetch_optional(&pool)
                     .await?;
                 if let Some(snapshot) = snapshot{
-                    request_server_project_action(project_slug_obj.clone(), ServerProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
+                    request_server_project_action(project_slug_obj.clone(), ProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
                 }
 
                 Ok(())
@@ -624,12 +621,17 @@ pub mod server_fns {
                  )
                     .fetch_one(&pool)
                     .await?;
-                if let Some(active_snapshot_id) = active_snapshot_id.active_snapshot_id {
+                
+                // TODO: one project action 
+                
+                let should_umount_first = if let Some(active_snapshot_id) = active_snapshot_id.active_snapshot_id {
                     if active_snapshot_id == snapshot.id {
                         return Err(AppError::Custom("Snapshot is already active.".to_string()));
                     }
-                    request_server_project_action(project_slug.clone(), ServerProjectSnapshotAction::UnmountProd.into()).await?;
-                }
+                    true
+                }else{
+                    false
+                };
 
 
                 sqlx::query!(
@@ -640,9 +642,7 @@ pub mod server_fns {
                     .execute(&pool)
                     .await?;
 
-                request_server_project_action(project_slug.clone(), ServerProjectSnapshotAction::MountSnapshotProd { snapshot_name: snapshot.snapshot_name }.into()).await?;
-                request_hosting_action(project_slug.clone(), HostingAction::ServeReloadProject).await?;
-
+                request_server_project_action(project_slug.clone(), ProjectSnapshotAction::MountSnapshotProd { snapshot_name: snapshot.snapshot_name, should_umount_first }.into()).await?;
                 Ok(())
             },
         )

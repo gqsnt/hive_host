@@ -177,7 +177,7 @@ pub mod ssr {
         http::Request,
         response::{IntoResponse, Response},
     };
-    use common::website_to_server::permission::Permission;
+    use common::server_action::permission::Permission;
     use common::{ProjectId, UserId};
     use leptos::config::LeptosOptions;
     use leptos::context::{provide_context, use_context};
@@ -189,13 +189,13 @@ pub mod ssr {
     use sqlx::PgPool;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
-    use common::tarpc_website_to_server::WebsiteServerClient;
     use tarpc::client;
     use tarpc::tokio_serde::formats::Bincode;
+    use common::server_action::tarpc::WebsiteToServerClient;
     use common::tarpc_client::{TarpcClient, TarpcClientError};
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
-    pub type WsClient =  Arc<TarpcClient<WebsiteServerClient>>;
+    pub type WsClient =  Arc<TarpcClient<WebsiteToServerClient>>;
 
     #[derive(Clone, FromRef)]
     pub struct AppState {
@@ -332,12 +332,12 @@ pub mod ssr {
     }
 
 
-    pub async fn connect_website_client(addr: String) -> Result<WebsiteServerClient, TarpcClientError> {
+    pub async fn connect_website_client(addr: String) -> Result<WebsiteToServerClient, TarpcClientError> {
         let mut transport = tarpc::serde_transport::tcp::connect(addr, Bincode::default);
         transport
             .config_mut()
             .max_frame_length(usize::MAX);
-        Ok(WebsiteServerClient::new(client::Config::default(), transport.await?).spawn())
+        Ok(WebsiteToServerClient::new(client::Config::default(), transport.await?).spawn())
         
     }
 }

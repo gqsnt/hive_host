@@ -1,11 +1,11 @@
-use crate::website_to_server::permission::Permission;
-use crate::website_to_server::server_project_action::{IsProjectServerAction, ServerProjectAction};
+use crate::server_action::permission::Permission;
+use crate::server_action::project_action::{IsProjectServerAction, ProjectAction};
 use crate::{impl_chain_from, Slug};
 
 use serde::{Deserialize, Serialize};
 
 #[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
-pub enum ServerProjectPermissionAction {
+pub enum ProjectPermissionAction {
     Grant {
         user_slug: Slug,
         permission: Permission,
@@ -19,9 +19,9 @@ pub enum ServerProjectPermissionAction {
     },
 }
 
-impl_chain_from!(ServerProjectAction, ServerProjectAction::Permission => ServerProjectPermissionAction);
+impl_chain_from!(ProjectAction, ProjectAction::Permission => ProjectPermissionAction);
 
-impl IsProjectServerAction for ServerProjectPermissionAction {
+impl IsProjectServerAction for ProjectPermissionAction {
     fn with_token(&self) -> bool {
         false
     }

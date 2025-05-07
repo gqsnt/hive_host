@@ -10,8 +10,8 @@ use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::IntoView;
 use leptos_router::params::Params;
 
-use common::website_to_server::server_project_action::io_action::dir_action::ServerProjectIoDirAction;
-use common::website_to_server::server_project_action::ServerProjectResponse;
+use common::server_action::project_action::io_action::dir_action::ProjectIoDirAction;
+use common::server_action::project_action::ProjectResponse;
 use leptos::either::Either;
 
 use leptos::prelude::{ElementChild, Memo, Read, Suspend, Transition};
@@ -90,7 +90,7 @@ pub fn ProjectFiles() -> impl IntoView {
         |(path, slug, _)| {
             crate::api::get_action_server_project_action_inner(
                 slug,
-                ServerProjectIoDirAction::Ls { path }.into(),
+                ProjectIoDirAction::Ls { path }.into(),
                 None,
             )
         },
@@ -182,7 +182,7 @@ pub fn ProjectFiles() -> impl IntoView {
                                     .and_then(|r| {
                                         r.ok()
                                             .and_then(|r| match r {
-                                                ServerProjectResponse::Ls(inner) => Some(inner.inner),
+                                                ProjectResponse::Ls(inner) => Some(inner.inner),
                                                 _ => None,
                                             })
                                     }),

@@ -109,8 +109,8 @@ pub mod server_fns {
         use crate::models::Project;
         use crate::security::utils::ssr::SANITIZED_REGEX;
         use crate::AppResult;
-        use common::website_to_server::permission::Permission;
-        use common::website_to_server::server_action::user_action::ServerUserAction;
+        use common::server_action::permission::Permission;
+        use common::server_action::user_action::ServerUserAction;
         use common::Slug;
         use validator::{Validate, ValidationError};
 
@@ -147,7 +147,7 @@ pub mod server_fns {
         }
 
         pub async fn create_project(user_slug: Slug, name: String) -> AppResult<Project> {
-            use crate::api::ssr::request_server_action;
+            use crate::api::ssr::request_user_action;
             let pool = crate::ssr::pool()?;
             let project_form = CreateProjectForm { name: name.clone() };
             project_form.validate()?;
@@ -166,12 +166,11 @@ pub mod server_fns {
             )
             .execute(&pool)
             .await?;
-            request_server_action(
+            request_user_action(
                 ServerUserAction::AddProject {
                     user_slug,
                     project_slug: Slug::new(project.id, project_form.name),
-                }
-                .into(),
+                },
             )
             .await?;
             Ok(Project {

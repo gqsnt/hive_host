@@ -1,7 +1,7 @@
 use crate::api::get_action_server_project_action;
-use common::website_to_server::permission::Permission;
-use common::website_to_server::server_project_action::io_action::file_action::ServerProjectIoFileAction;
-use common::website_to_server::server_project_action::ServerProjectResponse;
+use common::server_action::permission::Permission;
+use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
+use common::server_action::project_action::ProjectResponse;
 use common::ProjectSlugStr;
 use leptos::either::Either;
 use leptos::html::Textarea;
@@ -26,12 +26,12 @@ pub fn FileContentView(
                 Some(file_path) => {
                     match crate::api::get_action_server_project_action_inner(
                         slug,
-                        ServerProjectIoFileAction::View { path: file_path }.into(),
+                        ProjectIoFileAction::View { path: file_path }.into(),
                         None,
                     )
                     .await
                     {
-                        Ok(ServerProjectResponse::File(file_info)) => Ok(file_info),
+                        Ok(ProjectResponse::File(file_info)) => Ok(file_info),
                         Err(e) => {
                             leptos::logging::error!("Error fetching file: {:?}", e);
                             Err(ServerFnError::new("Failed to fetch file"))
@@ -79,7 +79,7 @@ pub fn FileContentView(
                                                 server_project_action
                                                     .dispatch((
                                                         slug.get(),
-                                                        ServerProjectIoFileAction::Update {
+                                                        ProjectIoFileAction::Update {
                                                             path: path_clone.clone(),
                                                             content: content_to_save,
                                                         }

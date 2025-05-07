@@ -15,13 +15,13 @@ tokio-serde = {version = "0.9.0", features = ["bincode", "serde"]}
 bincode = {version = "1.3"}
 tracing ={workspace = true, optional = true}
 tracing-subscriber = {workspace = true, features = ["env-filter"], optional = true}
-
+futures={workspace = true, optional = true}
 
 [features]
 website-ssr = ["dep:sqlx"]
-tarpc-website-to-server=["dep:tarpc", "website-to-server"]
-tarpc-hosting=["dep:tarpc","hosting"]
-tarpc-server-to-helper=["dep:tarpc", "server-to-helper"]
+tarpc-website-to-server=["dep:tarpc", "website-to-server", "tarpc-client"]
+tarpc-server-to-hosting=["dep:tarpc","hosting", "tarpc-client"]
+tarpc-server-to-helper=["dep:tarpc", "server-to-helper", "tarpc-client"]
 website-to-server=["hosting", "server-to-helper"]
 hosting=[]
 server-to-helper=[]

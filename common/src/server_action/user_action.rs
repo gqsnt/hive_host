@@ -1,7 +1,7 @@
-use crate::website_to_server::server_action::ServerAction;
-use crate::{impl_chain_from, Slug};
+use crate::{Slug};
 
 use serde::{Deserialize, Serialize};
+use crate::helper_command::HelperResponse;
 
 #[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
 pub enum ServerUserAction {
@@ -21,4 +21,10 @@ pub enum ServerUserAction {
     },
 }
 
-impl_chain_from!(ServerAction, ServerAction::UserAction => ServerUserAction);
+
+#[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
+pub enum ServerUserResponse{
+    Ok,
+    Helper(HelperResponse),
+    Error(String),
+}

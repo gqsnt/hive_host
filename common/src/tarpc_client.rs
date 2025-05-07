@@ -6,9 +6,14 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use tarpc::context;
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
+
+
+
+
+
+
 
 #[derive(Debug, thiserror::Error, Clone, Serialize, Deserialize)]
 pub enum TarpcClientError {
@@ -91,28 +96,28 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         connector: Arc<Connector<T>>,
         server_addr: String,
     ) -> Result<T, TarpcClientError> {
-        info!("Establishing connection to server at {}...", server_addr);
+        println!("Establishing connection to server at {server_addr}...", );
         connector(server_addr).await // Call the stored connector function
     }
 
 
-    async fn get_or_connect_client(&self) -> Result<T, TarpcClientError> {
+    pub(crate) async fn get_or_connect_client(&self) -> Result<T, TarpcClientError> {
         let mut inner_guard = self.inner.lock().await;
 
         if let Some(client) = inner_guard.as_ref() {
-            debug!("Client already connected to {}.", self.server_addr);
+            println!("Client already connected to {}.", self.server_addr);
             return Ok(client.clone());
         }
         
         info!("Client not connected, attempting synchronous connection to {}...", self.server_addr);
         match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone()).await {
             Ok(new_client) => {
-                info!("Successfully connected to {}.", self.server_addr);
+                println!("Successfully connected to {}.", self.server_addr);
                 *inner_guard = Some(new_client.clone()); // Store the new client
                 Ok(new_client)
             }
             Err(e) => {
-                error!("Failed to connect synchronously to {}: {:?}", self.server_addr, e);
+                println!("Failed to connect synchronously to {}: {:?}", self.server_addr, e);
               
                 Err(e) 
             }
@@ -124,11 +129,11 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         let mut inner_guard = self.inner.lock().await; // Lock mutex
 
         if inner_guard.is_some() {
-            info!("Explicit connect: Client is already connected to {}.", self.server_addr);
+            println!("Explicit connect: Client is already connected to {}.", self.server_addr);
             return Ok(());
         }
 
-        info!(
+        println!(
             "Explicit connect: Attempting connection to server at {}...",
             self.server_addr
         );
@@ -136,11 +141,11 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone()).await {
             Ok(client_instance) => {
                 *inner_guard = Some(client_instance);
-                info!("Explicit connect: Successfully connected to {}.", self.server_addr);
+                println!("Explicit connect: Successfully connected to {}.", self.server_addr);
                 Ok(())
             }
             Err(e) => {
-                error!(
+                println!(
                     "Explicit connect: Failed to connect to {}: {:?}",
                     self.server_addr, e
                 );
@@ -149,15 +154,7 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         }
     }
 
-    pub async fn execute<F, Fut, R>(&self, operation: F) -> TarpcClientResult<R>
-    where
-        F: FnOnce(T, context::Context) -> Fut + Send, // Ensure FnOnce is Send
-        Fut: Future<Output = Result<R, tarpc::client::RpcError>> + Send, // Future must be Send
-        R: Send + 'static,
-    {
-        let client = self.get_or_connect_client().await?;
-        Ok(operation(client, context::current()).await?)
-    }
+
     
     
     pub async fn is_connected(&self) -> bool {
@@ -174,3 +171,6 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         }
     }
 }
+
+
+

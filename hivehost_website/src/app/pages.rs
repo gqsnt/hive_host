@@ -1,5 +1,5 @@
 use crate::models::{Project, User};
-use common::website_to_server::permission::Permission;
+use common::server_action::permission::Permission;
 use common::Slug;
 use reactive_stores::Store;
 

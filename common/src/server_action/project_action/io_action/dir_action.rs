@@ -1,12 +1,12 @@
 use crate::impl_chain_from;
-use crate::website_to_server::permission::Permission;
-use crate::website_to_server::server_project_action::io_action::ServerProjectIoAction;
-use crate::website_to_server::server_project_action::{IsProjectServerAction, ServerProjectAction};
+use crate::server_action::permission::Permission;
+use crate::server_action::project_action::io_action::ProjectIoAction;
+use crate::server_action::project_action::{IsProjectServerAction, ProjectAction};
 
 use serde::{Deserialize, Serialize};
 
 #[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
-pub enum ServerProjectIoDirAction {
+pub enum ProjectIoDirAction {
     Create { path: String },
     Rename { path: String, new_name: String },
     Delete { path: String },
@@ -14,9 +14,9 @@ pub enum ServerProjectIoDirAction {
     Download,
 }
 
-impl_chain_from!(ServerProjectAction , ServerProjectAction::Io | ServerProjectIoAction::Dir  => ServerProjectIoDirAction);
+impl_chain_from!(ProjectAction , ProjectAction::Io | ProjectIoAction::Dir  => ProjectIoDirAction);
 
-impl IsProjectServerAction for ServerProjectIoDirAction {
+impl IsProjectServerAction for ProjectIoDirAction {
     fn with_token(&self) -> bool {
         false
         // match self {
@@ -30,17 +30,17 @@ impl IsProjectServerAction for ServerProjectIoDirAction {
 
     fn permission(&self) -> Permission {
         match self {
-            ServerProjectIoDirAction::Create { .. } | ServerProjectIoDirAction::Rename { .. } | ServerProjectIoDirAction::Delete { .. } => {
+            ProjectIoDirAction::Create { .. } | ProjectIoDirAction::Rename { .. } | ProjectIoDirAction::Delete { .. } => {
                 Permission::Write
             }
-            ServerProjectIoDirAction::Download | ServerProjectIoDirAction::Ls { .. } => Permission::Read,
+            ProjectIoDirAction::Download | ProjectIoDirAction::Ls { .. } => Permission::Read,
         }
     }
 
     fn require_csrf(&self) -> bool {
         match self {
-            ServerProjectIoDirAction::Create { .. } | ServerProjectIoDirAction::Rename { .. } | ServerProjectIoDirAction::Delete { .. } => true,
-            ServerProjectIoDirAction::Download | ServerProjectIoDirAction::Ls { .. } => false,
+            ProjectIoDirAction::Create { .. } | ProjectIoDirAction::Rename { .. } | ProjectIoDirAction::Delete { .. } => true,
+            ProjectIoDirAction::Download | ProjectIoDirAction::Ls { .. } => false,
         }
     }
 }

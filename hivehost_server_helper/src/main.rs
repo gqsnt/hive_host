@@ -10,7 +10,7 @@ use tarpc::{server};
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use common::server::tarpc_server_to_helper::ServerHelper;
+use common::helper_command::tarpc::ServerHelper;
 
 #[tokio::main]
 async fn main() -> ServerHelperResult<()> {
