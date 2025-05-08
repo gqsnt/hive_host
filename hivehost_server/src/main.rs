@@ -13,7 +13,7 @@ use tarpc::{server};
 use tarpc::server::Channel;
 use tarpc::tokio_serde::formats::Bincode;
 use tower_http::cors::CorsLayer;
-use tracing::error;
+use tracing::{error, info};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use common::server_action::tarpc::WebsiteToServer;
@@ -101,7 +101,7 @@ async fn main() -> ServerResult<()> {
     // run our app with hyper, listening globally on port 3000
     let tcp_addr_front = SocketAddr::from_str(&server_addr_front)?;
     let listener = tokio::net::TcpListener::bind(tcp_addr_front).await?;
-
+    info!("Server listening on {}", listener.local_addr()?);
     axum::serve(listener, app).await?;
     Ok(())
 }

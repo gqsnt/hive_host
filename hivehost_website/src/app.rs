@@ -131,10 +131,10 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
 }
 
 #[server(input=Bincode, output=Bincode)]
-pub async fn get_server_url() -> AppResult<String> {
+pub async fn get_server_url_front() -> AppResult<String> {
     use crate::ssr::server_vars;
     let server_vars = server_vars()?;
-    Ok(server_vars.server_url.to_string())
+    Ok(server_vars.server_url_front.to_string())
 }
 
 

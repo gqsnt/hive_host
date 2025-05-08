@@ -7,7 +7,7 @@ use common::{ProjectSlugStr};
 use leptos::prelude::Action;
 use web_sys::FormData;
 use common::server_action::token_action::{TokenAction, TokenActionResponse, UsedTokenActionResponse};
-use crate::app::get_server_url;
+use crate::app::get_server_url_front;
 
 #[cfg(feature = "hydrate")]
 pub fn fetch_api(
@@ -42,13 +42,13 @@ pub fn fetch_api(
             path.clone()
         };
         log!("api front request: {path} with dns : {dns_path}");
-
+        
         gloo_net::http::Request::post(&path)
             .header("Access-Control-Allow-Origin", &dns_path)
             .header("Content-Type", "multipart/form-data")
-            
             .abort_signal(abort_signal.as_ref())
-            .body(body.unwrap_or(FormData::from(wasm_bindgen::JsValue::null()))).ok()?
+            .body(body.unwrap_or(FormData::new().ok()?))
+            .unwrap()
             .send()
             .await
             .map_err(|e| log!("api front request error: {e}"))
@@ -130,7 +130,7 @@ pub async fn get_action_token_action(
     form:Option<FormData>,
 ) -> AppResult<UsedTokenActionResponse> {
     let token = request_token_action_front(project_slug, action, csrf).await?;
-    fetch_api(token_url(&get_server_url().await?,&token), form).await.ok_or(AppError::Custom("Error fetching token action".to_string()))
+    fetch_api(token_url(&get_server_url_front().await?, &token), form).await.ok_or(AppError::Custom("Error fetching token action".to_string()))
 }
 
 

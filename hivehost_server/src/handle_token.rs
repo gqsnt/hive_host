@@ -27,7 +27,7 @@ pub async fn server_project_action_token(
     Path(token): Path<String>,
     mut form: Multipart
 ) -> impl IntoResponse {
-    
+    info!("server_project_action_token: {}", token);
     if let Some((project_slug, action)) = state.project_token_action_cache.get(&token).await {
         state.project_token_action_cache.invalidate(&token).await;
         info!("token action cache hit : {} => {:?}", project_slug, action);
