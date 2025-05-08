@@ -1,5 +1,6 @@
 pub mod project_action;
 pub mod server_action;
+pub mod handle_token;
 
 use crate::project_action::handle_server_project_action;
 use crate::server_action::handle_user_action;
@@ -16,10 +17,15 @@ use moka::future::Cache;
 use secrecy::SecretString;
 use std::path::StripPrefixError;
 use std::sync::Arc;
+use async_broadcast::{Receiver, Sender};
+use dashmap::DashMap;
+use futures::Stream;
 use tarpc::context::Context;
 use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{client};
 use thiserror::Error;
+use common::server_action::token_action::{TokenAction, TokenActionResponse};
+use uuid::Uuid;
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -92,20 +98,65 @@ impl From<ProjectId> for ServerProjectId {
     }
 }
 
+
+
+
 pub type TarpcHelperClient = Arc<TarpcClient<ServerHelperClient>>;
 pub type TarpcHostingClient = Arc<TarpcClient<ServerHostingClient>>;
+
+pub type FileUploads = Arc<Cache<String, FileUpload>>;
+pub type ProjectTokenActionCache = Arc<Cache<String, (ProjectSlugStr, TokenAction)>>;
+
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub token_auth: SecretString,
-    pub server_project_action_cache: Arc<Cache<String, (ProjectSlugStr, ProjectAction)>>,
+    pub project_token_action_cache: ProjectTokenActionCache,
     pub helper_client: TarpcHelperClient,
     pub hosting_client: TarpcHostingClient,
+    pub file_uploads: FileUploads,
 }
+
+
+#[derive(Clone, Debug)]
+pub struct FileUpload{
+    pub file_name: String,
+    pub file_path: String,
+    pub project_slug:ProjectSlugStr,
+    pub total: usize,
+    pub tx:Sender<usize>,
+    pub rx:Receiver<usize>,
+}
+
+pub async fn get_file_upload(file_uploads:FileUploads, token:String, info:Option<(ProjectSlugStr,String ,String)>) -> impl Stream<Item=usize>{
+    let entry = file_uploads.entry(token.clone()).or_insert_with(async {
+        let (tx, rx) = async_broadcast::broadcast(128);
+        let (project_slug, file_name, file_path) = info.unwrap_or_default();
+        FileUpload {
+            file_name,
+            file_path,
+            project_slug,
+            total: 0,
+            tx,
+            rx,
+        }
+    }).await;
+    entry.value().rx.clone()
+}
+
 
 #[derive(Clone)]
 pub struct WebsiteToServerServer(pub AppState);
 impl WebsiteToServer for WebsiteToServerServer {
+    async fn token_action(self, _: Context, project_slug_str: ProjectSlugStr, action: TokenAction) -> TokenActionResponse {
+        let token = Uuid::new_v4().to_string();
+        self.0.project_token_action_cache.insert(
+            token.clone(),
+            (project_slug_str.clone(), action)
+        ).await;
+        token
+    }
+
     async fn user_action(self, _: Context, action: ServerUserAction) -> ServerUserResponse {
         handle_user_action(
             self.0.helper_client.clone(),

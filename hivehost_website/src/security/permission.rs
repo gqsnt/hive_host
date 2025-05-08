@@ -1,12 +1,33 @@
 use crate::{AppResult};
-use common::server_action::project_action::{ProjectAction, ProjectResponse};
+use common::server_action::project_action::{IsProjectServerAction, ProjectAction, ProjectResponse};
 use common::ProjectSlugStr;
 use leptos::server;
 use leptos::server_fn::codec::Bincode;
+use common::server_action::token_action::{TokenAction, TokenActionResponse};
 
 pub fn token_url(server_url: &str, token: &str) -> String {
     format!("http://{server_url}/token/{token}")
 }
+
+#[server(input=Bincode,output=Bincode)]
+pub async fn request_token_action_front(
+    project_slug: ProjectSlugStr,
+    action: TokenAction,
+    csrf: Option<String>,
+) -> AppResult<TokenActionResponse> {
+
+    ssr::handle_project_permission_request(
+        project_slug,
+        action.permission(),
+        action.require_csrf().then_some(csrf.unwrap_or_default()),
+        |_, _, project_slug| async move {
+            let ws_client = crate::ssr::ws_client().unwrap();
+            ws_client.token_action(project_slug.to_string(), action).await.map_err(Into::into)
+        },
+    )
+        .await
+}
+
 
 #[server(input=Bincode,output=Bincode)]
 pub async fn request_server_project_action_front(

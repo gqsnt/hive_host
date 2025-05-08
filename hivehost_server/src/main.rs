@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use dashmap::DashMap;
 use futures::{future, StreamExt};
 use tarpc::{server};
 use tarpc::server::Channel;
@@ -17,10 +18,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use common::server_action::tarpc::WebsiteToServer;
 use common::tarpc_client::TarpcClient;
-use hivehost_server::project_action::server_project_action_token;
-
-
-
+use hivehost_server::handle_token::{server_project_action_token};
 
 #[tokio::main]
 async fn main() -> ServerResult<()> {
@@ -56,7 +54,7 @@ async fn main() -> ServerResult<()> {
     
 
     let app_state = AppState {
-        server_project_action_cache: Arc::new(
+        project_token_action_cache: Arc::new(
             Cache::builder()
                 .time_to_live(Duration::from_secs(15))
                 .build(),
@@ -64,6 +62,9 @@ async fn main() -> ServerResult<()> {
         token_auth: token_action_auth,
         helper_client:server_helper_client,
         hosting_client:server_hosting_client,
+        file_uploads: Arc::new( Cache::builder()
+            .time_to_live(Duration::from_secs(3600))
+            .build()),
     };
 
     let listener_addr = dotenvy::var("SERVER_ADDR")?;

@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { workspace = true, features = ["macros", "json"] }
+axum = { workspace = true, features = ["macros", "json", "multipart", "tokio", "form"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "fs", "process"] }
 tower-http = { workspace = true, features = ["fs", "compression-full", "cors"] }
 moka = { workspace = true, features = ["future"] }
 tarpc = {workspace = true}
 futures = { workspace = true }
-
+dashmap = { workspace = true }
+async-broadcast = "0.7.1"
 common = { path = "../common", features = [
     "website-to-server",
     "tarpc-website-to-server",
@@ -28,3 +29,14 @@ tracing = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
+uuid = { version = "1.16.0", features = ["v4"] }
+zip = { version = "2.6.1", default-features = false, features = [
+    "aes-crypto",
+    "bzip2",
+    "deflate64",
+    "deflate",
+    "lzma",
+    "time",
+    "zstd",
+]}
+bytes = "1.10.1"

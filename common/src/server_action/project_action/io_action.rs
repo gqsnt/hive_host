@@ -12,13 +12,6 @@ pub enum ProjectIoAction {
 }
 
 impl IsProjectServerAction for ProjectIoAction {
-    fn with_token(&self) -> bool {
-        match self {
-            ProjectIoAction::Dir(action) => action.with_token(),
-            ProjectIoAction::File(action) => action.with_token(),
-        }
-    }
-
     fn permission(&self) -> Permission {
         match self {
             ProjectIoAction::Dir(action) => action.permission(),

@@ -3,14 +3,11 @@ Description=HiveHost Server Service
 After=network.target
 
 [Service]
-# Run the service as root to perform privileged operations
 User=hivehost_server
 Group=hivehost_server
 
-# Path to the compiled helper binary
 ExecStart=/usr/local/bin/hivehost_server
 
-# Restart policy
 Restart=on-failure
 RestartSec=5
 

@@ -4,7 +4,6 @@ pub mod snapshot;
 
 use crate::server_action::permission::Permission;
 use crate::server_action::project_action::io_action::dir_action::ServerProjectIoDirActionLsResponse;
-use crate::server_action::project_action::io_action::file_action::FileInfo;
 
 use serde::{Deserialize, Serialize};
 use crate::helper_command::HelperResponse;
@@ -18,14 +17,6 @@ pub enum ProjectAction {
 }
 
 impl IsProjectServerAction for ProjectAction {
-    fn with_token(&self) -> bool {
-        match self {
-            ProjectAction::Io(action) => action.with_token(),
-            ProjectAction::Permission(action) => action.with_token(),
-            ProjectAction::Snapshot(action) => action.with_token(),
-        }
-    }
-
     fn permission(&self) -> Permission {
         match self {
             ProjectAction::Io(action) => action.permission(),
@@ -49,14 +40,10 @@ pub enum ProjectResponse {
     Error(String),
     HelperResponses(HelperResponse),
     HostingResponse(HostingResponse),
-    Token(String),
-    Content(String),
     Ls(ServerProjectIoDirActionLsResponse),
-    File(FileInfo),
 }
 
 pub trait IsProjectServerAction {
-    fn with_token(&self) -> bool;
     fn permission(&self) -> Permission;
 
     fn require_csrf(&self) -> bool;

@@ -25,6 +25,9 @@ pub mod tarpc_client;
 #[cfg(feature = "server-to-helper")]
 pub mod helper_command;
 
+
+
+
 use std::num::ParseIntError;
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
@@ -38,6 +41,13 @@ pub const USER_GROUP: &str = "sftp_users";
 pub const DEV_ROOT_PATH_PREFIX: &str = "/hivehost/dev";
 pub const PROD_ROOT_PATH_PREFIX: &str = "/hivehost/prod";
 pub const USER_ROOT_PATH_PREFIX: &str = "/hivehost/users";
+pub const TEMP_ROOT_PATH_PREFIX: &str = "/hivehost/temp";
+
+
+
+pub fn get_temp_token_path(token: &str) -> String {
+    format!("{TEMP_ROOT_PATH_PREFIX}/{token}")
+}
 
 pub fn get_project_dev_path(project_slug_str: &str) -> String {
     format!("{DEV_ROOT_PATH_PREFIX}/{project_slug_str}")

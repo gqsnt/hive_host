@@ -11,36 +11,25 @@ pub enum ProjectIoDirAction {
     Rename { path: String, new_name: String },
     Delete { path: String },
     Ls { path: String },
-    Download,
 }
 
 impl_chain_from!(ProjectAction , ProjectAction::Io | ProjectIoAction::Dir  => ProjectIoDirAction);
 
 impl IsProjectServerAction for ProjectIoDirAction {
-    fn with_token(&self) -> bool {
-        false
-        // match self {
-        //     ServerProjectIoDirAction::Create { .. }
-        //     | ServerProjectIoDirAction::Rename { .. }
-        //     | ServerProjectIoDirAction::Delete { .. }
-        //     | ServerProjectIoDirAction::Ls { .. } => false,
-        //     ServerProjectIoDirAction::Download => true,
-        // }
-    }
 
     fn permission(&self) -> Permission {
         match self {
             ProjectIoDirAction::Create { .. } | ProjectIoDirAction::Rename { .. } | ProjectIoDirAction::Delete { .. } => {
                 Permission::Write
             }
-            ProjectIoDirAction::Download | ProjectIoDirAction::Ls { .. } => Permission::Read,
+            ProjectIoDirAction::Ls { .. } => Permission::Read,
         }
     }
 
     fn require_csrf(&self) -> bool {
         match self {
             ProjectIoDirAction::Create { .. } | ProjectIoDirAction::Rename { .. } | ProjectIoDirAction::Delete { .. } => true,
-            ProjectIoDirAction::Download | ProjectIoDirAction::Ls { .. } => false,
+             ProjectIoDirAction::Ls { .. } => false,
         }
     }
 }

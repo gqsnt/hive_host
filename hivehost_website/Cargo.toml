@@ -7,11 +7,11 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-leptos = { git="https://github.com/gqsnt/leptos-bitcode", rev="eed8ef74924488f414db21e3b79b47b1c4d13cc2", features = ["nightly", "delegation", "bincode"] }
-leptos_router = { git="https://github.com/gqsnt/leptos-bitcode", rev="eed8ef74924488f414db21e3b79b47b1c4d13cc2", features = ["nightly"] }
-leptos_axum = { git="https://github.com/gqsnt/leptos-bitcode", rev="eed8ef74924488f414db21e3b79b47b1c4d13cc2", optional = true }
-leptos_meta = { git="https://github.com/gqsnt/leptos-bitcode", rev="eed8ef74924488f414db21e3b79b47b1c4d13cc2"}
-reactive_stores = { git="https://github.com/gqsnt/leptos-bitcode", rev="eed8ef74924488f414db21e3b79b47b1c4d13cc2"}
+leptos = { git="https://github.com/gqsnt/leptos-bitcode", rev="e6daa7f5ea475e17eff0fd1d1e905a8211262868", features = ["nightly", "delegation", "bincode"] }
+leptos_router = { git="https://github.com/gqsnt/leptos-bitcode", rev="e6daa7f5ea475e17eff0fd1d1e905a8211262868", features = ["nightly"] }
+leptos_axum = { git="https://github.com/gqsnt/leptos-bitcode", rev="e6daa7f5ea475e17eff0fd1d1e905a8211262868", optional = true }
+leptos_meta = { git="https://github.com/gqsnt/leptos-bitcode", rev="e6daa7f5ea475e17eff0fd1d1e905a8211262868"}
+reactive_stores = { git="https://github.com/gqsnt/leptos-bitcode", rev="e6daa7f5ea475e17eff0fd1d1e905a8211262868"}
 http = { workspace = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 axum = { workspace = true, features = ["macros"], optional = true }
@@ -38,7 +38,9 @@ base64 = { version = "0.22.1", optional = true }
 mime = { version = "0.3.17", optional = true }
 chrono = { version = "0.4.40", optional = true }
 memory-serve = { version = "1.2.1", optional = true }
-wasm-bindgen = { version = "=0.2.100", optional = true }
+wasm-bindgen  = { version = "=0.2.100", optional = true }
+gloo-net = { version = "0.6.0", features = ["http"] }
+send_wrapper = { version = "0.6.0", features = ["futures"] }
 uuid = { workspace = true , optional = true}
 strum = { workspace = true, features = ["derive"] }
 strum_macros = { workspace = true }

@@ -1,7 +1,7 @@
 use crate::server_action::{
     add_user_to_project, remove_user_from_project_commands, update_user_in_project,
 };
-use crate::{AppState, ServerError, ServerResult, TarpcHelperClient, TarpcHostingClient};
+use crate::{AppState, ProjectTokenActionCache, ServerError, ServerResult, TarpcHelperClient, TarpcHostingClient};
 
 use axum::extract::{Path, Request, State};
 use axum::http::StatusCode;
@@ -12,7 +12,7 @@ use common::server_action::project_action::io_action::dir_action::{
     LsElement, ProjectIoDirAction, ServerProjectIoDirActionLsResponse,
 };
 use common::server_action::project_action::io_action::file_action::{
-    FileInfo, ProjectIoFileAction,
+    ProjectIoFileAction,
 };
 use common::server_action::project_action::io_action::ProjectIoAction;
 use common::server_action::project_action::permission::ProjectPermissionAction;
@@ -24,20 +24,7 @@ use common::{
 use std::path::PathBuf;
 use tokio::io::AsyncWriteExt;
 use tracing::info;
-
-pub async fn server_project_action_token(
-    State(state): State<AppState>,
-    Path(token): Path<String>,
-    _request: Request,
-) -> Result<(), (StatusCode, String)> {
-    if let Some((_project_slug, _action)) = state.server_project_action_cache.get(&token).await {
-        state.server_project_action_cache.invalidate(&token).await;
-        info!("Server project action cache hit");
-        Ok(())
-    } else {
-        Err(ServerError::Unauthorized.into())
-    }
-}
+use common::server_action::token_action::FileInfo;
 
 pub async fn handle_server_project_action(
     hosting_client: TarpcHostingClient,
@@ -180,7 +167,8 @@ pub async fn handle_server_project_action_io(
 ) -> ServerResult<ProjectResponse> {
     match action {
         ProjectIoAction::Dir(dir) => handle_server_project_action_dir(project_slug, dir).await,
-        ProjectIoAction::File(file) => handle_server_project_action_file(project_slug, file).await,
+        ProjectIoAction::File(file) => handle_server_project_action_file(project_slug, file).await
+        
     }
 }
 
@@ -225,31 +213,6 @@ pub async fn handle_server_project_action_dir(
                 inner: result,
             }));
         }
-        ProjectIoDirAction::Download => {
-            // make a tar.gz of the project and send it to the client
-            let project_path = get_project_dev_path(&project_slug.to_string());
-            let tar_path = format!("/tmp/{project_slug}.tar.gz");
-            let tar_cmd = format!("tar -czf {tar_path} -C {project_path} .");
-            let output = tokio::process::Command::new("bash")
-                .arg("-c")
-                .arg(tar_cmd)
-                .output()
-                .await
-                .map_err(ServerError::from)?;
-            if !output.status.success() {
-                return Err(ServerError::CommandFailed("tar".to_string()));
-            }
-            let tar_file = tokio::fs::File::open(tar_path)
-                .await
-                .map_err(ServerError::from)?;
-            let mut reader = tokio::io::BufReader::new(tar_file);
-            // return the file to the client
-            let mut buf = Vec::new();
-            tokio::io::copy(&mut reader, &mut buf)
-                .await
-                .map_err(ServerError::from)?;
-            return Ok(ProjectResponse::Content(String::from_utf8(buf).unwrap()));
-        }
     }
     Ok(ProjectResponse::Ok)
 }
@@ -293,41 +256,6 @@ pub async fn handle_server_project_action_file(
             tokio::fs::copy(path, new_path)
                 .await
                 .map_err(ServerError::from)?;
-        }
-        ProjectIoFileAction::View { path } => {
-            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
-            let path_copy = path.clone();
-            let path_copy = path_copy
-                .strip_prefix(get_project_dev_path(&project_slug.to_string()))
-                .map_err(ServerError::from)?;
-            let name = path
-                .file_name()
-                .ok_or(ServerError::CantReadFileName(
-                    path.to_string_lossy().to_string(),
-                ))?
-                .to_string_lossy()
-                .to_string();
-            let file = tokio::fs::File::open(path)
-                .await
-                .map_err(ServerError::from)?;
-            let metadata = file.metadata().await.map_err(ServerError::from)?;
-            let size = metadata.len();
-            let modified = metadata.modified()?;
-            let modified: DateTime<Utc> = modified.into();
-            let last_modified = modified.format("%a, %d %b %Y %T").to_string();
-            let mut reader = tokio::io::BufReader::new(file);
-            let mut buf = Vec::new();
-            tokio::io::copy(&mut reader, &mut buf)
-                .await
-                .map_err(ServerError::from)?;
-
-            return Ok(ProjectResponse::File(FileInfo {
-                name,
-                content: String::from_utf8(buf).unwrap(),
-                size,
-                path: format!("root/{}", path_copy.to_string_lossy()),
-                last_modified,
-            }));
         }
         ProjectIoFileAction::Update { path, content } => {
             let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;

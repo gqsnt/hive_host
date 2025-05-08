@@ -10,7 +10,9 @@ use leptos::prelude::{ClassAttribute, Get, Resource, Signal, Transition};
 use leptos::prelude::{GetUntracked, OnAttribute};
 use leptos::prelude::{IntoMaybeErased, ServerFnError, Suspend};
 use leptos::{component, view, IntoView};
+use leptos::server::LocalResource;
 use web_sys::MouseEvent;
+use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
 
 #[component]
 pub fn FileContentView(
@@ -19,19 +21,19 @@ pub fn FileContentView(
     csrf_signal: Signal<Option<String>>,
     permission_signal: Signal<Permission>,
 ) -> impl IntoView {
-    let file_content_resource = Resource::new_bincode(
-        move || (selected_file.get(), slug.get()),
-        |(file_path_opt, slug)| async move {
-            match file_path_opt {
+    let file_content_resource = LocalResource::new(
+        move || async move {
+            match selected_file.get() {
                 Some(file_path) => {
-                    match crate::api::get_action_server_project_action_inner(
-                        slug,
-                        ProjectIoFileAction::View { path: file_path }.into(),
+                    match crate::api::get_action_token_action(
+                        slug.get(),
+                        TokenAction::DownloadFile { path: file_path }.into(),
+                        None,
                         None,
                     )
                     .await
                     {
-                        Ok(ProjectResponse::File(file_info)) => Ok(file_info),
+                        Ok(UsedTokenActionResponse::File(file_info)) => Ok(file_info),
                         Err(e) => {
                             leptos::logging::error!("Error fetching file: {:?}", e);
                             Err(ServerFnError::new("Failed to fetch file"))

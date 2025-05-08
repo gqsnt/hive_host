@@ -22,9 +22,6 @@ pub enum ProjectPermissionAction {
 impl_chain_from!(ProjectAction, ProjectAction::Permission => ProjectPermissionAction);
 
 impl IsProjectServerAction for ProjectPermissionAction {
-    fn with_token(&self) -> bool {
-        false
-    }
 
     fn permission(&self) -> Permission {
         Permission::Owner

@@ -26,6 +26,7 @@ use leptos_router::components::A;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::ParamsError;
 use reactive_stores::Store;
+use crate::security::permission::request_server_project_action_front;
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectFilesParams {
@@ -88,7 +89,7 @@ pub fn ProjectFiles() -> impl IntoView {
             )
         },
         |(path, slug, _)| {
-            crate::api::get_action_server_project_action_inner(
+            request_server_project_action_front(
                 slug,
                 ProjectIoDirAction::Ls { path }.into(),
                 None,

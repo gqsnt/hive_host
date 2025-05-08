@@ -14,9 +14,6 @@ pub enum ProjectSnapshotAction {
 impl_chain_from!(ProjectAction, ProjectAction::Snapshot => ProjectSnapshotAction);
 
 impl IsProjectServerAction for ProjectSnapshotAction {
-    fn with_token(&self) -> bool {
-        false
-    }
 
     fn permission(&self) -> Permission {
         Permission::Owner

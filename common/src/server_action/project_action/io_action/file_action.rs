@@ -12,24 +12,12 @@ pub enum ProjectIoFileAction {
     Delete { path: String },
     Move { path: String, new_path: String },
     Copy { path: String, new_path: String },
-    View { path: String },
     Update { path: String, content: String },
 }
 
 impl_chain_from!(ProjectAction, ProjectAction::Io | ProjectIoAction::File => ProjectIoFileAction);
 
 impl IsProjectServerAction for ProjectIoFileAction {
-    fn with_token(&self) -> bool {
-        false
-        // match self {
-        //     ServerProjectIoFileAction::Rename { .. }
-        //     | ServerProjectIoFileAction::Delete { .. }
-        //     | ServerProjectIoFileAction::Move { .. }
-        //     | ServerProjectIoFileAction::Copy { .. } => false,
-        //     ServerProjectIoFileAction::Create { .. } | ServerProjectIoFileAction::View { .. } | ServerProjectIoFileAction::Update { .. } => true,
-        // }
-    }
-
     fn permission(&self) -> Permission {
         match self {
             ProjectIoFileAction::Create { .. }
@@ -37,8 +25,7 @@ impl IsProjectServerAction for ProjectIoFileAction {
             | ProjectIoFileAction::Delete { .. }
             | ProjectIoFileAction::Move { .. }
             | ProjectIoFileAction::Copy { .. }
-            | ProjectIoFileAction::Update { .. } => Permission::Write,
-            ProjectIoFileAction::View { .. } => Permission::Read,
+            | ProjectIoFileAction::Update { .. } => Permission::Write
         }
     }
 
@@ -49,17 +36,8 @@ impl IsProjectServerAction for ProjectIoFileAction {
             | ProjectIoFileAction::Delete { .. }
             | ProjectIoFileAction::Move { .. }
             | ProjectIoFileAction::Copy { .. }
-            | ProjectIoFileAction::Update { .. } => true,
-            ProjectIoFileAction::View { .. } => false,
+            | ProjectIoFileAction::Update { .. } => true
         }
     }
 }
 
-#[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
-pub struct FileInfo {
-    pub name: String,
-    pub content: String,
-    pub path: String,
-    pub size: u64,
-    pub last_modified: String,
-}
