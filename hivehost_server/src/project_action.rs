@@ -257,20 +257,6 @@ pub async fn handle_server_project_action_file(
                 .await
                 .map_err(ServerError::from)?;
         }
-        ProjectIoFileAction::Update { path, content } => {
-            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
-            let file = tokio::fs::OpenOptions::new()
-                .write(true)
-                .open(path)
-                .await
-                .map_err(ServerError::from)?;
-            let mut writer = tokio::io::BufWriter::new(file);
-            writer
-                .write_all(content.as_bytes())
-                .await
-                .map_err(ServerError::from)?;
-            writer.flush().await.map_err(ServerError::from)?;
-        }
     }
     Ok(ProjectResponse::Ok)
 }

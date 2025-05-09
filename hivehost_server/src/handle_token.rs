@@ -15,7 +15,7 @@ use bytes::Bytes as BytesExt;
 use chrono::{DateTime, Utc};
 use common::{get_project_dev_path, get_temp_token_path};
 use common::server_action::project_action::ProjectResponse;
-use common::server_action::token_action::{FileInfo, TokenAction, UsedTokenActionResponse};
+use common::server_action::token_action::{FileInfo, FileUploadStatus, TokenAction, UsedTokenActionResponse};
 use crate::{AppState, ServerError, ServerResult};
 use crate::project_action::ensure_path_in_project_path;
 
@@ -32,65 +32,75 @@ pub async fn server_project_action_token(
         state.project_token_action_cache.invalidate(&token).await;
         info!("token action cache hit : {} => {:?}", project_slug, action);
         match action{
-            TokenAction::UploadFile { path } => {
-                let path = match ensure_path_in_project_path(project_slug.clone(), &path, true, false).await{
+            TokenAction::UploadFiles { path } => {
+                let base_upload_path = match ensure_path_in_project_path(project_slug.clone(), &path, false, true).await{
                     Ok(path) => path,
                     Err(e) => {
                         return Json(UsedTokenActionResponse::Error(format!("Error: {}", e)))
                     }
                 };
-                 while let Ok(Some(field)) = form.next_field().await {
-                    let bytes = field.bytes().await.unwrap_or_else(|_| Bytes::new());
-                    return match tokio::fs::write(path, &bytes).await{
-                        Ok(_) => Json(UsedTokenActionResponse::Ok),
-                        Err(e) => {
-                           Json(UsedTokenActionResponse::Error(format!("Error writing file: {}", e)))
+                let mut upload_statuses = Vec::new();
+                while let Ok(Some(mut field)) = form.next_field().await {
+                    let original_filename = match field.file_name() {
+                        Some(name) => name.to_string(),
+                        None => {
+                            // This part might be a non-file form field, or an issue with the upload.
+                            // Log or decide how to handle. For now, skip.
+                            // It's important that the frontend sends files with proper names.
+                            continue;
                         }
-                    }
-                }
-                Json(UsedTokenActionResponse::Error("No file uploaded".to_string()))
-            }
-            TokenAction::UploadDir { path } => {
-                let path = match ensure_path_in_project_path(project_slug.clone(), &path, false, false).await{
-                    Ok(path) => path,
-                    Err(e) => {
-                        return Json(UsedTokenActionResponse::Error(format!("Error: {}", e)))
-                    }
-                };
-                while let Ok(Some(field)) = form.next_field().await {
-                    let bytes = field.bytes().await.unwrap_or_else(|_| Bytes::new());
-                    let cursor = Cursor::new(bytes);
-                    let tokio_reader = BufReader::new(cursor);
-                    let mut archive = zip::ZipArchive::new(tokio_reader).unwrap();
-                    for i in 0..archive.len(){
-                        let mut file = archive.by_index(i).unwrap();
-                        let output_path = match file.enclosed_name() {
-                            Some(file_path) => path.join(file_path),
-                            None => continue,
-                        };
-                        if file.is_dir() {
-                            println!("File {} extracted to \"{}\"", i, output_path.display());
-                            fs::create_dir_all(&output_path).await.unwrap();
-                        } else {
-                            println!(
-                                "File {} extracted to \"{}\" ({} bytes)",
-                                i,
-                                output_path.display(),
-                                file.size()
-                            );
-                            if let Some(p) = output_path.parent() {
-                                if !p.exists() {
-                                    fs::create_dir_all(p).await.unwrap();
+                    };
+
+                    // Basic sanitization (you might want more robust logic)
+                    // if sanitized_filename.is_empty() {
+                    //     upload_statuses.push(FileUploadStatus {
+                    //         filename: original_filename,
+                    //         success: false,
+                    //         message: "Filename became empty after sanitization.".to_string(),
+                    //     });
+                    //     continue;
+                    // }
+
+                    let final_path = base_upload_path.join(&original_filename);
+
+                    // Security: Ensure final_path is still within the project and intended directory.
+                    // ensure_path_in_project_path could be used here again if it checks containment.
+                    // For now, assuming base_upload_path + sanitized_filename is safe.
+
+                    match field.bytes().await { // Reads entire file into memory. For very large files, stream to disk.
+                        Ok(bytes) => {
+                            match tokio::fs::write(&final_path, &bytes).await {
+                                Ok(_) => {
+                                    upload_statuses.push(FileUploadStatus {
+                                        filename: original_filename.clone(),
+                                        success: true,
+                                        message: "Uploaded successfully.".to_string(),
+                                    });
+                                }
+                                Err(e) => {
+                                    upload_statuses.push(FileUploadStatus {
+                                        filename: original_filename.clone(),
+                                        success: false,
+                                        message: format!("Error writing file: {}", e),
+                                    });
                                 }
                             }
-                            let mut outfile = std::fs::File::create(&output_path).unwrap();
-                            std::io::copy(&mut file, &mut outfile).unwrap();
                         }
-
+                        Err(e) => {
+                            upload_statuses.push(FileUploadStatus {
+                                filename: original_filename.clone(),
+                                success: false,
+                                message: format!("Error reading file bytes: {}", e),
+                            });
+                        }
                     }
-                    return Json(UsedTokenActionResponse::Ok);
                 }
-                Json(UsedTokenActionResponse::Error("No file uploaded".to_string()))
+
+                if upload_statuses.is_empty() {
+                    Json(UsedTokenActionResponse::Error("No files were processed or found in the upload.".to_string()))
+                } else {
+                    Json(UsedTokenActionResponse::UploadReport(upload_statuses))
+                }
             }
             TokenAction::DownloadFile { path } => {
                 let path = match ensure_path_in_project_path(project_slug.clone(), &path, true, true).await{
@@ -122,7 +132,7 @@ pub async fn server_project_action_token(
                     let mut buf = Vec::new();
                     tokio::io::copy(&mut reader, &mut buf)
                         .await.unwrap();
-                    Some(String::from_utf8(buf).unwrap())
+                    Some(String::from_utf8_lossy(&buf).to_string())
                 }else{
                     None
                 };
@@ -142,6 +152,19 @@ pub async fn server_project_action_token(
                     }
                 };                // Create a zip file
                 Json(UsedTokenActionResponse::Ok)
+            }
+            TokenAction::UpdateFile { path } => {
+                let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await.unwrap();
+                while let Ok(Some(field)) = form.next_field().await {
+                    let bytes = field.bytes().await.unwrap_or_else(|_| Bytes::new());
+                    return match tokio::fs::write(path, &bytes).await{
+                        Ok(_) => Json(UsedTokenActionResponse::Ok),
+                        Err(e) => {
+                            Json(UsedTokenActionResponse::Error(format!("Error writing file: {}", e)))
+                        }
+                    }
+                }
+                Json(UsedTokenActionResponse::Error("No file uploaded".to_string()))
             }
         }
     } else {

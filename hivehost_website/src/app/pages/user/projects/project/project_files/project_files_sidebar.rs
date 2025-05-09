@@ -1,11 +1,11 @@
-use crate::api::ServerProjectActionFront;
+use crate::api::{get_action_token_action, ServerProjectActionFront};
 use common::server_action::permission::Permission;
 use common::server_action::project_action::io_action::dir_action::{ProjectIoDirAction, LsElement};
 use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
 use leptos::callback::Callback;
 use leptos::either::Either;
 use leptos::html::Input;
-use leptos::prelude::AddAnyAttr;
+use leptos::prelude::{AddAnyAttr, For, GetUntracked, RwSignal, Set, WriteSignal};
 use leptos::prelude::CustomAttribute;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::{signal, NodeRef, NodeRefAttribute, ReadSignal};
@@ -13,8 +13,13 @@ use leptos::prelude::{Callable, Get, IntoMaybeErased};
 use leptos::prelude::{ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Signal};
 use leptos::prelude::{ElementChild, Read, Show};
 use leptos::{component, view, IntoView};
+use leptos::reactive::spawn_local;
 use leptos_router::components::A;
-use web_sys::SubmitEvent;
+use leptos_router::hooks::use_navigate;
+use wasm_bindgen::JsCast;
+use web_sys::{FormData, HtmlFormElement, MouseEvent, SubmitEvent};
+use common::ProjectSlugStr;
+use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
 
 pub type FileListSignal = ReadSignal<Option<Vec<LsElement>>>;
 
@@ -23,185 +28,17 @@ pub fn ProjectFilesSidebar(
     file_list: FileListSignal,
     current_path: Signal<String>,
     slug: Signal<String>,
-    // on_go_up: Callback<()>,
-    // on_navigate_dir: Callback<String>,
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
     csrf_signal: Signal<Option<String>>,
     permission_signal: Signal<Permission>,
 ) -> impl IntoView {
-    let folder_name_ref: NodeRef<Input> = NodeRef::new();
-    let file_name_ref: NodeRef<Input> = NodeRef::new();
-
-    let on_folder_create_submit = move |ev: SubmitEvent| {
-        ev.prevent_default();
-        let folder_name = folder_name_ref.get().unwrap().value();
-        if folder_name.trim().is_empty() {
-            return;
-        }
-        server_project_action.dispatch((
-            slug(),
-            ProjectIoDirAction::Create {
-                path: format!("{}{}", current_path.get(), folder_name),
-            }
-            .into(),
-            Some(
-                csrf_signal
-                    .read()
-                    .as_ref()
-                    .map(|csrf| csrf.clone())
-                    .unwrap_or_default(),
-            ),
-        ));
-    };
-
-    let on_file_create_submit = move |ev: SubmitEvent| {
-        ev.prevent_default();
-        let file_name = file_name_ref.get().unwrap().value();
-        if file_name.trim().is_empty() {
-            return;
-        }
-        server_project_action.dispatch((
-            slug(),
-            ProjectIoFileAction::Create {
-                path: format!("{}{}", current_path.get(), file_name),
-            }
-            .into(),
-            Some(
-                csrf_signal
-                    .read()
-                    .as_ref()
-                    .map(|csrf| csrf.clone())
-                    .unwrap_or_default(),
-            ),
-        ));
-    };
+    
 
     view! {
         <div class="p-4 h-full flex flex-col">
-
-            // Create Folder Section
-            <div
-                class="mb-2 flex-shrink-0"
-                class=("hidden", move || !permission_signal().can_edit())
-            >
-                <form on:submit=on_folder_create_submit class="flex items-center gap-x-2">
-                    <input
-                        type="text"
-                        name="folder_name"
-                        node_ref=folder_name_ref
-                        class="form-input flex-grow px-2 py-1 text-sm"
-                        placeholder="New folder name..."
-                    />
-                    <button type="submit" class="btn btn-primary text-sm px-2 py-1 flex-shrink-0">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke-width="1.5"
-                            stroke="currentColor"
-                            class="w-4 h-4 inline mr-1"
-                        >
-                            <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"
-                            />
-                        </svg>
-                        "Create"
-                    </button>
-                </form>
-            </div>
-
-            <hr
-                class="border-white/10 my-3 flex-shrink-0"
-                class=("hidden", move || !permission_signal().can_edit())
-            />
-
-            <div
-                class="mb-4 flex-shrink-0"
-                class=("hidden", move || !permission_signal().can_edit())
-            >
-                <form on:submit=on_file_create_submit class="space-y-2">
-                    // File Input (for upload)
-                    // <div>
-                    // <label for="file_upload" class="form-label text-xs mb-1">Upload file (optional)</label>
-                    // <input
-                    // node_ref=file_input_ref
-                    // id="file_upload"
-                    // name="file_content" // Name for potential FormData
-                    // type="file"
-                    // class="block w-full text-sm text-gray-400 file:mr-4 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-500 file:text-white hover:file:bg-indigo-400 cursor-pointer"
-                    // />
-                    // </div>
-                    // Filename Input + Create Button Row
-                    <div class="flex items-center gap-x-2">
-                        <input
-                            type="text"
-                            name="file_name"
-                            node_ref=file_name_ref
-                            class="form-input flex-grow px-2 py-1 text-sm"
-                            placeholder="New file name..."
-                        />
-                        <button
-                            type="submit"
-                            class="btn btn-primary text-sm px-2 py-1 flex-shrink-0"
-                        >
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke-width="1.5"
-                                stroke="currentColor"
-                                class="w-4 h-4 inline mr-1"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m6.75 12.75h3m-3.75 0h.008v.008h-.008v-.008Zm0 0-.008.008h.008v-.008Zm-3.75 0h.008v.008h-.008v-.008Zm0 0-.008.008h.008v-.008ZM12 3.75 M12 3.75a.75.75 0 0 0-.75.75v10.5a.75.75 0 0 0 1.5 0V4.5A.75.75 0 0 0 12 3.75ZM3.75 12a.75.75 0 0 0 .75.75h10.5a.75.75 0 0 0 0-1.5H4.5a.75.75 0 0 0-.75.75Z"
-                                />
-                            </svg>
-                            "Create / Upload"
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <hr
-                class="border-white/10 my-3 flex-shrink-0"
-                class=("hidden", move || !permission_signal().can_edit())
-            />
-
-            <ProjectFilesSidebarList
-                slug=slug
-                current_path=current_path
-                file_list=file_list
-                // on_go_up=on_go_up
-                // on_navigate_dir=on_navigate_dir
-                on_select_file=on_select_file
-                server_project_action=server_project_action
-                csrf_signal
-                permission_signal=permission_signal
-            />
-
-        </div>
-    }
-}
-
-#[component]
-pub fn ProjectFilesSidebarList(
-    csrf_signal: Signal<Option<String>>,
-    slug: Signal<String>,
-    current_path: Signal<String>,
-    file_list: FileListSignal,
-    // on_go_up: Callback<()>,
-    // on_navigate_dir: Callback<String>,
-    on_select_file: Callback<String>,
-    server_project_action: ServerProjectActionFront,
-    permission_signal: Signal<Permission>,
-) -> impl IntoView {
-    view! {
-        <div class="flex-grow overflow-y-auto -mr-4 pr-4">
+        
+             <div class="flex-grow overflow-y-auto -mr-4 pr-4">
             {move || match file_list.get() {
                 None => Either::Left("Loading...".to_string()),
                 Some(file_list) => {
@@ -278,8 +115,11 @@ pub fn ProjectFilesSidebarList(
                 }
             }}
         </div>
+
+        </div>
     }
 }
+
 
 #[component]
 pub fn ProjectFilesSidebarItem(
@@ -529,6 +369,12 @@ pub fn ProjectFilesSidebarItem(
         </li>
     }
 }
+
+
+
+
+
+
 
 pub mod server_fns {
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {

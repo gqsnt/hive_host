@@ -1,9 +1,11 @@
-use leptos::prelude::AddAnyAttr;
+use leptos::prelude::CustomAttribute;
+use std::thread::current;
+use leptos::prelude::{AddAnyAttr, For, GetUntracked, NodeRef, NodeRefAttribute, OnAttribute, RwSignal, Set, Show};
 use leptos::prelude::{Effect, IntoAnyAttribute};
 pub mod file_content_view;
 pub mod project_files_sidebar;
 
-use crate::api::get_action_server_project_action;
+use crate::api::{get_action_server_project_action, get_action_token_action};
 use crate::app::pages::user::projects::project::project_files::file_content_view::FileContentView;
 use crate::app::pages::user::projects::project::project_files::project_files_sidebar::ProjectFilesSidebar;
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
@@ -22,10 +24,17 @@ use leptos::prelude::{expect_context, signal, ClassAttribute, CollectView, Get, 
 use leptos::prelude::{Callback, Signal};
 use leptos::server::Resource;
 use leptos::{component, view, Params};
+use leptos::html::Input;
+use leptos::reactive::spawn_local;
 use leptos_router::components::A;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::ParamsError;
 use reactive_stores::Store;
+use wasm_bindgen::JsCast;
+use web_sys::{FormData, HtmlFormElement, SubmitEvent};
+use common::ProjectSlugStr;
+use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
+use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
 use crate::security::permission::request_server_project_action_front;
 
 #[derive(Params, Clone, Debug, PartialEq)]
@@ -60,6 +69,7 @@ pub fn ProjectFiles() -> impl IntoView {
             .unwrap_or_else(|| "root/".to_string())
     });
 
+
     let global_state: Store<GlobalState> = expect_context();
 
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
@@ -78,17 +88,19 @@ pub fn ProjectFiles() -> impl IntoView {
     let csrf_signal = Signal::derive(move || global_state.csrf().get());
 
     let (selected_file, set_selected_file) = signal::<Option<String>>(None);
+    let refresh_signal = RwSignal::new(0u32);
 
     let server_project_action = get_action_server_project_action();
     let file_list_resource = Resource::new_bincode(
         move || {
             (
+                refresh_signal.get(),
                 current_path.get(),
                 slug(),
                 server_project_action.version().get(),
             )
         },
-        |(path, slug, _)| {
+        |(_,path, slug, _)| {
             request_server_project_action_front(
                 slug,
                 ProjectIoDirAction::Ls { path }.into(),
@@ -121,11 +133,52 @@ pub fn ProjectFiles() -> impl IntoView {
     let handle_select_file = Callback::new(move |file_path: String| {
         set_selected_file(Some(file_path));
     });
-    //
-    // let handle_navigate_dir = Callback::new(move |dir_path: String| {
-    //     set_current_path(dir_path);
-    //     set_selected_file(None);
-    // });
+    let folder_name_ref: NodeRef<Input> = NodeRef::new();
+    let file_name_ref: NodeRef<Input> = NodeRef::new();
+
+    let on_folder_create_submit = move |ev: SubmitEvent| {
+        ev.prevent_default();
+        let folder_name = folder_name_ref.get().unwrap().value();
+        if folder_name.trim().is_empty() {
+            return;
+        }
+        server_project_action.dispatch((
+            slug(),
+            ProjectIoDirAction::Create {
+                path: format!("{}{}", current_path.get(), folder_name),
+            }
+                .into(),
+            Some(
+                csrf_signal
+                    .read()
+                    .as_ref()
+                    .map(|csrf| csrf.clone())
+                    .unwrap_or_default(),
+            ),
+        ));
+    };
+
+    let on_file_create_submit = move |ev: SubmitEvent| {
+        ev.prevent_default();
+        let file_name = file_name_ref.get().unwrap().value();
+        if file_name.trim().is_empty() {
+            return;
+        }
+        server_project_action.dispatch((
+            slug(),
+            ProjectIoFileAction::Create {
+                path: format!("{}{}", current_path.get(), file_name),
+            }
+                .into(),
+            Some(
+                csrf_signal
+                    .read()
+                    .as_ref()
+                    .map(|csrf| csrf.clone())
+                    .unwrap_or_default(),
+            ),
+        ));
+    };
 
     view! {
         <div class="flex flex-col h-full">
@@ -170,6 +223,62 @@ pub fn ProjectFiles() -> impl IntoView {
                     }}
                 </nav>
             </div>
+            <div
+                class="flex-shrink-0 p-4 border-b border-gray-700" // Adjusted border
+                class=("hidden" , move || !permission_signal().can_edit())
+            >
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start"> // Grid layout for actions
+
+                    // --- Create New Folder ---
+                    <form on:submit=on_folder_create_submit class="flex flex-col space-y-2">
+                        <label for="folder_name" class="form-label text-xs">"New Folder"</label>
+                        <div class="flex items-center gap-x-2">
+                            <input
+                                type="text"
+                                name="folder_name"
+                                node_ref=folder_name_ref
+                                class="form-input flex-grow" // Removed size specifics, rely on form-input and flex-grow
+                                placeholder="Folder name..."
+                            />
+                            <button type="submit" class="btn btn-primary flex-shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1"> // Slightly larger icon
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                                </svg>
+                                "Create"
+                            </button>
+                        </div>
+                    </form>
+
+                    // --- Create New File ---
+                    <form on:submit=on_file_create_submit class="flex flex-col space-y-2">
+                         <label for="file_name" class="form-label text-xs">"New Empty File"</label>
+                        <div class="flex items-center gap-x-2">
+                            <input
+                                type="text"
+                                name="file_name"
+                                node_ref=file_name_ref
+                                class="form-input flex-grow"
+                                placeholder="File name..."
+                            />
+                            <button type="submit" class="btn btn-primary flex-shrink-0">
+                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1"> // Slightly larger icon
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                </svg>
+                                "Create"
+                            </button>
+                        </div>
+                    </form>
+
+                    // --- Upload Files Area ---
+                    <FileUploadArea // This will now be the third column
+                        slug
+                        current_path
+                        csrf_signal
+                        refresh_signal
+                    />
+                </div>
+            </div>
+
             <div class="flex flex-grow overflow-hidden">
 
                 <Transition fallback=move || {
@@ -226,6 +335,118 @@ pub fn ProjectFiles() -> impl IntoView {
                     />
                 </div>
             </div>
+        </div>
+    }
+}
+
+
+#[component]
+pub fn FileUploadArea(
+    slug: Signal<ProjectSlugStr>,
+    current_path: Signal<String>,
+    csrf_signal: Signal<Option<String>>,
+    refresh_signal:RwSignal<u32>
+) -> impl IntoView {
+    let file_input_ref: NodeRef<Input> = NodeRef::new();
+    let (upload_messages, set_upload_messages) = signal(Vec::<String>::new());
+    let (is_uploading, set_is_uploading) = signal(false);
+
+    let handle_file_upload = move |ev: SubmitEvent| {
+        ev.prevent_default();
+        if let Some(input_element) = file_input_ref.get() {
+            if let Some(file_list) = input_element.files() {
+                if file_list.length() == 0 {
+                    set_upload_messages(vec!["No files selected.".to_string()]);
+                    return;
+                }
+                set_is_uploading(true);
+                set_upload_messages(vec!["Starting upload...".to_string()]);
+                let form_element = ev.target().unwrap().unchecked_into::<HtmlFormElement>();
+                let form_data = FormData::new_with_form(&form_element).unwrap();
+                log!("File list length: {}", file_list.length());
+                for i in 0..file_list.length() {
+                    if let Some(file) = file_list.item(i) {
+                        form_data.append_with_blob_and_filename("files[]", &file, &file.name()).unwrap();
+                    }
+                }
+                form_element.reset();
+
+
+                spawn_local(async move {
+                    match get_action_token_action(
+                        slug(),
+                        TokenAction::UploadFiles { path: current_path() }.into(),
+                        csrf_signal(),
+                        Some(form_data),
+                    ).await {
+                        Ok(UsedTokenActionResponse::UploadReport(report)) => {
+                            let messages: Vec<String> = report.into_iter()
+                                .map(|status| format!("{}: {} ({})",
+                                                      if status.success { "SUCCESS" } else { "FAIL" },
+                                                      status.filename,
+                                                      status.message
+                                ))
+                                .collect();
+                            set_upload_messages(messages);
+                        }
+                        Ok(UsedTokenActionResponse::Error(e)) => {
+                            set_upload_messages(vec![format!("Upload failed: {}", e)]);
+                        }
+                        Err(e) => {
+                            set_upload_messages(vec![format!("Server error during upload: {:?}", e)]);
+                        }
+                        _ => {
+                            set_upload_messages(vec!["Upload finished with an unexpected response.".to_string()]);
+                        }
+                    }
+                    set_is_uploading(false);
+                    refresh_signal.set(refresh_signal.get() + 1);
+                });
+            }
+        }
+    };
+
+    view! {
+       <div class="flex flex-col space-y-2"> // Main container for this section
+            <form on:submit=handle_file_upload class="space-y-3">
+                <div>
+                    <label for="file_upload_input" class="form-label text-xs mb-1">"Upload Files"</label>
+                    <input
+                        node_ref=file_input_ref
+                        name="input-file" // Keep this name for FormData
+                        type="file"
+                        multiple
+                        class="form-input file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer focus:outline-none" // More integrated styling
+                    />
+                </div>
+                <button
+                    type="submit"
+                    class="btn btn-primary w-full" // Full width for this button in its column
+                    disabled=move || is_uploading.get()
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                    </svg>
+                    {move || if is_uploading.get() { "Uploading..." } else { "Upload Selected" }}
+                </button>
+            </form>
+
+            <Show when=move || !upload_messages.get().is_empty()>
+                <div class="mt-2 p-3 bg-gray-800 rounded-md max-h-32 overflow-y-auto text-xs space-y-1 shadow"> // Added bg, padding, max-height and shadow
+                    <For
+                        each=move || upload_messages.get()
+                        key=|msg| msg.clone()
+                        children=move |msg| {
+                            let is_success = msg.starts_with("SUCCESS");
+                            view! {
+                                <p class:text-green-400=is_success class:text-red-400=!is_success>
+                                    {msg}
+                                </p>
+                            }
+                        }
+                    />
+                </div>
+            </Show>
         </div>
     }
 }

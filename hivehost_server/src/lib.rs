@@ -24,6 +24,7 @@ use tarpc::context::Context;
 use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{client};
 use thiserror::Error;
+use tracing::info;
 use common::server_action::token_action::{TokenAction, TokenActionResponse};
 use uuid::Uuid;
 
@@ -150,6 +151,7 @@ pub struct WebsiteToServerServer(pub AppState);
 impl WebsiteToServer for WebsiteToServerServer {
     async fn token_action(self, _: Context, project_slug_str: ProjectSlugStr, action: TokenAction) -> TokenActionResponse {
         let token = Uuid::new_v4().to_string();
+        info!("Token action: {:?} for project: {}", action, project_slug_str);
         self.0.project_token_action_cache.insert(
             token.clone(),
             (project_slug_str.clone(), action)

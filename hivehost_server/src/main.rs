@@ -7,6 +7,7 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use axum::extract::DefaultBodyLimit;
 use dashmap::DashMap;
 use futures::{future, StreamExt};
 use tarpc::{server};
@@ -93,6 +94,7 @@ async fn main() -> ServerResult<()> {
     
     let app = Router::new()
         .route("/token/{token}", post(server_project_action_token))
+        .layer(DefaultBodyLimit::max(65536000))
         .layer(CorsLayer::permissive())
         .with_state(app_state);
     

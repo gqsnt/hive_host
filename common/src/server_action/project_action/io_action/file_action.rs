@@ -12,32 +12,17 @@ pub enum ProjectIoFileAction {
     Delete { path: String },
     Move { path: String, new_path: String },
     Copy { path: String, new_path: String },
-    Update { path: String, content: String },
 }
 
 impl_chain_from!(ProjectAction, ProjectAction::Io | ProjectIoAction::File => ProjectIoFileAction);
 
 impl IsProjectServerAction for ProjectIoFileAction {
     fn permission(&self) -> Permission {
-        match self {
-            ProjectIoFileAction::Create { .. }
-            | ProjectIoFileAction::Rename { .. }
-            | ProjectIoFileAction::Delete { .. }
-            | ProjectIoFileAction::Move { .. }
-            | ProjectIoFileAction::Copy { .. }
-            | ProjectIoFileAction::Update { .. } => Permission::Write
-        }
+        Permission::Write
     }
 
     fn require_csrf(&self) -> bool {
-        match self {
-            ProjectIoFileAction::Create { .. }
-            | ProjectIoFileAction::Rename { .. }
-            | ProjectIoFileAction::Delete { .. }
-            | ProjectIoFileAction::Move { .. }
-            | ProjectIoFileAction::Copy { .. }
-            | ProjectIoFileAction::Update { .. } => true
-        }
+        true
     }
 }
 

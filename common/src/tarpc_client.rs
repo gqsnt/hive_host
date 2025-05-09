@@ -105,7 +105,6 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         let mut inner_guard = self.inner.lock().await;
 
         if let Some(client) = inner_guard.as_ref() {
-            println!("Client already connected to {}.", self.server_addr);
             return Ok(client.clone());
         }
         

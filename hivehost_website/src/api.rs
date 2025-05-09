@@ -5,7 +5,9 @@ use crate::{AppError, AppResult};
 use common::server_action::project_action::{ProjectAction, ProjectResponse};
 use common::{ProjectSlugStr};
 use leptos::prelude::Action;
-use web_sys::FormData;
+
+use web_sys::{Blob, FormData};
+use web_sys::js_sys::Array;
 use common::server_action::token_action::{TokenAction, TokenActionResponse, UsedTokenActionResponse};
 use crate::app::get_server_url_front;
 
@@ -17,7 +19,7 @@ pub fn fetch_api(
     use leptos::logging::log;
     use leptos::prelude::on_cleanup;
     use send_wrapper::SendWrapper;
-
+    use wasm_bindgen::JsValue;
 
 
 
@@ -34,20 +36,20 @@ pub fn fetch_api(
 
 
         let path_split = path.split("://").collect::<Vec<_>>();
-        log!("Split path: {path_split:?}");
         let dns_path = if path_split.len() > 1 {
             let path_resplit = path_split[1].split('/').collect::<Vec<_>>();
             format!("{}://{}", path_split[0], path_resplit[0])
         } else {
             path.clone()
         };
-        log!("api front request: {path} with dns : {dns_path}");
+        let body = body.unwrap_or({
+            FormData::new().unwrap()
+        });
         
         gloo_net::http::Request::post(&path)
             .header("Access-Control-Allow-Origin", &dns_path)
-            .header("Content-Type", "multipart/form-data")
             .abort_signal(abort_signal.as_ref())
-            .body(body.unwrap_or(FormData::new().ok()?))
+            .body(body)
             .unwrap()
             .send()
             .await
@@ -123,12 +125,14 @@ pub fn get_action_server_project_action() -> ServerProjectActionFront {
     )
 }
 
+
 pub async fn get_action_token_action(
     project_slug: ProjectSlugStr,
     action: TokenAction,
     csrf: Option<String>,
     form:Option<FormData>,
 ) -> AppResult<UsedTokenActionResponse> {
+    log!("get_action_token_action: {project_slug} {action:?} {csrf:?}");
     let token = request_token_action_front(project_slug, action, csrf).await?;
     fetch_api(token_url(&get_server_url_front().await?, &token), form).await.ok_or(AppError::Custom("Error fetching token action".to_string()))
 }
