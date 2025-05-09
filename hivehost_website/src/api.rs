@@ -1,15 +1,12 @@
-use std::time::Duration;
-use leptos::logging::log;
-use crate::security::permission::{request_server_project_action_front, request_token_action_front, token_url};
+use crate::security::permission::{request_server_project_action_front, request_token_action_front};
 use crate::{AppError, AppResult};
 use common::server_action::project_action::{ProjectAction, ProjectResponse};
-use common::{ProjectSlugStr};
+use common::ProjectSlugStr;
+use leptos::logging::log;
 use leptos::prelude::Action;
 
-use web_sys::{Blob, FormData};
-use web_sys::js_sys::Array;
-use common::server_action::token_action::{TokenAction, TokenActionResponse, UsedTokenActionResponse};
-use crate::app::get_server_url_front;
+use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
+use web_sys::FormData;
 
 #[cfg(feature = "hydrate")]
 pub fn fetch_api(
@@ -19,7 +16,6 @@ pub fn fetch_api(
     use leptos::logging::log;
     use leptos::prelude::on_cleanup;
     use send_wrapper::SendWrapper;
-    use wasm_bindgen::JsValue;
 
 
 
@@ -65,7 +61,7 @@ pub fn fetch_api(
 #[cfg(feature = "ssr")]
 pub fn fetch_api(
     path: String,
-    content: Option<FormData>,
+    _content: Option<FormData>,
 ) -> impl std::future::Future<Output = Option<UsedTokenActionResponse>> + Send + 'static{
     log!("api front request error: {path}");
     async {
@@ -78,13 +74,13 @@ pub fn fetch_api(
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use crate::{AppResult};
+    use crate::AppResult;
     use common::server_action::project_action::{
         ProjectAction, ProjectResponse,
     };
-    use common::Slug;
     use common::server_action::user_action::{ServerUserAction, ServerUserResponse};
-    
+    use common::Slug;
+
 
     pub async fn request_server_project_action(
         project_slug: Slug,
@@ -133,8 +129,8 @@ pub async fn get_action_token_action(
     form:Option<FormData>,
 ) -> AppResult<UsedTokenActionResponse> {
     log!("get_action_token_action: {project_slug} {action:?} {csrf:?}");
-    let token = request_token_action_front(project_slug, action, csrf).await?;
-    fetch_api(token_url(&get_server_url_front().await?, &token), form).await.ok_or(AppError::Custom("Error fetching token action".to_string()))
+    let token_url = request_token_action_front(project_slug, action, csrf).await?;
+    fetch_api(token_url, form).await.ok_or(AppError::Custom("Error fetching token action".to_string()))
 }
 
 

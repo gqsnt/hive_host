@@ -114,17 +114,12 @@ fn ProjectsRoutes() -> impl MatchNestedRoutes + Clone {
 #[component(transparent)]
 fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     view! {
-        <ParentRoute
-            path=path!(":project_slug")
-            view=ProjectPage>
+        <ParentRoute path=path!(":project_slug") view=ProjectPage>
             <Route path=path!("") view=ProjectDashboard />
             <Route path=path!("settings") view=ProjectSettings />
             <Route path=path!("files/*path") view=ProjectFiles />
             <Route path=path!("team") view=ProjectTeam />
-            <Route
-                path=path!("snapshots")
-                view=ProjectSnapshots
-            />
+            <Route path=path!("snapshots") view=ProjectSnapshots />
         </ParentRoute>
     }
     .into_inner()

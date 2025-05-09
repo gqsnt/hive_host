@@ -18,7 +18,6 @@ use secrecy::SecretString;
 use std::path::StripPrefixError;
 use std::sync::Arc;
 use async_broadcast::{Receiver, Sender};
-use dashmap::DashMap;
 use futures::Stream;
 use tarpc::context::Context;
 use tarpc::tokio_serde::formats::Bincode;
@@ -41,7 +40,7 @@ pub enum ServerError {
     #[error("StripPrefix error: {0}")]
     StripPrefixError(#[from] StripPrefixError),
     #[error("Rpc error: {0}")]
-    RpcError(#[from] tarpc::client::RpcError),
+    RpcError(#[from] client::RpcError),
     #[error("Command failed: {0}")]
     CommandFailed(String),
     #[error("Unauthorized")]
@@ -66,7 +65,7 @@ pub enum ServerError {
     InvalidMessageLength,
 
     #[error("Tarpc Client Error {0}")]
-    TarpcClientError(#[from] common::tarpc_client::TarpcClientError),
+    TarpcClientError(#[from] TarpcClientError),
 }
 
 impl From<ServerError> for (StatusCode, String) {

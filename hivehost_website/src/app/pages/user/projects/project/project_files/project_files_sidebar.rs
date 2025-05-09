@@ -1,25 +1,20 @@
-use crate::api::{get_action_token_action, ServerProjectActionFront};
+use crate::api::ServerProjectActionFront;
 use common::server_action::permission::Permission;
-use common::server_action::project_action::io_action::dir_action::{ProjectIoDirAction, LsElement};
+use common::server_action::project_action::io_action::dir_action::{LsElement, ProjectIoDirAction};
 use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
 use leptos::callback::Callback;
 use leptos::either::Either;
 use leptos::html::Input;
-use leptos::prelude::{AddAnyAttr, For, GetUntracked, RwSignal, Set, WriteSignal};
 use leptos::prelude::CustomAttribute;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::{signal, NodeRef, NodeRefAttribute, ReadSignal};
+use leptos::prelude::{AddAnyAttr};
 use leptos::prelude::{Callable, Get, IntoMaybeErased};
 use leptos::prelude::{ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Signal};
 use leptos::prelude::{ElementChild, Read, Show};
 use leptos::{component, view, IntoView};
-use leptos::reactive::spawn_local;
 use leptos_router::components::A;
-use leptos_router::hooks::use_navigate;
-use wasm_bindgen::JsCast;
-use web_sys::{FormData, HtmlFormElement, MouseEvent, SubmitEvent};
-use common::ProjectSlugStr;
-use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
+use web_sys::SubmitEvent;
 
 pub type FileListSignal = ReadSignal<Option<Vec<LsElement>>>;
 
@@ -37,84 +32,84 @@ pub fn ProjectFilesSidebar(
 
     view! {
         <div class="p-4 h-full flex flex-col">
-        
-             <div class="flex-grow overflow-y-auto -mr-4 pr-4">
-            {move || match file_list.get() {
-                None => Either::Left("Loading...".to_string()),
-                Some(file_list) => {
-                    Either::Right({
-                        let is_empty = file_list.is_empty();
 
-                        view! {
-                            {(current_path.get() != "root/")
-                                .then(|| {
-                                    let prev_path = move |path: String| {
-                                        path.strip_suffix("/")
-                                            .unwrap_or_default()
-                                            .rsplit_once('/')
-                                            .map(|(prev, _)| prev.to_string())
-                                            .unwrap_or_else(|| current_path.get())
-                                            .to_string()
-                                    };
-                                    view! {
-                                        <div>
-                                            <A
-                                                attr:class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
-                                                href=move || {
-                                                    format!(
-                                                        "/user/projects/{}/files/{}",
-                                                        slug.get(),
-                                                        prev_path(current_path.get()),
-                                                    )
-                                                }
-                                            >
-                                                <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke-width="1.5"
-                                                    stroke="currentColor"
-                                                    class="w-5 h-5 flex-shrink-0"
+            <div class="flex-grow overflow-y-auto -mr-4 pr-4">
+                {move || match file_list.get() {
+                    None => Either::Left("Loading...".to_string()),
+                    Some(file_list) => {
+                        Either::Right({
+                            let is_empty = file_list.is_empty();
+
+                            view! {
+                                {(current_path.get() != "root/")
+                                    .then(|| {
+                                        let prev_path = move |path: String| {
+                                            path.strip_suffix("/")
+                                                .unwrap_or_default()
+                                                .rsplit_once('/')
+                                                .map(|(prev, _)| prev.to_string())
+                                                .unwrap_or_else(|| current_path.get())
+                                                .to_string()
+                                        };
+                                        view! {
+                                            <div>
+                                                <A
+                                                    attr:class="flex items-center w-full gap-x-2 px-2 py-1.5 text-sm rounded-md text-indigo-400 hover:bg-gray-700 hover:text-indigo-300"
+                                                    href=move || {
+                                                        format!(
+                                                            "/user/projects/{}/files/{}",
+                                                            slug.get(),
+                                                            prev_path(current_path.get()),
+                                                        )
+                                                    }
                                                 >
-                                                    <path
-                                                        stroke-linecap="round"
-                                                        stroke-linejoin="round"
-                                                        d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke-width="1.5"
+                                                        stroke="currentColor"
+                                                        class="w-5 h-5 flex-shrink-0"
+                                                    >
+                                                        <path
+                                                            stroke-linecap="round"
+                                                            stroke-linejoin="round"
+                                                            d="M9 9l6-6m0 0l6 6m-6-6v12a6 6 0 01-12 0v-3"
+                                                        />
+                                                    </svg>
+                                                    <span>".."</span>
+                                                </A>
+                                            </div>
+                                        }
+                                    })}
+                                <Show
+                                    when=move || !is_empty
+                                    fallback=move || view! { "Folder is empty" }
+                                >
+                                    <ul class="space-y-1">
+                                        {file_list
+                                            .iter()
+                                            .map(|item| {
+                                                view! {
+                                                    <ProjectFilesSidebarItem
+                                                        csrf_signal=csrf_signal
+                                                        slug=slug
+                                                        current_path=current_path
+                                                        item=item.clone()
+                                                        server_project_action=server_project_action
+                                                        on_select_file=on_select_file
+                                                        permission_signal=permission_signal
                                                     />
-                                                </svg>
-                                                <span>".."</span>
-                                            </A>
-                                        </div>
-                                    }
-                                })}
-                            <Show
-                                when=move || !is_empty
-                                fallback=move || view! { "Folder is empty" }
-                            >
-                                <ul class="space-y-1">
-                                    {file_list
-                                        .iter()
-                                        .map(|item| {
-                                            view! {
-                                                <ProjectFilesSidebarItem
-                                                    csrf_signal=csrf_signal
-                                                    slug=slug
-                                                    current_path=current_path
-                                                    item=item.clone()
-                                                    server_project_action=server_project_action
-                                                    on_select_file=on_select_file
-                                                    permission_signal=permission_signal
-                                                />
-                                            }
-                                        })
-                                        .collect_view()}
-                                </ul>
-                            </Show>
-                        }
-                    })
-                }
-            }}
-        </div>
+                                                }
+                                            })
+                                            .collect_view()}
+                                    </ul>
+                                </Show>
+                            }
+                        })
+                    }
+                }}
+            </div>
 
         </div>
     }

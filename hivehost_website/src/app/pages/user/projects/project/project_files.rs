@@ -1,6 +1,5 @@
 use leptos::prelude::CustomAttribute;
-use std::thread::current;
-use leptos::prelude::{AddAnyAttr, For, GetUntracked, NodeRef, NodeRefAttribute, OnAttribute, RwSignal, Set, Show};
+use leptos::prelude::{AddAnyAttr, For, NodeRef, NodeRefAttribute, OnAttribute, RwSignal, Set, Show};
 use leptos::prelude::{Effect, IntoAnyAttribute};
 pub mod file_content_view;
 pub mod project_files_sidebar;
@@ -19,23 +18,23 @@ use leptos::either::Either;
 use leptos::prelude::{ElementChild, Memo, Read, Suspend, Transition};
 
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::security::permission::request_server_project_action_front;
+use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
+use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
+use common::ProjectSlugStr;
+use leptos::html::Input;
 use leptos::logging::log;
 use leptos::prelude::{expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased};
 use leptos::prelude::{Callback, Signal};
+use leptos::reactive::spawn_local;
 use leptos::server::Resource;
 use leptos::{component, view, Params};
-use leptos::html::Input;
-use leptos::reactive::spawn_local;
 use leptos_router::components::A;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::ParamsError;
 use reactive_stores::Store;
 use wasm_bindgen::JsCast;
 use web_sys::{FormData, HtmlFormElement, SubmitEvent};
-use common::ProjectSlugStr;
-use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
-use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
-use crate::security::permission::request_server_project_action_front;
 
 #[derive(Params, Clone, Debug, PartialEq)]
 pub struct ProjectFilesParams {
@@ -224,25 +223,42 @@ pub fn ProjectFiles() -> impl IntoView {
                 </nav>
             </div>
             <div
-                class="flex-shrink-0 p-4 border-b border-gray-700" // Adjusted border
-                class=("hidden" , move || !permission_signal().can_edit())
+                // Adjusted border
+                class="flex-shrink-0 p-4 border-b border-gray-700"
+                class=("hidden", move || !permission_signal().can_edit())
             >
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start"> // Grid layout for actions
+                // Grid layout for actions
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
 
                     // --- Create New Folder ---
                     <form on:submit=on_folder_create_submit class="flex flex-col space-y-2">
-                        <label for="folder_name" class="form-label text-xs">"New Folder"</label>
+                        <label for="folder_name" class="form-label text-xs">
+                            "New Folder"
+                        </label>
                         <div class="flex items-center gap-x-2">
                             <input
                                 type="text"
                                 name="folder_name"
                                 node_ref=folder_name_ref
-                                class="form-input flex-grow" // Removed size specifics, rely on form-input and flex-grow
+                                // Removed size specifics, rely on form-input and flex-grow
+                                class="form-input flex-grow"
                                 placeholder="Folder name..."
                             />
                             <button type="submit" class="btn btn-primary flex-shrink-0">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1"> // Slightly larger icon
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+                                // Slightly larger icon
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke-width="1.5"
+                                    stroke="currentColor"
+                                    class="w-5 h-5 mr-1"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"
+                                    />
                                 </svg>
                                 "Create"
                             </button>
@@ -251,7 +267,9 @@ pub fn ProjectFiles() -> impl IntoView {
 
                     // --- Create New File ---
                     <form on:submit=on_file_create_submit class="flex flex-col space-y-2">
-                         <label for="file_name" class="form-label text-xs">"New Empty File"</label>
+                        <label for="file_name" class="form-label text-xs">
+                            "New Empty File"
+                        </label>
                         <div class="flex items-center gap-x-2">
                             <input
                                 type="text"
@@ -261,8 +279,20 @@ pub fn ProjectFiles() -> impl IntoView {
                                 placeholder="File name..."
                             />
                             <button type="submit" class="btn btn-primary flex-shrink-0">
-                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-1"> // Slightly larger icon
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                // Slightly larger icon
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke-width="1.5"
+                                    stroke="currentColor"
+                                    class="w-5 h-5 mr-1"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
+                                    />
                                 </svg>
                                 "Create"
                             </button>
@@ -270,12 +300,8 @@ pub fn ProjectFiles() -> impl IntoView {
                     </form>
 
                     // --- Upload Files Area ---
-                    <FileUploadArea // This will now be the third column
-                        slug
-                        current_path
-                        csrf_signal
-                        refresh_signal
-                    />
+                    // This will now be the third column
+                    <FileUploadArea slug current_path csrf_signal refresh_signal />
                 </div>
             </div>
 
@@ -375,7 +401,7 @@ pub fn FileUploadArea(
                 spawn_local(async move {
                     match get_action_token_action(
                         slug(),
-                        TokenAction::UploadFiles { path: current_path() }.into(),
+                        TokenAction::UploadFiles { path: current_path() },
                         csrf_signal(),
                         Some(form_data),
                     ).await {
@@ -407,32 +433,50 @@ pub fn FileUploadArea(
     };
 
     view! {
-       <div class="flex flex-col space-y-2"> // Main container for this section
+        // Main container for this section
+        <div class="flex flex-col space-y-2">
             <form on:submit=handle_file_upload class="space-y-3">
                 <div>
-                    <label for="file_upload_input" class="form-label text-xs mb-1">"Upload Files"</label>
+                    <label for="file_upload_input" class="form-label text-xs mb-1">
+                        "Upload Files"
+                    </label>
                     <input
                         node_ref=file_input_ref
-                        name="input-file" // Keep this name for FormData
+                        // Keep this name for FormData
+                        name="input-file"
                         type="file"
                         multiple
-                        class="form-input file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer focus:outline-none" // More integrated styling
+                        // More integrated styling
+                        class="form-input file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer focus:outline-none"
                     />
                 </div>
                 <button
                     type="submit"
-                    class="btn btn-primary w-full" // Full width for this button in its column
+                    // Full width for this button in its column
+                    class="btn btn-primary w-full"
                     disabled=move || is_uploading.get()
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-5 h-5 mr-2"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+                        />
                     </svg>
                     {move || if is_uploading.get() { "Uploading..." } else { "Upload Selected" }}
                 </button>
             </form>
 
             <Show when=move || !upload_messages.get().is_empty()>
-                <div class="mt-2 p-3 bg-gray-800 rounded-md max-h-32 overflow-y-auto text-xs space-y-1 shadow"> // Added bg, padding, max-height and shadow
+                // Added bg, padding, max-height and shadow
+                <div class="mt-2 p-3 bg-gray-800 rounded-md max-h-32 overflow-y-auto text-xs space-y-1 shadow">
                     <For
                         each=move || upload_messages.get()
                         key=|msg| msg.clone()

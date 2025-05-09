@@ -28,15 +28,5 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
-async-trait = { workspace = true }
 uuid = { version = "1.16.0", features = ["v4"] }
-zip = { version = "2.6.1", default-features = false, features = [
-    "aes-crypto",
-    "bzip2",
-    "deflate64",
-    "deflate",
-    "lzma",
-    "time",
-    "zstd",
-]}
 bytes = "1.10.1"

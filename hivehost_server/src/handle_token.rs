@@ -1,22 +1,15 @@
-use std::io::{BufReader, Cursor, Read};
-use std::path::PathBuf;
-use axum::body::{to_bytes, Body, Bytes};
-use axum::extract::{FromRequest, Multipart, Path, Request, State};
-use axum::http::StatusCode;
+
+use axum::body::{Bytes};
+use axum::extract::{Multipart, Path, State};
 use axum::Json;
 use axum::response::IntoResponse;
-use futures::TryFutureExt;
-use tokio::fs;
-use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader as TokioBufReader};
+use tokio::fs::{File};
+use tokio::io::{BufReader as TokioBufReader};
 use tracing::info;
-use uuid::Uuid;
-use bytes::Bytes as BytesExt;
 use chrono::{DateTime, Utc};
-use common::{get_project_dev_path, get_temp_token_path};
-use common::server_action::project_action::ProjectResponse;
+use common::{get_project_dev_path};
 use common::server_action::token_action::{FileInfo, FileUploadStatus, TokenAction, UsedTokenActionResponse};
-use crate::{AppState, ServerError, ServerResult};
+use crate::{AppState, ServerError};
 use crate::project_action::ensure_path_in_project_path;
 
 
@@ -36,11 +29,11 @@ pub async fn server_project_action_token(
                 let base_upload_path = match ensure_path_in_project_path(project_slug.clone(), &path, false, true).await{
                     Ok(path) => path,
                     Err(e) => {
-                        return Json(UsedTokenActionResponse::Error(format!("Error: {}", e)))
+                        return Json(UsedTokenActionResponse::Error(format!("Error: {e}")))
                     }
                 };
                 let mut upload_statuses = Vec::new();
-                while let Ok(Some(mut field)) = form.next_field().await {
+                while let Ok(Some(field)) = form.next_field().await {
                     let original_filename = match field.file_name() {
                         Some(name) => name.to_string(),
                         None => {
@@ -81,7 +74,7 @@ pub async fn server_project_action_token(
                                     upload_statuses.push(FileUploadStatus {
                                         filename: original_filename.clone(),
                                         success: false,
-                                        message: format!("Error writing file: {}", e),
+                                        message: format!("Error writing file: {e}"),
                                     });
                                 }
                             }
@@ -90,7 +83,7 @@ pub async fn server_project_action_token(
                             upload_statuses.push(FileUploadStatus {
                                 filename: original_filename.clone(),
                                 success: false,
-                                message: format!("Error reading file bytes: {}", e),
+                                message: format!("Error reading file bytes: {e}"),
                             });
                         }
                     }
@@ -106,7 +99,7 @@ pub async fn server_project_action_token(
                 let path = match ensure_path_in_project_path(project_slug.clone(), &path, true, true).await{
                     Ok(path) => path,
                     Err(e) => {
-                        return Json(UsedTokenActionResponse::Error(format!("Error: {}", e)))
+                        return Json(UsedTokenActionResponse::Error(format!("Error: {e}")))
                     }
                 };                let path_copy = path.clone();
                 let path_copy = path_copy
@@ -119,7 +112,7 @@ pub async fn server_project_action_token(
                     )).unwrap()
                     .to_string_lossy()
                     .to_string();
-                let file = tokio::fs::File::open(path)
+                let file = File::open(path)
                     .await
                     .unwrap();
                 let metadata = file.metadata().await.unwrap();
@@ -145,10 +138,10 @@ pub async fn server_project_action_token(
                 }))
             }
             TokenAction::DownloadDir { path } => {
-                let path = match ensure_path_in_project_path(project_slug.clone(), &path, false, true).await{
+                let _path = match ensure_path_in_project_path(project_slug.clone(), &path, false, true).await{
                     Ok(path) => path,
                     Err(e) => {
-                        return Json(UsedTokenActionResponse::Error(format!("Error: {}", e)))
+                        return Json(UsedTokenActionResponse::Error(format!("Error: {e}")))
                     }
                 };                // Create a zip file
                 Json(UsedTokenActionResponse::Ok)
@@ -157,14 +150,9 @@ pub async fn server_project_action_token(
                 let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await.unwrap();
                 while let Ok(Some(field)) = form.next_field().await {
                     let bytes = field.bytes().await.unwrap_or_else(|_| Bytes::new());
-                    return match tokio::fs::write(path, &bytes).await{
-                        Ok(_) => Json(UsedTokenActionResponse::Ok),
-                        Err(e) => {
-                            Json(UsedTokenActionResponse::Error(format!("Error writing file: {}", e)))
-                        }
-                    }
+                    tokio::fs::write(path.clone(), &bytes).await.unwrap();
                 }
-                Json(UsedTokenActionResponse::Error("No file uploaded".to_string()))
+                Json(UsedTokenActionResponse::Ok)
             }
         }
     } else {

@@ -1,11 +1,8 @@
 use crate::server_action::{
     add_user_to_project, remove_user_from_project_commands, update_user_in_project,
 };
-use crate::{AppState, ProjectTokenActionCache, ServerError, ServerResult, TarpcHelperClient, TarpcHostingClient};
+use crate::{ServerError, ServerResult, TarpcHelperClient, TarpcHostingClient};
 
-use axum::extract::{Path, Request, State};
-use axum::http::StatusCode;
-use chrono::{DateTime, Utc};
 use common::helper_command::{HelperCommand, HelperResponse};
 use common::hosting_command::HostingCommand;
 use common::server_action::project_action::io_action::dir_action::{
@@ -22,9 +19,7 @@ use common::{
     get_project_dev_path, get_project_prod_path, get_project_snapshot_path, ProjectSlugStr,
 };
 use std::path::PathBuf;
-use tokio::io::AsyncWriteExt;
 use tracing::info;
-use common::server_action::token_action::FileInfo;
 
 pub async fn handle_server_project_action(
     hosting_client: TarpcHostingClient,

@@ -10,7 +10,6 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 thiserror = { workspace = true }
 dotenvy = { workspace = true }
 common = { path = "../common", features = [  "server-to-helper","server-command", "tarpc-server-to-helper"] }
-async-trait = { workspace = true }
 
 tarpc = {workspace = true}
 futures = {workspace = true}
