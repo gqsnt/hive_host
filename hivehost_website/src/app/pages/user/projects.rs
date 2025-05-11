@@ -43,34 +43,27 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
     let handle_select_project = move |new_slug_option: Option<String>| {
         let navigate = use_navigate();
         let current_path = location_pathname.get(); // Get current path before navigation
-
-        // Determine the current section from the current_path
+        
         let current_section_enum = {
             let segments: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
             if let Some(projects_idx) = segments.iter().position(|&seg| seg == "projects") {
-                // slug is at projects_idx + 1
-                // section part is at projects_idx + 2
                 if segments.len() > projects_idx + 2 {
                     ProjectSection::from_first_segment(segments[projects_idx + 2])
                 } else {
-                    ProjectSection::Dashboard // Default to dashboard if no specific section in URL
+                    ProjectSection::default()
                 }
             } else {
-                ProjectSection::Dashboard // Default if path structure is unexpected
+                ProjectSection::default()
             }
         };
-
-        // Update the signal that drives the select dropdown's displayed value
-        // This will also be updated by the Effect below if the URL changes externally
+        
         set_current_project_slug(new_slug_option.clone());
 
         match new_slug_option {
             None => {
-                // Navigate to the "new project" page or base projects page
                 navigate("/user/projects", Default::default());
             }
             Some(slug_value) => {
-                // Navigate to the same section of the newly selected project
                 let target_path = current_section_enum.href(&slug_value);
                 navigate(&target_path, Default::default());
             }
@@ -79,12 +72,10 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
     Effect::new(move |_old_path| {
         let current_path_str = location_pathname.get();
         let slug_from_url = get_current_project_slug_from_path(&current_path_str);
-        // Only update if the derived slug from URL is different from the signal's state
-        // This prevents re-running downstream effects unnecessarily if already in sync
         if slug_from_url != current_project_slug.get() {
             set_current_project_slug(slug_from_url);
         }
-        current_path_str // Track current_path_str
+        current_path_str
     });
 
     view! {

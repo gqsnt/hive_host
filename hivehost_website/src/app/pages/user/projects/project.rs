@@ -124,8 +124,7 @@ pub fn ProjectPage(
             if segments.len() > projects_idx + 2 {
                 ProjectSection::from_first_segment(segments[projects_idx + 2])
             } else {
-                // No segment after project_slug, implies Dashboard
-                ProjectSection::Dashboard
+                ProjectSection::default()
             }
         } else {
             leptos::logging::warn!(
