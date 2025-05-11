@@ -117,5 +117,6 @@ echo "Next Steps:"
 echo "1. Ensure your Btrfs volume is mounted at '$BTRFS_DEV_MOUNT_POINT' with 'acl' in /etc/fstab."
 echo "2. Configure SSHD for SFTP Chroot (Match Group $SFTP_GROUP, ChrootDirectory $USERS_BASE/%u, ForceCommand internal-sftp, etc.)."
 echo "3. Ensure your backend service runs as/uses '$SERVICE_USER' (likely via sudo for helper commands)."
+echo "4. Ensure /etc/hivehost/.env exist and /usr/local/bin/hivehost-ssh-keys.sh is 755 owned by root"
 
 exit 0

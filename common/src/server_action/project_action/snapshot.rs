@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum ProjectSnapshotAction {
     Create { snapshot_name: String },
     Delete { snapshot_name: String },
+    Restore { snapshot_name: String, users_slug: Vec<String> },
     MountSnapshotProd { snapshot_name: String, should_umount_first:bool },
     UnmountProd,
 }

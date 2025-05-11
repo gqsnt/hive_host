@@ -16,7 +16,7 @@ use common::helper_command::tarpc::ServerHelper;
 async fn main() -> ServerHelperResult<()> {
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_env("/home/canarit/projects/hive_host/.env")
+            tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| format!("{}=debug", env!("CARGO_CRATE_NAME")).into()),
         )
         .with(tracing_subscriber::fmt::layer().with_ansi(true))

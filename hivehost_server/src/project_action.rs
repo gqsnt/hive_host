@@ -15,9 +15,7 @@ use common::server_action::project_action::io_action::ProjectIoAction;
 use common::server_action::project_action::permission::ProjectPermissionAction;
 use common::server_action::project_action::snapshot::ProjectSnapshotAction;
 use common::server_action::project_action::{ProjectAction, ProjectResponse};
-use common::{
-    get_project_dev_path, get_project_prod_path, get_project_snapshot_path, ProjectSlugStr,
-};
+use common::{get_project_dev_path, get_project_prod_path, get_project_snapshot_path, get_user_project_path, ProjectSlugStr};
 use std::path::PathBuf;
 use tracing::info;
 
@@ -114,6 +112,20 @@ pub async fn handle_server_project_action_snapshot(
             } else {
                 ProjectResponse::HelperResponses(helper_response)
             }
+        }
+        ProjectSnapshotAction::Restore { snapshot_name, users_slug } => {
+            let users_project_path = users_slug
+                .into_iter()
+                .map(|s| get_user_project_path(&s, &project_slug))
+                .collect::<Vec<String>>();
+            let helper_response = helper_client
+                .execute(vec![HelperCommand::RestoreSnapshot {
+                    snapshot_path: get_project_snapshot_path(&snapshot_name),
+                    path: get_project_dev_path(&project_slug),
+                    users_project_path
+                }])
+                .await?;
+            ProjectResponse::HelperResponses(helper_response)
         }
     })
 }

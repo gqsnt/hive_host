@@ -75,8 +75,9 @@ pub fn ProjectFiles() -> impl IntoView {
     let permission_signal = Signal::derive(move || {
         global_state
             .project()
-            .get()
-            .map(|p| p.1)
+            .read()
+            .as_ref()
+            .map(|p| p.permission)
             .unwrap_or_default()
     });
 

@@ -1,7 +1,4 @@
-use crate::app::pages::user::projects::project::project_snapshots::server_fns::{
-    CreateProjectSnapshot, DeleteProjectSnapshot, SetActiveProjectSnapshot,
-    UnsetActiveProjectSnapshot,
-};
+use crate::app::pages::user::projects::project::project_snapshots::server_fns::{CreateProjectSnapshot, DeleteProjectSnapshot, RestoreProjectSnapshot, SetActiveProjectSnapshot, UnsetActiveProjectSnapshot};
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::app::IntoView;
@@ -19,8 +16,9 @@ pub fn ProjectSnapshots() -> impl IntoView {
     let permission_signal = Signal::derive(move || {
         global_state
             .project()
-            .get()
-            .map(|p| p.1)
+            .read()
+            .as_ref()
+            .map(|p| p.permission)
             .unwrap_or_default()
     });
 
@@ -29,8 +27,9 @@ pub fn ProjectSnapshots() -> impl IntoView {
     let active_snapshot_id_signal = Signal::derive(move || {
         global_state
             .project()
-            .get()
-            .and_then(|p| p.2.active_snapshot_id)
+            .read()
+            .as_ref()
+            .and_then(|p| p.project.active_snapshot_id)
     });
 
     // --- Actions ---
@@ -38,7 +37,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
     let delete_snapshot_action = ServerAction::<DeleteProjectSnapshot>::new();
     let set_active_snapshot_action = ServerAction::<SetActiveProjectSnapshot>::new();
     let unset_active_snapshot_action = ServerAction::<UnsetActiveProjectSnapshot>::new();
-
+    let restore_snapshot_action = ServerAction::<RestoreProjectSnapshot>::new();
     
     // --- Resource for Snapshots List ---
     let snapshots_resource = Resource::new_bincode(
@@ -61,6 +60,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
     // --- Feedback Signals ---
     let (create_feedback, set_create_feedback) = signal(String::new());
     let (delete_feedback, set_delete_feedback) = signal(String::new());
+    let (restore_feedback, set_restore_feedback) = signal(String::new());
     let (set_active_feedback, set_set_active_feedback) = signal(String::new());
     let (unset_active_feedback, set_unset_active_feedback) = signal(String::new());
 
@@ -120,6 +120,39 @@ pub fn ProjectSnapshots() -> impl IntoView {
         }
     });
     
+    Effect::new(move |_| {
+        if let Some(result) = restore_snapshot_action.value().get() {
+            match result {
+                Ok(_) => set_restore_feedback.set("Snapshot restored successfully.".to_string()),
+                Err(e) => set_restore_feedback.set(format!("Error restoring snapshot: {e}")),
+            }
+        } else {
+            set_restore_feedback.set("".to_string()); // Clear on potential refetch
+        }
+    });
+    
+    
+    let on_restore_submit= move |ev: SubmitEvent, snapshot_id:i64| {
+        ev.prevent_default();
+        let confirmed = if let Some(window) = web_sys::window() {
+            window
+                .confirm_with_message(
+                    "Are you sure you want to Restore this snapshot?"
+                )
+                .unwrap_or(false)
+        } else {
+            false
+        };
+        if confirmed{
+            restore_snapshot_action.dispatch(RestoreProjectSnapshot{
+                csrf: csrf_signal.get().unwrap_or_default(),
+                project_slug: slug_signal(),
+                snapshot_id,
+            });
+        }
+    };
+    
+    
     let on_set_active_submit = move |ev: SubmitEvent, snapshot_id:i64| {
         ev.prevent_default();
         set_active_snapshot_action.dispatch(SetActiveProjectSnapshot{
@@ -130,8 +163,8 @@ pub fn ProjectSnapshots() -> impl IntoView {
         global_state.project().update(|project_opt| {
             match project_opt{
                 None => {}
-                Some((_,_,project)) => {
-                    project.active_snapshot_id = Some(snapshot_id);
+                Some(p_state) => {
+                    p_state.project.active_snapshot_id = Some(snapshot_id);
                 }
             }
         });
@@ -145,8 +178,8 @@ pub fn ProjectSnapshots() -> impl IntoView {
         global_state.project().update(|project_opt| {
             match project_opt{
                 None => {}
-                Some((_,_,project)) => {
-                    project.active_snapshot_id = None;
+                Some(p_state) => {
+                    p_state.project.active_snapshot_id = None;
                 }
             }
         });
@@ -259,6 +292,9 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 </div>
                 <div class="mt-1 text-sm text-right min-h-[1.25em] text-yellow-400">
                     {unset_active_feedback}
+                </div>
+                <div class="mt-1 text-sm text-right min-h-[1.25em] text-yellow-400">
+                    {restore_feedback}
                 </div>
 
                 <div class="mt-6 flow-root">
@@ -375,6 +411,18 @@ pub fn ProjectSnapshots() -> impl IntoView {
                                                                                                     )
                                                                                                 }
                                                                                             }}
+                                                                                            <form on:submit=move |ev| on_restore_submit(
+                                                                                                ev,
+                                                                                                snapshot.id,
+                                                                                            )>
+                                                                                                <button
+                                                                                                    type="submit"
+                                                                                                    class="btn btn-success"
+                                                                                                    disabled=move || restore_snapshot_action.pending().get()
+                                                                                                >
+                                                                                                    "Restore"
+                                                                                                </button>
+                                                                                            </form>
                                                                                             // Delete Button (using form for potential future hidden fields)
                                                                                             <form on:submit=move |ev| on_delete_submit(
                                                                                                 ev,
@@ -554,6 +602,53 @@ pub mod server_fns {
         .await
     }
 
+
+
+    #[server(input=Bincode, output=Bincode)]
+    pub async fn restore_project_snapshot(
+        csrf: String,
+        project_slug: ProjectSlugStr,
+        snapshot_id: i64,
+    ) -> AppResult<()>{
+        handle_project_permission_request(
+            project_slug,
+            Permission::Owner, // Restoring requires owner permission
+            Some(csrf),
+            |_, pool, project_slug| async move {
+                let snapshot = sqlx::query!(
+                     "SELECT id,snapshot_name FROM projects_snapshots WHERE id = $1 AND project_id = $2",
+                     snapshot_id,
+                     project_slug.id
+                 )
+                    .fetch_optional(&pool)
+                    .await?;
+                let users_slug = sqlx::query!(
+                    "SELECT u.slug from permissions as  p inner join  users as u on p.user_id = u.id where p.project_id = $1",
+                    project_slug.id
+                )
+                    .fetch_all(&pool)
+                    .await?
+                    .into_iter()
+                    .map(|u| u.slug)
+                    .collect::<Vec<_>>();
+                if snapshot.is_none() {
+                    return Err(AppError::Custom("Snapshot not found for this project.".to_string()));
+                }
+                let snapshot = snapshot.unwrap();
+                request_server_project_action(
+                    project_slug.clone(),
+                    ProjectSnapshotAction::Restore { 
+                        snapshot_name: snapshot.snapshot_name,
+                        users_slug
+                    }.into()
+                ).await?;
+                Ok(())
+            },
+        )
+            .await
+    }
+    
+    
     #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project_snapshot(
         csrf: String,

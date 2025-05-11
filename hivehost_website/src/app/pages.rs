@@ -12,6 +12,26 @@ pub mod user;
 pub struct GlobalState {
     pub csrf: Option<String>,
     pub user: Option<(Slug, User)>,
-    pub project: Option<(Slug, Permission, Project)>,
+    pub project: Option<ProjectState>,
     pub hosting_url: Option<String>,
+}
+
+
+
+#[derive(Clone, Debug, Store)]
+pub struct ProjectState{
+    pub slug: Slug,
+    pub permission: Permission,
+    pub project: Project,
+}
+
+impl ProjectState {
+    pub fn new(slug: Slug, permission: Permission, project: Project) -> Self {
+        Self {
+            slug,
+            permission,
+            project,
+        }
+    }
+    
 }

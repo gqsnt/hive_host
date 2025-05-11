@@ -1,5 +1,5 @@
 use crate::app::components::select::FormSelectIcon;
-use leptos::prelude::{OnAttribute, OnTargetAttribute, PropAttribute, Transition};
+use leptos::prelude::{GetUntracked, OnAttribute, OnTargetAttribute, PropAttribute, Transition};
 
 use leptos::prelude::signal;
 use leptos::prelude::Get;
@@ -13,7 +13,8 @@ use leptos::prelude::{ClassAttribute, Resource, Suspend};
 use leptos::server::ServerAction;
 use leptos::{component, view, IntoView};
 use leptos_router::components::Outlet;
-use leptos_router::hooks::use_location;
+use leptos_router::hooks::{use_location, use_navigate};
+use crate::app::pages::user::projects::project::ProjectSection;
 
 pub mod new_project;
 pub mod project;
@@ -25,40 +26,65 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
         move |_| server_fns::get_projects(),
     );
 
-    let get_project_slug = move |path: String| {
-        let split = path.split("/").collect::<Vec<_>>();
-        let mut found = false;
-        for s in split.iter() {
-            if found {
-                return Some(s.to_string());
-            }
-            if s.eq(&"projects") {
-                found = true;
+    let get_current_project_slug_from_path = move |path_str: &str| {
+        let segments: Vec<&str> = path_str.split('/').filter(|s| !s.is_empty()).collect();
+        // Expected: "user", "projects", "{slug}"
+        if let Some(projects_idx) = segments.iter().position(|&seg| seg == "projects") {
+            if segments.len() > projects_idx + 1 {
+                return Some(segments[projects_idx + 1].to_string());
             }
         }
         None
     };
-    
-    let location_path = use_location().pathname.get();
-    let (project_id, set_project_id) = signal(get_project_slug(location_path));
 
-    let handle_select_project = move |value: Option<String>| {
-        let navigate = leptos_router::hooks::use_navigate();
-        set_project_id(value.clone());
-        match value {
-            None => navigate("/user/projects", Default::default()),
-            Some(project_slug) => navigate(
-                format!("/user/projects/{project_slug}").as_str(),
-                Default::default(),
-            ),
+    let location_pathname = use_location().pathname;
+    let (current_project_slug, set_current_project_slug) = signal(get_current_project_slug_from_path(&location_pathname.get_untracked()));
+
+    let handle_select_project = move |new_slug_option: Option<String>| {
+        let navigate = use_navigate();
+        let current_path = location_pathname.get(); // Get current path before navigation
+
+        // Determine the current section from the current_path
+        let current_section_enum = {
+            let segments: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
+            if let Some(projects_idx) = segments.iter().position(|&seg| seg == "projects") {
+                // slug is at projects_idx + 1
+                // section part is at projects_idx + 2
+                if segments.len() > projects_idx + 2 {
+                    ProjectSection::from_first_segment(segments[projects_idx + 2])
+                } else {
+                    ProjectSection::Dashboard // Default to dashboard if no specific section in URL
+                }
+            } else {
+                ProjectSection::Dashboard // Default if path structure is unexpected
+            }
+        };
+
+        // Update the signal that drives the select dropdown's displayed value
+        // This will also be updated by the Effect below if the URL changes externally
+        set_current_project_slug(new_slug_option.clone());
+
+        match new_slug_option {
+            None => {
+                // Navigate to the "new project" page or base projects page
+                navigate("/user/projects", Default::default());
+            }
+            Some(slug_value) => {
+                // Navigate to the same section of the newly selected project
+                let target_path = current_section_enum.href(&slug_value);
+                navigate(&target_path, Default::default());
+            }
         };
     };
-    Effect::new(move || {
-        let location = use_location().pathname.get();
-        let location_project_id = get_project_slug(location);
-        if location_project_id != project_id(){
-            set_project_id(location_project_id.clone());
+    Effect::new(move |_old_path| {
+        let current_path_str = location_pathname.get();
+        let slug_from_url = get_current_project_slug_from_path(&current_path_str);
+        // Only update if the derived slug from URL is different from the signal's state
+        // This prevents re-running downstream effects unnecessarily if already in sync
+        if slug_from_url != current_project_slug.get() {
+            set_current_project_slug(slug_from_url);
         }
+        current_path_str // Track current_path_str
     });
 
     view! {
@@ -69,7 +95,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                     <select
                         name="project_id"
                         class="form-select"
-                        prop:value=move || project_id.get().unwrap_or_default()
+                        prop:value=move || current_project_slug.get().unwrap_or_default()
                         on:change:target=move |e| {
                             let target_value = e.target().value();
                             if target_value.is_empty() {
@@ -99,7 +125,8 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                                                         <option
                                                             value=project.slug.clone()
                                                             selected=move || {
-                                                                project.slug.clone() == project_id.get().unwrap_or_default()
+                                                                project.slug.clone()
+                                                                    == current_project_slug.get().unwrap_or_default()
                                                             }
                                                         >
                                                             {project.slug.clone()}

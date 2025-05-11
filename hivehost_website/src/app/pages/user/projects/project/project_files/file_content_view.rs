@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use bytes::Bytes;
 use crate::api::{get_action_server_project_action, get_action_token_action};
 use common::server_action::permission::Permission;
 use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
@@ -14,9 +13,8 @@ use leptos::prelude::{IntoMaybeErased, ServerFnError, Suspend};
 use leptos::reactive::spawn_local;
 use leptos::server::LocalResource;
 use leptos::{component, view, IntoView};
-use leptos::tachys::renderer::CastFrom;
 use wasm_bindgen::{JsCast, JsValue};
-use web_sys::{js_sys, BinaryType, Blob, File, FormData, SubmitEvent};
+use web_sys::{js_sys, Blob, FormData, SubmitEvent};
 
 
 #[component]
@@ -70,7 +68,7 @@ pub fn FileContentView(
             {
                 Ok(UsedTokenActionResponse::Content(buff)) => {
                     // Handle the content download, e.g., create a Blob and trigger download
-                    let file_name = file_path.split('/').last().unwrap_or("downloaded_file");
+                    let file_name = file_path.split('/').next_back().unwrap_or("downloaded_file");
                     let buff_value = JsValue::from(buff);
                     let array = js_sys::Array::from_iter(std::iter::once(&buff_value));
                     let blob = Blob::new_with_str_sequence(
@@ -79,7 +77,7 @@ pub fn FileContentView(
                     let url = web_sys::Url::create_object_url_with_blob(&blob).unwrap();
                     let a = web_sys::window().unwrap().document().unwrap().create_element("a").unwrap();
                     a.set_attribute("href", &url).unwrap();
-                    a.set_attribute("download", &file_name).unwrap();
+                    a.set_attribute("download", file_name).unwrap();
                     a.dyn_ref::<web_sys::HtmlAnchorElement>().unwrap().click();
                     web_sys::Url::revoke_object_url(&url).unwrap(); // Clean up URL
                 }
@@ -225,11 +223,16 @@ pub fn FileContentView(
                                                     <p>
                                                         "This might be a binary file, too large, or not valid text."
                                                     </p>
-                                                // Add a Download button here if desired
-                                                // Example:
-                                                <button class="btn btn-primary mt-4" on:click=move |_| handle_download_file(file_path_clone.clone())>
+                                                    // Add a Download button here if desired
+                                                    // Example:
+                                                    <button
+                                                        class="btn btn-primary mt-4"
+                                                        on:click=move |_| handle_download_file(
+                                                            file_path_clone.clone(),
+                                                        )
+                                                    >
                                                         Download File
-                                                </button>
+                                                    </button>
                                                 </div>
                                             }
                                         }

@@ -1,6 +1,4 @@
-use leptos::prelude::{
-    expect_context, OnceResource, Read, Signal, Transition, Update,
-};
+use leptos::prelude::{expect_context, OnceResource, Read, Resource, Signal, Transition, Update};
 use leptos::prelude::{AddAnyAttr, Suspend};
 use std::fmt::Display;
 pub mod project_dashboard;
@@ -11,14 +9,14 @@ pub mod project_team;
 
 use leptos::context::provide_context;
 use leptos::prelude::{
-    signal, ClassAttribute, CollectView, Effect, Get, Memo, ReadSignal, Set, WriteSignal,
+     ClassAttribute, CollectView, Get, Memo,
 };
 use leptos::{component, view, IntoView, Params};
 use leptos_router::hooks::{use_location, use_params};
 
 use crate::app::get_hosting_url;
 use crate::app::pages::user::projects::project::server_fns::get_project;
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectState};
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
@@ -65,19 +63,18 @@ impl ProjectSection {
             ProjectSection::Snapshots => "Snapshots",
         }
     }
-}
 
-impl From<&str> for ProjectSection {
-    fn from(path: &str) -> Self {
-        match path {
+    pub fn from_first_segment(segment:&str)->Self{
+        match segment {
             "team" => ProjectSection::Team,
             "files" => ProjectSection::Files,
             "settings" => ProjectSection::Settings,
-            "snapshots" => ProjectSection::Snapshots,
-            _ => ProjectSection::Dashboard,
+             _  => ProjectSection::Snapshots,
         }
     }
+
 }
+
 
 impl Display for ProjectSection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -99,14 +96,7 @@ pub struct ProjectSlugSignal(pub String);
 pub fn ProjectPage(
 ) -> impl IntoView {
     let params: MemoProjectParams = use_params::<ProjectParams>();
-    let project_slug = move || {
-        params
-            .read()
-            .as_ref()
-            .ok()
-            .map(|p| p.project_slug.clone())
-            .unwrap_or_default()
-    };
+    let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal = Signal::derive(move || {
         params
             .read()
@@ -116,38 +106,37 @@ pub fn ProjectPage(
     });
     provide_context(project_slug_signal);
 
-    let global_state: Store<GlobalState> = expect_context();
-    let project_resource = OnceResource::new_bincode(get_project(project_slug()));
+
+    let project_resource = Resource::new_bincode(
+        move || { project_slug_signal() },
+        move |s| get_project(s.0),
+    );
 
     let hosting_url_resource = OnceResource::new_bincode(get_hosting_url());
+    let active_project_section = Memo::new(move |_| {
+        let current_path = use_location().pathname.get();
+        let segments: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
+        // Expected structure: "user", "projects", "{project_slug}", "{section_segment}", ...
 
-    let get_project_section = move |location: String| {
-        let split = location.split("/").collect::<Vec<_>>();
-        // find projets string and return next next
-        let mut found_1 = false;
-        let mut found_2 = false;
-        for &s in split.iter() {
-            if found_1 && !found_2 {
-                found_2 = true;
-            } else if found_2 {
-                let p = ProjectSection::from(s);
-                return p;
-            } else if s.eq("projects") {
-                found_1 = true;
+        if let Some(projects_idx) = segments.iter().position(|&seg| seg == "projects") {
+            // Project slug is at projects_idx + 1
+            // Section segment starts at projects_idx + 2
+            if segments.len() > projects_idx + 2 {
+                ProjectSection::from_first_segment(segments[projects_idx + 2])
+            } else {
+                // No segment after project_slug, implies Dashboard
+                ProjectSection::Dashboard
             }
+        } else {
+            leptos::logging::warn!(
+                "Could not determine project section: 'projects' segment not found in path: {}",
+                current_path
+            );
+            ProjectSection::default()
         }
-        ProjectSection::default()
-    };
-
-    let location = use_location().pathname.get();
-    // Gestion de la section active
-    let (current, set_current): (ReadSignal<ProjectSection>, WriteSignal<ProjectSection>) =
-        signal(get_project_section(location));
-    Effect::new(move |_| {
-        let location = use_location().pathname.get();
-        let sec = get_project_section(location);
-        set_current.set(sec);
     });
+
+    
 
     view! {
         <div>
@@ -160,7 +149,7 @@ pub fn ProjectPage(
                                     view! {
                                         <SectionNav
                                             section=s
-                                            current_section=current
+                                            current_section=active_project_section
                                             project_slug_signal
                                         />
                                     }
@@ -178,7 +167,9 @@ pub fn ProjectPage(
                             global_state
                                 .project()
                                 .update(|inner| {
-                                    *inner = Some((project.get_slug(), permission, project));
+                                    *inner = Some(
+                                        ProjectState::new(project.get_slug(), permission, project),
+                                    );
                                 });
                         }
                         Err(_) => {
@@ -205,7 +196,7 @@ pub fn ProjectPage(
 #[component]
 fn SectionNav(
     #[prop(into)] section: ProjectSection,
-    #[prop(into)] current_section: ReadSignal<ProjectSection>,
+    #[prop(into)] current_section: Memo<ProjectSection>,
     #[prop(into)] project_slug_signal: Signal<ProjectSlugSignal>,
 ) -> impl IntoView {
     view! {

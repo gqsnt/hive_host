@@ -33,13 +33,14 @@ pub fn ProjectTeam() -> impl IntoView {
     let add_member_email_ref= NodeRef::<Input>::default();
     let add_member_permission_ref= NodeRef::<Select>::default();
 
-    let permission_signal = Signal::derive(move || {
+    let permission_signal = Signal::derive(move || 
         global_state
             .project()
-            .get()
-            .map(|p| p.1)
+            .read()
+            .as_ref()
+            .map(|p| p.permission)
             .unwrap_or_default()
-    });
+    );
 
     let team_res = Resource::new_bincode(
         move || {

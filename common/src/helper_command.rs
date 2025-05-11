@@ -82,6 +82,11 @@ pub enum HelperCommand {
     DeleteSnapshot {
         snapshot_path: String,
     },
+    RestoreSnapshot {
+        path: String,
+        snapshot_path: String,
+        users_project_path:Vec<String>,
+    },
     MountSnapshot {
         path: String,
         snapshot_name: String,

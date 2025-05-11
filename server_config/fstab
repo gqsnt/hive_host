@@ -1,0 +1,1 @@
+UUID=22bdb03c-bec4-4e6f-8ed4-d5122120a159 /hivehost/dev btrfs defaults,acl,noatime,compress=zstd,ssd,space_cache=v2,subvol=/ 0 0

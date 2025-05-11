@@ -174,6 +174,39 @@ pub async fn execute_command(
         HelperCommand::UnmountProd { path } => {
             run_external_command("umount", &[&path]).await?;
         }
+        HelperCommand::RestoreSnapshot { path, snapshot_path, users_project_path } => {
+            for user_project_path in &users_project_path {
+                run_external_command(
+                    "umount",
+                    &[
+                        user_project_path,
+                    ],
+                )
+                .await?;
+            }
+            run_external_command(
+                "btrfs",
+                &[
+                    "subvolume",
+                    "delete",
+                    &path,
+                ],
+            )
+            .await?;
+            run_external_command(
+                "btrfs",
+                &[
+                    "subvolume",
+                    "snapshot",
+                    &snapshot_path,
+                    &path,
+                ],
+            )
+            .await?;
+            for user_project_path in &users_project_path {
+                run_external_command("mount", &["--bind", &path, user_project_path]).await?;
+            }
+        }
     }
     Ok(())
 }

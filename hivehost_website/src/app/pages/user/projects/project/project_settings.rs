@@ -2,7 +2,7 @@ use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::app::IntoView;
 use common::ProjectSlugStr;
-use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::{IntoMaybeErased, Read};
 use leptos::prelude::{expect_context, Action, ElementChild, Signal};
 use leptos::prelude::{signal, ClassAttribute, OnAttribute};
 use leptos::prelude::{CustomAttribute, Effect};
@@ -18,10 +18,12 @@ pub fn ProjectSettings() -> impl IntoView {
         project_slug_signal.get().0;
 
     let is_active = Signal::derive(move ||
-        global_state.project().get().and_then(|inner| inner.2.active_snapshot_id).is_some());
+        global_state.project().read().as_ref().and_then(|inner| inner.project.active_snapshot_id).is_some());
 
     let permission_signal = Signal::derive(move || {
-        global_state.project().get().map(|p| p.1).unwrap_or_default()
+        global_state.project().read()
+            .as_ref()
+            .map(|p| p.permission).unwrap_or_default()
     });
 
     let hosting_url = move ||
