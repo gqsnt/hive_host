@@ -95,7 +95,7 @@ pub async fn server_project_action_token(
                     Json(UsedTokenActionResponse::UploadReport(upload_statuses))
                 }
             }
-            TokenAction::DownloadFile { path } => {
+            TokenAction::ViewFile { path } => {
                 let path = match ensure_path_in_project_path(project_slug.clone(), &path, true, true).await{
                     Ok(path) => path,
                     Err(e) => {
@@ -120,8 +120,9 @@ pub async fn server_project_action_token(
                 let modified = metadata.modified().unwrap();
                 let modified: DateTime<Utc> = modified.into();
                 let last_modified = modified.format("%a, %d %b %Y %T").to_string();
-                let mut reader = TokioBufReader::new(file);
+    
                 let content = if size < 200_000{
+                    let mut reader = TokioBufReader::new(file);
                     let mut buf = Vec::new();
                     tokio::io::copy(&mut reader, &mut buf)
                         .await.unwrap();
@@ -153,6 +154,24 @@ pub async fn server_project_action_token(
                     tokio::fs::write(path.clone(), &bytes).await.unwrap();
                 }
                 Json(UsedTokenActionResponse::Ok)
+            }
+            TokenAction::DownloadFile { path } => {
+                let path = match ensure_path_in_project_path(project_slug.clone(), &path, true, true).await{
+                    Ok(path) => path,
+                    Err(e) => {
+                        return Json(UsedTokenActionResponse::Error(format!("Error: {e}")))
+                    }
+                };
+                let file = File::open(path)
+                    .await
+                    .unwrap();
+                let mut reader = TokioBufReader::new(file);
+                let mut buf = Vec::new();
+                tokio::io::copy(&mut reader, &mut buf)
+                    .await.unwrap();
+                Json(UsedTokenActionResponse::Content(buf))
+                
+                
             }
         }
     } else {

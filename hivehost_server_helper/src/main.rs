@@ -25,6 +25,8 @@ async fn main() -> ServerHelperResult<()> {
     LazyLock::force(&BTRFS_DEVICE);
     let server_helper_socket_path =
         dotenvy::var("SERVER_HELPER_SOCKET_PATH").expect("HELPER_ADDR not set");
+    let _ = tokio::fs::remove_file(server_helper_socket_path.clone()).await;
+
     info!("Server helper socket path: {}", server_helper_socket_path);
     let mut listener =
         tarpc::serde_transport::unix::listen(server_helper_socket_path.clone(), Bincode::default)

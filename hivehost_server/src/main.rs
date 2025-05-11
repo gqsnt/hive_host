@@ -69,6 +69,7 @@ async fn main() -> ServerResult<()> {
 
     let listener_addr = dotenvy::var("SERVER_ADDR")?;
     
+    info!("Starting Server on {}", listener_addr);
     let listener_addr = SocketAddr::from_str(&listener_addr)?;
     let mut website_server_listener = tarpc::serde_transport::tcp::listen(&listener_addr, Bincode::default).await?;
     website_server_listener.config_mut().max_frame_length(usize::MAX);
@@ -98,7 +99,7 @@ async fn main() -> ServerResult<()> {
         .with_state(app_state);
     
     let server_addr_front = dotenvy::var("SERVER_ADDR_FRONT")?;
-
+    info!("Starting Server Front on {}", server_addr_front);
     // run our app with hyper, listening globally on port 3000
     let tcp_addr_front = SocketAddr::from_str(&server_addr_front)?;
     let listener = tokio::net::TcpListener::bind(tcp_addr_front).await?;

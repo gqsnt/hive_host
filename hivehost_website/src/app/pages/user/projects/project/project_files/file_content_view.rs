@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use bytes::Bytes;
 use crate::api::{get_action_server_project_action, get_action_token_action};
 use common::server_action::permission::Permission;
 use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
@@ -12,7 +14,10 @@ use leptos::prelude::{IntoMaybeErased, ServerFnError, Suspend};
 use leptos::reactive::spawn_local;
 use leptos::server::LocalResource;
 use leptos::{component, view, IntoView};
-use web_sys::{FormData, SubmitEvent};
+use leptos::tachys::renderer::CastFrom;
+use wasm_bindgen::{JsCast, JsValue};
+use web_sys::{js_sys, BinaryType, Blob, File, FormData, SubmitEvent};
+
 
 #[component]
 pub fn FileContentView(
@@ -28,7 +33,7 @@ pub fn FileContentView(
                 Some(file_path) => {
                     match get_action_token_action(
                         slug.get(),
-                        TokenAction::DownloadFile { path: file_path },
+                        TokenAction::ViewFile { path: file_path },
                         None,
                         None,
                     )
@@ -49,13 +54,45 @@ pub fn FileContentView(
 
     let (current_file_path_for_form, set_current_file_path_for_form) = signal(String::new());
 
-    // Effect to reset editing state when selected file changes or content loads
-
     
     let server_save_action = get_action_server_project_action(); // Assuming this is a general action for project ops
     let node_ref: NodeRef<Textarea> = NodeRef::new();
     
-
+    let handle_download_file= move |file_path:Arc<String>|{
+        spawn_local(async move {
+            match get_action_token_action(
+                slug.get(),
+                TokenAction::DownloadFile { path: file_path.to_string() },
+                None,
+                None,
+            )
+                .await
+            {
+                Ok(UsedTokenActionResponse::Content(buff)) => {
+                    // Handle the content download, e.g., create a Blob and trigger download
+                    let file_name = file_path.split('/').last().unwrap_or("downloaded_file");
+                    let buff_value = JsValue::from(buff);
+                    let array = js_sys::Array::from_iter(std::iter::once(&buff_value));
+                    let blob = Blob::new_with_str_sequence(
+                        &array,
+                    ).unwrap();
+                    let url = web_sys::Url::create_object_url_with_blob(&blob).unwrap();
+                    let a = web_sys::window().unwrap().document().unwrap().create_element("a").unwrap();
+                    a.set_attribute("href", &url).unwrap();
+                    a.set_attribute("download", &file_name).unwrap();
+                    a.dyn_ref::<web_sys::HtmlAnchorElement>().unwrap().click();
+                    web_sys::Url::revoke_object_url(&url).unwrap(); // Clean up URL
+                }
+                Err(e) => {
+                    leptos::logging::error!("Error downloading file: {e:?}");
+                }
+                _ => {
+                    leptos::logging::error!("Error downloading file");
+                    // Show error to user
+                }
+            }
+        });
+    };
 
     let handle_on_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
@@ -132,6 +169,7 @@ pub fn FileContentView(
                         set_current_file_path_for_form(file_info.path.clone());
                         let content = file_info.content.clone();
                         let has_content = content.is_some();
+                        let file_path_clone = Arc::new(file_info.path.clone());
                         let content = Signal::derive(move || content.clone().unwrap_or_default());
                         EitherOf4::D(
                             view! {
@@ -178,6 +216,7 @@ pub fn FileContentView(
                                     <Show
                                         when=move || has_content
                                         fallback=move || {
+                                            let file_path_clone = file_path_clone.clone();
                                             view! {
                                                 <div class="flex-grow p-4 text-gray-400">
                                                     <p class="font-semibold mb-2">
@@ -188,9 +227,9 @@ pub fn FileContentView(
                                                     </p>
                                                 // Add a Download button here if desired
                                                 // Example:
-                                                // <button class="btn btn-secondary mt-4" on:click=move |_| { /* trigger download action */ }>
-                                                // Download File
-                                                // </button>
+                                                <button class="btn btn-primary mt-4" on:click=move |_| handle_download_file(file_path_clone.clone())>
+                                                        Download File
+                                                </button>
                                                 </div>
                                             }
                                         }

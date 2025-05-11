@@ -8,7 +8,7 @@ set -euo pipefail
 # Permissions: 755 (rwxr-xr-x)
 
 
-DB_ENV="/etc/hivehost/.env"
+DB_ENV="/hivehost/.env"
  if [[ -f "$DB_ENV" ]]; then
    source "$DB_ENV" 
  else

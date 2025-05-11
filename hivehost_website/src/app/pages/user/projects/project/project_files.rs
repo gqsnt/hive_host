@@ -388,7 +388,7 @@ pub fn FileUploadArea(
                 set_is_uploading(true);
                 set_upload_messages(vec!["Starting upload...".to_string()]);
                 let form_element = ev.target().unwrap().unchecked_into::<HtmlFormElement>();
-                let form_data = FormData::new_with_form(&form_element).unwrap();
+                let form_data = FormData::new().unwrap();
                 log!("File list length: {}", file_list.length());
                 for i in 0..file_list.length() {
                     if let Some(file) = file_list.item(i) {
