@@ -1,5 +1,6 @@
 create type role_type as enum ('admin', 'user');
 create type permission_type as enum ('read', 'write', 'owner');
+create type log_type as enum ('user_action', 'permission_action','snapshot_action', 'io_action', 'token_action');
 
 create table if not exists users
 (
@@ -13,11 +14,21 @@ create table if not exists users
             STORED     not null
 );
 
+create table if not exists servers
+(
+    id       bigserial primary key,
+    name     text      not null,
+    ip text      not null,
+    hosting_address  text      not null,
+    token text      not null
+);
+
 
 
 create table if not exists projects
 (
     id   bigserial primary key,
+    server_id BIGINT references servers (id) on delete cascade NOT NULL,
     name text      not null,
     slug TEXT
         GENERATED ALWAYS AS (name || '-' || id::TEXT)
@@ -53,4 +64,14 @@ create table if not exists user_ssh_keys
     name       text                                           not null,
     user_id    BIGINT references users (id) on delete cascade NOT NULL,
     public_key text                                           not null
+);
+
+
+create table if not exists logs(
+    id         bigserial primary key,
+    user_id    BIGINT references users (id) on delete cascade NOT NULL,
+    project_id BIGINT references projects (id) on delete cascade,
+    log_type  log_type not null,
+    action     text                                           not null,
+    created_at timestamp default now()                         not null
 );

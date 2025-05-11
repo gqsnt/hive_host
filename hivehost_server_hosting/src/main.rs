@@ -5,8 +5,7 @@ use hivehost_server_hosting::{
     accept_hosting_loop, cache_project_path, create_socket, HostingResult, CACHE, DB, TOKEN,
 };
 use std::future;
-use std::net::SocketAddr;
-use std::str::FromStr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::LazyLock;
 use std::thread::available_parallelism;
 use tarpc::server;
@@ -17,7 +16,7 @@ use tokio::runtime;
 use tracing::{error, info};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use common::hosting_command::tarpc::ServerHosting;
+use common::hosting_command::tarpc::{ServerHosting, HOSTING_SOCKET_PATH};
 
 pub fn main() -> HostingResult<()> {
     tracing_subscriber::registry()
@@ -53,17 +52,15 @@ async fn serve(handle: &runtime::Handle) -> HostingResult<()> {
         cache_project_path(unix_slug).await;
     }
     drop(db);
-
-    let server_hosting_socket_path = dotenvy::var("SERVER_HOSTING_SOCKET_PATH")?;
-    let _ = tokio::fs::remove_file(server_hosting_socket_path.clone()).await;
-
-    let hosting_addr = dotenvy::var("HOSTING_ADDR")?;
-    let addr = SocketAddr::from_str(&hosting_addr)?;
+    
+    let _ = tokio::fs::remove_file(HOSTING_SOCKET_PATH).await;
+    
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 3002);
     let socket = create_socket(addr).expect("Failed to create socket");
     let listener = TcpListener::from_std(socket.into())?;
     let accept_hosting_loop = accept_hosting_loop(handle.clone(), listener);
     let mut listener =
-        tarpc::serde_transport::unix::listen(server_hosting_socket_path.clone(), Bincode::default)
+        tarpc::serde_transport::unix::listen(HOSTING_SOCKET_PATH, Bincode::default)
             .await?;
     listener.config_mut().max_frame_length(usize::MAX);
     let (http_res, command_res) = tokio::join!(

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use crate::api::{get_action_server_project_action, get_action_token_action};
 use common::server_action::permission::Permission;
 use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
-use common::ProjectSlugStr;
+use common::{ProjectSlugStr, ServerId};
 use leptos::either::EitherOf4;
 use leptos::html::Textarea;
 use leptos::leptos_dom::log;
@@ -21,6 +21,7 @@ use web_sys::{js_sys, Blob, FormData, SubmitEvent};
 pub fn FileContentView(
     selected_file: Signal<Option<String>>,
     slug: Signal<ProjectSlugStr>,
+    server_id:Signal<ServerId>,
     csrf_signal: Signal<Option<String>>, // Assuming this provides the CSRF token string
     permission_signal: Signal<Permission>,
 ) -> impl IntoView {
@@ -30,6 +31,7 @@ pub fn FileContentView(
             match selected_file.get() {
                 Some(file_path) => {
                     match get_action_token_action(
+                        server_id(),
                         slug.get(),
                         TokenAction::ViewFile { path: file_path },
                         None,
@@ -59,7 +61,8 @@ pub fn FileContentView(
     let handle_download_file= move |file_path:Arc<String>|{
         spawn_local(async move {
             match get_action_token_action(
-                slug.get(),
+                server_id(),
+                slug(),
                 TokenAction::DownloadFile { path: file_path.to_string() },
                 None,
                 None,
@@ -104,7 +107,8 @@ pub fn FileContentView(
 
         spawn_local(async move {
             match get_action_token_action(
-                slug.get(), // Or slug.get_untracked() if appropriate
+                server_id(),
+                slug(), 
                 TokenAction::UpdateFile { path: path_to_save },
                 csrf_token_val,
                 Some(form_data),

@@ -1,16 +1,20 @@
-use leptos::prelude::{expect_context, signal, Effect, ElementChild, Get, NodeRef, NodeRefAttribute, OnAttribute, Set};
+use leptos::prelude::{expect_context, signal, Effect, ElementChild, Get, NodeRef, NodeRefAttribute, OnAttribute, OnceResource, Set, Suspend, Transition};
 use leptos::prelude::{ClassAttribute, IntoMaybeErased};
 use leptos::server::ServerAction;
 use leptos::{component, view, IntoView};
-use leptos::html::Input;
+use leptos::either::Either;
+use leptos::html::{Input, Select};
 use reactive_stores::Store;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::pages::user::projects::new_project::server_fns::get_servers;
 
 #[component]
 pub fn NewProjectPage(
     create_project_action: ServerAction<server_fns::CreateProject>,
 ) -> impl IntoView {
     let global_store: Store<GlobalState> = expect_context();
+    let servers_resource = OnceResource::new_bincode(get_servers());
+    
 
     let (new_project_result, set_new_project_result) = signal(" ".to_string());
     Effect::new(move |_| {
@@ -22,10 +26,17 @@ pub fn NewProjectPage(
         };
     });
     let project_name_ref= NodeRef::<Input>::default();
+    let server_id_ref= NodeRef::<Select>::default();
     
     let on_new_project = move |event: web_sys::SubmitEvent| {
         event.prevent_default();
         create_project_action.dispatch(server_fns::CreateProject {
+            server_id: server_id_ref
+                .get()
+                .expect("<select> should be mounted")
+                .value()
+                .parse()
+                .unwrap(),
             csrf: global_store.csrf().get().unwrap_or_default(),
             name: project_name_ref
                 .get()
@@ -57,6 +68,40 @@ pub fn NewProjectPage(
                         </div>
                     </div>
                 </div>
+                <div class="mt-6">
+                    <label for="server" class="form-label">
+                        "Select Server"
+                    </label>
+                    <select name="server" class="form-select" node_ref=server_id_ref>
+                        <Transition fallback=|| {
+                            view! { <option>"Loading servers..."</option> }
+                        }>
+                            {move || Suspend::new(async move {
+                                let servers = servers_resource.await;
+                                match servers {
+                                    Ok(servers) => {
+                                        Either::Left(
+                                            view! {
+                                                {servers
+                                                    .into_iter()
+                                                    .map(|server| {
+                                                        view! { <option value=server.id>{server.name}</option> }
+                                                    })
+                                                    .collect::<Vec<_>>()}
+                                            },
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Either::Right(
+
+                                            view! { <option>"Error loading servers"</option> },
+                                        )
+                                    }
+                                }
+                            })}
+                        </Transition>
+                    </select>
+                </div>
 
                 <div class="mt-6 flex items-center justify-end gap-x-6">
                     <button type="submit" class="btn btn-primary">
@@ -74,6 +119,8 @@ pub mod server_fns {
     use crate::AppResult;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
+    use common::ServerId;
+    use crate::models::Server;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::utils::ssr::verify_easy_hash;
@@ -82,7 +129,7 @@ pub mod server_fns {
     }}
 
     #[server(input=Bincode, output=Bincode)]
-    pub async fn create_project(csrf: String, name: String) -> AppResult<()> {
+    pub async fn create_project(csrf: String, server_id:ServerId,name: String) -> AppResult<()> {
         let auth = crate::ssr::auth(false)?;
         let server_vars = crate::ssr::server_vars()?;
         verify_easy_hash(
@@ -91,7 +138,7 @@ pub mod server_fns {
             csrf,
         )?;
         let user_slug = crate::security::utils::ssr::get_auth_session_user_slug(&auth).unwrap();
-        match ssr::create_project(user_slug, name).await {
+        match ssr::create_project(server_id, user_slug, name).await {
             Ok(project) => {
                 log!("Project created: {:?}", project);
                 leptos_axum::redirect(format!("/user/projects/{}", project.get_slug()).as_str());
@@ -104,6 +151,15 @@ pub mod server_fns {
         Ok(())
     }
 
+    #[server(input=Bincode, output=Bincode)]
+    pub async  fn get_servers() -> AppResult<Vec<Server>> {
+        let pool = crate::ssr::pool()?;
+        Ok(sqlx::query_as!(Server, "SELECT id, name FROM servers")
+            .fetch_all(&pool)
+            .await?)
+    }
+
+
     #[cfg(feature = "ssr")]
     pub mod ssr {
         use crate::models::Project;
@@ -111,9 +167,10 @@ pub mod server_fns {
         use crate::AppResult;
         use common::server_action::permission::Permission;
         use common::server_action::user_action::ServerUserAction;
-        use common::Slug;
+        use common::{ServerId, Slug};
         use validator::{Validate, ValidationError};
-
+        
+      
         pub fn parse_repo(repo_url: &str) -> Result<(String, String, String), ValidationError> {
             if repo_url.is_empty() {
                 return Err(ValidationError::new("invalid_git_repo"));
@@ -146,15 +203,16 @@ pub mod server_fns {
             pub name: String,
         }
 
-        pub async fn create_project(user_slug: Slug, name: String) -> AppResult<Project> {
+        pub async fn create_project(server_id: ServerId, user_slug: Slug, name: String) -> AppResult<Project> {
             use crate::api::ssr::request_user_action;
             let pool = crate::ssr::pool()?;
             let project_form = CreateProjectForm { name: name.clone() };
             project_form.validate()?;
 
             let project = sqlx::query!(
-                "INSERT INTO projects (name) VALUES ($1) returning id",
-                project_form.name
+                "INSERT INTO projects (name, server_id) VALUES ($1, $2) returning id",
+                project_form.name,
+                server_id,
             )
             .fetch_one(&pool)
             .await?;
@@ -167,6 +225,7 @@ pub mod server_fns {
             .execute(&pool)
             .await?;
             request_user_action(
+                server_id,
                 ServerUserAction::AddProject {
                     user_slug,
                     project_slug: Slug::new(project.id, project_form.name),

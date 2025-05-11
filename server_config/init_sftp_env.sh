@@ -9,7 +9,6 @@ SFTP_GROUP="sftp_users"
 BTRFS_DEV_MOUNT_POINT="/hivehost/dev"
 PROD_MOUNT_BASE="/hivehost/prod"
 USERS_BASE="/hivehost/users"
-TEMP_BASE="/hivehost/temp"
 HIVEHOST_BASE="/hivehost"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -57,10 +56,6 @@ mkdir -p "$USERS_BASE"
 chown root:root "$USERS_BASE"
 chmod 755 "$USERS_BASE" # SFTP Chroot base
 
-mkdir -p "$TEMP_BASE"
-chown root:root "$TEMP_BASE"
-chmod 755 "$TEMP_BASE" # Temporary files
-
 
 
 
@@ -96,14 +91,6 @@ fi
 echo "Granting service user access to '$PROD_MOUNT_BASE'..."
 setfacl -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE"
 setfacl -d -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE" # Allow creating mount dirs
-
-# Grant service user access to manage temporary files
-echo "Granting service user access to '$TEMP_BASE'..."
-setfacl -m "u:$SERVICE_USER:rwx" "$TEMP_BASE"
-setfacl -d -m "u:$SERVICE_USER:rwx" "$TEMP_BASE" # Allow creating temp files
-
-
-
 
 
 

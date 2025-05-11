@@ -97,12 +97,22 @@ pub async fn signup(
     auth.remember_user(remember);
     leptos_axum::redirect("/user");
     let user_slug = Slug::new(user.id, form.username.clone());
-    crate::api::ssr::request_user_action(
-        ServerUserAction::Create {
-            user_slug: user_slug.clone(),
+    let ws_clients = crate::ssr::ws_clients()?;
+    let mut project_created = false;
+    for client in ws_clients.iter() {
+        crate::api::ssr::request_user_action(
+            *client.key(),
+            ServerUserAction::Create {
+                user_slug: user_slug.clone(),
+            }
+        )
+            .await?;
+        if !project_created{
+            create_project(*client.key(), user_slug.clone(), "default".to_string()).await?;
+            project_created = true;
         }
-    )
-    .await?;
-    create_project(user_slug, "default".to_string()).await?;
+
+    }
+    
     Ok(())
 }

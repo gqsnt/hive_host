@@ -23,6 +23,8 @@ pub fn ProjectSnapshots() -> impl IntoView {
     });
 
     let slug_signal = Signal::derive(move || project_slug_signal.get().0);
+    let server_id = move || global_state.project().read().as_ref().unwrap().project.server_id;
+
     let csrf_signal = Signal::derive(move || global_state.csrf().get());
     let active_snapshot_id_signal = Signal::derive(move || {
         global_state
@@ -145,6 +147,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
         };
         if confirmed{
             restore_snapshot_action.dispatch(RestoreProjectSnapshot{
+                server_id:server_id(),
                 csrf: csrf_signal.get().unwrap_or_default(),
                 project_slug: slug_signal(),
                 snapshot_id,
@@ -156,6 +159,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
     let on_set_active_submit = move |ev: SubmitEvent, snapshot_id:i64| {
         ev.prevent_default();
         set_active_snapshot_action.dispatch(SetActiveProjectSnapshot{
+            server_id:server_id(),
             csrf: csrf_signal.get().unwrap_or_default(),
             project_slug: slug_signal(),
             snapshot_id,
@@ -172,6 +176,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
     let on_unset_active_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         unset_active_snapshot_action.dispatch(UnsetActiveProjectSnapshot{
+            server_id:server_id(),
             csrf: csrf_signal.get().unwrap_or_default(),
             project_slug: slug_signal(),
         });
@@ -198,6 +203,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
         }
         set_create_feedback.set("Creating...".to_string()); // Indicate processing
         create_snapshot_action.dispatch(CreateProjectSnapshot {
+            server_id:server_id(),
             csrf:csrf_signal().unwrap_or_default(),
             project_slug: slug_signal(),
             name,
@@ -218,6 +224,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
         };
         if confirmed {
             delete_snapshot_action.dispatch(DeleteProjectSnapshot {
+                server_id:server_id(),
                 csrf: csrf_signal.get().unwrap_or_default(),
                 project_slug: slug_signal(),
                 snapshot_id,
@@ -472,7 +479,7 @@ pub mod server_fns {
     
     use crate::models::ProjectSnapshot;
     use crate::AppResult;
-    use common::ProjectSlugStr;
+    use common::{ProjectSlugStr, ServerId};
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::permission::ssr::handle_project_permission_request;
@@ -518,6 +525,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn create_project_snapshot(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
         name: String,
         description: Option<String>,
@@ -555,6 +563,7 @@ pub mod server_fns {
                     .await?;
 
                 request_server_project_action(
+                    server_id,
                     project_slug.clone(),
                     ProjectSnapshotAction::Create { snapshot_name }.into()
                 ).await?;
@@ -570,6 +579,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn unset_active_project_snapshot(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
     ) -> AppResult<()> {
         handle_project_permission_request(
@@ -593,6 +603,7 @@ pub mod server_fns {
                 .execute(&pool)
                 .await?;
                 request_server_project_action(
+                    server_id,
                     project_slug.clone(),
                     ProjectSnapshotAction::UnmountProd.into(),
                 ).await?;
@@ -607,6 +618,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn restore_project_snapshot(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
         snapshot_id: i64,
     ) -> AppResult<()>{
@@ -636,6 +648,7 @@ pub mod server_fns {
                 }
                 let snapshot = snapshot.unwrap();
                 request_server_project_action(
+                    server_id,
                     project_slug.clone(),
                     ProjectSnapshotAction::Restore { 
                         snapshot_name: snapshot.snapshot_name,
@@ -652,6 +665,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project_snapshot(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
         snapshot_id: i64,
     ) -> AppResult<()> {
@@ -677,7 +691,7 @@ pub mod server_fns {
                     .fetch_optional(&pool)
                     .await?;
                 if let Some(snapshot) = snapshot{
-                    request_server_project_action(project_slug_obj.clone(), ProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
+                    request_server_project_action(server_id,project_slug_obj.clone(), ProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
                 }
 
                 Ok(())
@@ -689,6 +703,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn set_active_project_snapshot(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
         snapshot_id: i64,
     ) -> AppResult<()> {
@@ -737,7 +752,7 @@ pub mod server_fns {
                     .execute(&pool)
                     .await?;
 
-                request_server_project_action(project_slug.clone(), ProjectSnapshotAction::MountSnapshotProd { snapshot_name: snapshot.snapshot_name, should_umount_first }.into()).await?;
+                request_server_project_action(server_id,project_slug.clone(), ProjectSnapshotAction::MountSnapshotProd { snapshot_name: snapshot.snapshot_name, should_umount_first }.into()).await?;
                 Ok(())
             },
         )

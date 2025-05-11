@@ -13,7 +13,6 @@ pub struct GlobalState {
     pub csrf: Option<String>,
     pub user: Option<(Slug, User)>,
     pub project: Option<ProjectState>,
-    pub hosting_url: Option<String>,
 }
 
 

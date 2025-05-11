@@ -2,6 +2,7 @@ pub mod project_action;
 pub mod server_action;
 pub mod handle_token;
 
+
 use crate::project_action::handle_server_project_action;
 use crate::server_action::handle_user_action;
 use axum::extract::FromRef;
@@ -9,20 +10,21 @@ use axum::http::StatusCode;
 use common::helper_command::tarpc::ServerHelperClient;
 use common::hosting_command::tarpc::ServerHostingClient;
 use common::server_action::project_action::{ProjectAction, ProjectResponse};
-use common::server_action::tarpc::WebsiteToServer;
+use common::server_action::tarpc::{AuthResponse, WebsiteToServer};
 use common::server_action::user_action::{ServerUserAction, ServerUserResponse};
 use common::tarpc_client::{TarpcClient, TarpcClientError};
 use common::{ProjectId, ProjectSlugStr, UserId};
 use moka::future::Cache;
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use std::path::StripPrefixError;
-use std::sync::Arc;
+use std::sync::{Arc};
 use async_broadcast::{Receiver, Sender};
 use futures::Stream;
 use tarpc::context::Context;
 use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{client};
 use thiserror::Error;
+use tokio::sync::RwLock;
 use tracing::info;
 use common::server_action::token_action::{TokenAction, TokenActionResponse};
 use uuid::Uuid;
@@ -115,6 +117,7 @@ pub struct AppState {
     pub helper_client: TarpcHelperClient,
     pub hosting_client: TarpcHostingClient,
     pub file_uploads: FileUploads,
+    pub connected:Arc<RwLock<bool>>,
 }
 
 
@@ -149,16 +152,22 @@ pub async fn get_file_upload(file_uploads:FileUploads, token:String, info:Option
 pub struct WebsiteToServerServer(pub AppState);
 impl WebsiteToServer for WebsiteToServerServer {
     async fn token_action(self, _: Context, project_slug_str: ProjectSlugStr, action: TokenAction) -> TokenActionResponse {
+        if !*self.0.connected.read().await{
+            return TokenActionResponse::Error("Not connected".to_string())
+        }
         let token = Uuid::new_v4().to_string();
         info!("Token action: {:?} for project: {}", action, project_slug_str);
         self.0.project_token_action_cache.insert(
             token.clone(),
             (project_slug_str.clone(), action)
         ).await;
-        token
+        TokenActionResponse::Ok(token)
     }
 
     async fn user_action(self, _: Context, action: ServerUserAction) -> ServerUserResponse {
+        if !*self.0.connected.read().await{
+            return ServerUserResponse::Error("Not connected".to_string())
+        }
         handle_user_action(
             self.0.helper_client.clone(),
             action).await
@@ -174,6 +183,9 @@ impl WebsiteToServer for WebsiteToServerServer {
         project_slug: String,
         action: ProjectAction,
     ) -> ProjectResponse {
+        if !*self.0.connected.read().await{
+            return ProjectResponse::Error("Not connected".to_string())
+        }
         handle_server_project_action(
             self.0.hosting_client.clone(),
             self.0.helper_client.clone(),  
@@ -185,10 +197,25 @@ impl WebsiteToServer for WebsiteToServerServer {
             })
         
     }
+
+    async fn auth(self, _: Context, token: String) -> AuthResponse {
+        let mut connected= self.0.connected.write().await;
+        if self.0.token_auth.expose_secret().eq(&token){
+            info!("Token auth success");
+            *connected = true;
+            AuthResponse::Ok
+        }else{
+            *connected = false;
+            info!("Token auth failed");
+            AuthResponse::Error
+        }
+        
+    }
 }
 
 pub async fn connect_server_hosting_client(
     addr: String,
+    _token: Option<String>,
 ) -> Result<ServerHostingClient, TarpcClientError> {
     let mut transport = tarpc::serde_transport::unix::connect(addr, Bincode::default);
     transport.config_mut().max_frame_length(usize::MAX);
@@ -197,6 +224,7 @@ pub async fn connect_server_hosting_client(
 
 pub async fn connect_server_helper_client(
     addr: String,
+    _token: Option<String>,
 ) -> Result<ServerHelperClient, TarpcClientError> {
     let mut transport = tarpc::serde_transport::unix::connect(addr, Bincode::default);
     transport.config_mut().max_frame_length(usize::MAX);

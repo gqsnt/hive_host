@@ -37,6 +37,8 @@ use thiserror::Error;
 pub static PING_PONG_ID:u64= 0;
 pub const SERVICE_USER: &str = "hivehost_server";
 pub const USER_GROUP: &str = "sftp_users";
+pub const SERVER_PORT: u16 = 5051;
+pub const SERVER_TOKEN_PORT: u16 = 5052;
 
 pub const DEV_ROOT_PATH_PREFIX: &str = "/hivehost/dev";
 pub const PROD_ROOT_PATH_PREFIX: &str = "/hivehost/prod";
@@ -99,6 +101,7 @@ macro_rules! impl_chain_from {
 
 
 pub type ProjectId = i64;
+pub type ServerId = i64;
 
 pub type ProjectSlugStr = String;
 

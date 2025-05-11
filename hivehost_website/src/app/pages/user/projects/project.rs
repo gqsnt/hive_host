@@ -1,4 +1,4 @@
-use leptos::prelude::{expect_context, OnceResource, Read, Resource, Signal, Transition, Update};
+use leptos::prelude::{expect_context, Read, Resource, Signal, Transition, Update};
 use leptos::prelude::{AddAnyAttr, Suspend};
 use std::fmt::Display;
 pub mod project_dashboard;
@@ -14,7 +14,6 @@ use leptos::prelude::{
 use leptos::{component, view, IntoView, Params};
 use leptos_router::hooks::{use_location, use_params};
 
-use crate::app::get_hosting_url;
 use crate::app::pages::user::projects::project::server_fns::get_project;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectState};
 use leptos::prelude::ElementChild;
@@ -111,8 +110,7 @@ pub fn ProjectPage(
         move || { project_slug_signal() },
         move |s| get_project(s.0),
     );
-
-    let hosting_url_resource = OnceResource::new_bincode(get_hosting_url());
+    
     let active_project_section = Memo::new(move |_| {
         let current_path = use_location().pathname.get();
         let segments: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
@@ -175,15 +173,6 @@ pub fn ProjectPage(
                             global_state.project().update(|inner| *inner = None);
                         }
                     }
-                    let hosting_url = hosting_url_resource.await;
-                    match hosting_url {
-                        Ok(hosting_url) => {
-                            global_state.hosting_url().update(|inner| *inner = Some(hosting_url));
-                        }
-                        Err(_) => {
-                            global_state.hosting_url().update(|inner| *inner = None);
-                        }
-                    }
                     view! { <Outlet /> }
                 })}
             </Transition>
@@ -238,7 +227,7 @@ pub mod server_fns {
             |auth, pool, project_slug| async move {
                 let user_id = get_auth_session_user_id(&auth).unwrap();
                 let record = sqlx::query!(
-                        r#"SELECT id,name,active_snapshot_id, slug, permissions.permission as "permission: Permission" FROM projects inner join permissions on projects.id = permissions.project_id and user_id = $1  WHERE id = $2"#,
+                        r#"SELECT pr.id,pr.name,pr.active_snapshot_id, pr.slug, pe.permission as "permission: Permission", pr.server_id as server_id, s.hosting_address as hosting_address  FROM projects pr inner join servers s on pr.server_id = s.id  inner join permissions pe on pr.id = pe.project_id and pe.user_id = $1  WHERE pr.id = $2"#,
                         user_id,
                         project_slug.id
                     )
@@ -249,6 +238,8 @@ pub mod server_fns {
                     name: record.name,
                     slug: record.slug,
                     active_snapshot_id: record.active_snapshot_id,
+                    server_id: record.server_id,
+                    hosting_address: record.hosting_address,
                 };
 
                 Ok((record.permission,project))

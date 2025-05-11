@@ -178,7 +178,7 @@ pub mod ssr {
         response::{IntoResponse, Response},
     };
     use common::server_action::permission::Permission;
-    use common::{ProjectId, UserId};
+    use common::{ProjectId, ServerId, UserId};
     use leptos::config::LeptosOptions;
     use leptos::context::{provide_context, use_context};
     use leptos_axum::{handle_server_fns_with_context, AxumRouteListing};
@@ -189,13 +189,17 @@ pub mod ssr {
     use sqlx::PgPool;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
-    use tarpc::client;
+    use dashmap::DashMap;
+    use tarpc::{client, context};
     use tarpc::tokio_serde::formats::Bincode;
-    use common::server_action::tarpc::WebsiteToServerClient;
+    use common::server_action::tarpc::{AuthResponse, WebsiteToServerClient};
     use common::tarpc_client::{TarpcClient, TarpcClientError};
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
-    pub type WsClient =  Arc<TarpcClient<WebsiteToServerClient>>;
+
+    pub type WsClient =  TarpcClient<WebsiteToServerClient>;
+    pub type WsClients =  DashMap<ServerId, WsClient>;
+
 
     #[derive(Clone, FromRef)]
     pub struct AppState {
@@ -205,37 +209,19 @@ pub mod ssr {
         pub permissions: Permissions,
         pub server_vars: ServerVars,
         pub rate_limiter: Arc<RateLimiter>,
-        pub ws_client:WsClient
+        pub ws_clients:WsClients
     }
 
     #[derive(Debug, Clone)]
     pub struct ServerVars {
         pub csrf_server: Arc<CsrfServer>,
-        pub server_url: Arc<String>,
-        pub server_url_front: Arc<String>,
-        pub server_addr: Arc<String>,
-        pub server_addr_front: Arc<String>,
-        pub hosting_url: Arc<String>,
-        pub token_action_auth: SecretString,
     }
+    
 
-    impl ServerVars {
-        pub fn new(
-            token_action_auth: SecretString,
-            server_url: String,
-            server_url_front: String,
-            server_addr: String,
-            server_addr_front: String,
-            hosting_url: String,
-        ) -> ServerVars {
+    impl Default for ServerVars{
+        fn default() -> Self {
             Self {
                 csrf_server: Arc::new(CsrfServer::default()),
-                token_action_auth,
-                server_url: Arc::new(server_url),
-                server_url_front: Arc::new(server_url_front),
-                server_addr: Arc::new(server_addr),
-                server_addr_front: Arc::new(server_addr_front),
-                hosting_url: Arc::new(hosting_url),
             }
         }
     }
@@ -262,8 +248,8 @@ pub mod ssr {
     pub fn pool() -> AppResult<PgPool> {
         use_context::<PgPool>().ok_or(AppError::PoolNotFound)
     }
-    pub fn ws_client() -> AppResult<WsClient> {
-        use_context::<WsClient>().ok_or(AppError::WebsiteToServerClientNotFound)
+    pub fn ws_clients() -> AppResult<WsClients> {
+        use_context::<WsClients>().ok_or(AppError::WebsiteToServerClientNotFound)
     }
     
 
@@ -302,7 +288,7 @@ pub mod ssr {
                 provide_context(app_state.pool.clone());
                 provide_context(app_state.server_vars.clone());
                 provide_context(app_state.rate_limiter.clone());
-                provide_context(app_state.ws_client.clone());
+                provide_context(app_state.ws_clients.clone());
             },
             request,
         )
@@ -323,7 +309,7 @@ pub mod ssr {
                 provide_context(app_state.permissions.clone());
                 provide_context(app_state.pool.clone());
                 provide_context(app_state.server_vars.clone());
-                provide_context(app_state.ws_client.clone());
+                provide_context(app_state.ws_clients.clone());
                 
             },
             move || shell(app_state.leptos_options.clone()),
@@ -332,12 +318,17 @@ pub mod ssr {
     }
 
 
-    pub async fn connect_website_client(addr: String) -> Result<WebsiteToServerClient, TarpcClientError> {
+    pub async fn connect_website_client(addr: String, token: Option<String>) -> Result<WebsiteToServerClient, TarpcClientError> {
         let mut transport = tarpc::serde_transport::tcp::connect(addr, Bincode::default);
         transport
             .config_mut()
             .max_frame_length(usize::MAX);
-        Ok(WebsiteToServerClient::new(client::Config::default(), transport.await?).spawn())
-        
+        let client = WebsiteToServerClient::new(client::Config::default(), transport.await?).spawn();
+        match client.auth(context::current(), token.unwrap_or_default()).await{
+            Ok(AuthResponse::Ok) => Ok(client),
+            _ => {
+                Err(TarpcClientError::ConnectionError("Auth failed".to_string()))
+            }
+        }
     }
 }

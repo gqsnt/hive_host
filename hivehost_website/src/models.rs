@@ -1,5 +1,5 @@
 use common::server_action::permission::Permission;
-use common::{ProjectId, ProjectSlugStr, Slug, UserId, UserSlugStr};
+use common::{ProjectId, ProjectSlugStr, ServerId, Slug, UserId, UserSlugStr};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 
@@ -52,10 +52,23 @@ impl Default for User {
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Project {
     pub id: ProjectId,
+    pub server_id:ServerId,
+    pub hosting_address: String,
     pub name: String,
     pub slug: ProjectSlugStr,
     pub active_snapshot_id: Option<i64>,
 }
+
+
+#[derive(Debug, Clone,Default, PartialEq, Eq, Store, Serialize, Deserialize)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+pub struct Server {
+    pub id: ServerId,
+    pub name: String,
+}
+
+
+
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectSnapshot {

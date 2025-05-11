@@ -30,10 +30,8 @@ use walkdir::WalkDir;
 pub mod handler;
 
 pub static HOSTING_PREFIX: LazyLock<String> = LazyLock::new(|| {
-    format!(
-        ".{}",
-        dotenvy::var("HOSTING_URL").expect("HOSTING_URL must be set")
-    )
+     ".localhost:3002".to_string()
+    
 });
 
 pub type HostingResult<T> = Result<T, HostingError>;

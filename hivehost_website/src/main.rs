@@ -1,4 +1,7 @@
+use std::net::{IpAddr, Ipv4Addr};
+use dashmap::DashMap;
 use common::server_action::tarpc::WebsiteToServerClient;
+use common::SERVER_PORT;
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
@@ -22,23 +25,14 @@ async fn main() -> hivehost_website::AppResult<()> {
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
     use moka::future::Cache;
-    use secrecy::SecretString;
     use sqlx::PgPool;
     use std::net::SocketAddr;
-    use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
     
     dotenvy::dotenv().ok();
 
     let database_url = dotenvy::var("DATABASE_URL")?;
-    let token_action_auth = SecretString::from(dotenvy::var("TOKEN_AUTH")?);
-    let website_addr = dotenvy::var("WEBSITE_ADDR")?;
-    let server_url = dotenvy::var("SERVER_URL")?;
-    let server_url_front = dotenvy::var("SERVER_URL_FRONT")?;
-    let server_addr = dotenvy::var("SERVER_ADDR")?;
-    let server_addr_front = dotenvy::var("SERVER_ADDR_FRONT")?;
-    let hosting_url = dotenvy::var("HOSTING_URL")?;
     let pool = PgPool::connect(database_url.as_str())
         .await
         .expect("Could not connect to database");
@@ -50,29 +44,32 @@ async fn main() -> hivehost_website::AppResult<()> {
     let auth_config = AuthConfig::<UserId>::default().with_anonymous_user_id(Some(-1));
 
     let mut conf = get_configuration(None).unwrap();
-    let addr = SocketAddr::from_str(&website_addr)?;
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 3000);
     conf.leptos_options.site_addr = addr;
     let leptos_options = conf.leptos_options;
     // Generate the list of routes in your Leptos App
     let routes = generate_route_list(App);
-    let server_vars = ServerVars::new(
-        token_action_auth.clone(),
-        server_url,
-        server_url_front,
-        server_addr.clone(),
-        server_addr_front,
-        hosting_url
-    );
+    let server_vars = ServerVars::default();
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
-    let ws_client = Arc::new(TarpcClient::<WebsiteToServerClient>::new(server_addr, connect_website_client));
-    let client_to_connect = ws_client.clone();
-    tokio::spawn(async move {
-        if let Err(e) = client_to_connect.connect().await {
-            error!("Initial WebsiteServerClient connection failed: {:?}", e);
-        }
-    });
+    let ws_clients = DashMap::new();
+    let servers = sqlx::query!(
+        r#"SELECT id,ip,hosting_address , token FROM servers"#,
+    )
+        .fetch_all(&pool)
+        .await?;
+    for server in servers {
+        let client = TarpcClient::<WebsiteToServerClient>::new(format!("{}:{SERVER_PORT}", server.ip), Some(server.token), connect_website_client);
+        let connect_website_client = client.clone();
+        tokio::spawn(async move {
+            if let Err(e) = connect_website_client.connect().await {
+                error!("Initial WebsiteServerClient connection failed: {:?}", e);
+            }
+        });
+        ws_clients.insert(server.id, client);
+    }
+
     let app_state = AppState {
         leptos_options: leptos_options.clone(),
         pool: pool.clone(),
@@ -84,7 +81,7 @@ async fn main() -> hivehost_website::AppResult<()> {
                 .time_to_live(Duration::from_secs(900)) // 15 minutes
                 .build(),
         ),
-        ws_client,
+        ws_clients,
     };
 
     let mut task_director = TaskDirector::default();

@@ -16,10 +16,9 @@ use crate::app::pages::user::projects::ProjectsPage;
 use crate::app::pages::user::user_settings::UserSettingsPage;
 use crate::app::pages::user::UserPage;
 use crate::app::pages::GlobalState;
-use crate::AppResult;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::*;
-use leptos::server_fn::codec::Bincode;
+
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::components::ParentRoute;
 use leptos_router::{
@@ -125,17 +124,3 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     .into_inner()
 }
 
-#[server(input=Bincode, output=Bincode)]
-pub async fn get_server_url_front() -> AppResult<String> {
-    use crate::ssr::server_vars;
-    let server_vars = server_vars()?;
-    Ok(server_vars.server_url_front.to_string())
-}
-
-
-#[server(input=Bincode, output=Bincode)]
-pub async fn get_hosting_url() -> AppResult<String> {
-    use crate::ssr::server_vars;
-    let server_vars = server_vars()?;
-    Ok(server_vars.hosting_url.to_string())
-}

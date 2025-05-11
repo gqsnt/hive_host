@@ -9,6 +9,8 @@ pub mod tarpc{
     use crate::helper_command::{HelperCommand, HelperResponse};
     use crate::tarpc_client::{TarpcClient, TarpcClientError};
 
+    pub const HELPER_SOCKET_PATH: &str ="/run/hivehost_server_helper/server_helper.sock";
+
     #[tarpc::service]
     pub trait ServerHelper {
         async fn execute(actions: Vec<HelperCommand>) -> HelperResponse;

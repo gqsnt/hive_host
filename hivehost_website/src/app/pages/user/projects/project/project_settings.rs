@@ -1,7 +1,7 @@
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::app::IntoView;
-use common::ProjectSlugStr;
+use common::{ProjectSlugStr, ServerId};
 use leptos::prelude::{IntoMaybeErased, Read};
 use leptos::prelude::{expect_context, Action, ElementChild, Signal};
 use leptos::prelude::{signal, ClassAttribute, OnAttribute};
@@ -16,6 +16,8 @@ pub fn ProjectSettings() -> impl IntoView {
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
     let slug = move ||
         project_slug_signal.get().0;
+    let server_id = move || global_state.project().read().as_ref().unwrap().project.server_id;
+
 
     let is_active = Signal::derive(move ||
         global_state.project().read().as_ref().and_then(|inner| inner.project.active_snapshot_id).is_some());
@@ -25,9 +27,13 @@ pub fn ProjectSettings() -> impl IntoView {
             .as_ref()
             .map(|p| p.permission).unwrap_or_default()
     });
-
-    let hosting_url = move ||
-        global_state.hosting_url().get().unwrap_or_default();
+    
+    let hosting_url = Signal::derive(move || {
+        global_state.project().read()
+            .as_ref()
+            .map(|p| p.project.hosting_address.clone()).unwrap_or_default()
+    });
+    
 
     let csrf = move || {
         global_state.csrf().get().unwrap_or_default()
@@ -40,10 +46,10 @@ pub fn ProjectSettings() -> impl IntoView {
         set_preview_version(preview_version() + 1);
     };
 
-    let delete_project_action = Action::new(|intput: &(ProjectSlugStr, String)| {
-        let (project_slug, csrf) = intput.clone();
+    let delete_project_action = Action::new(|intput: &(ServerId, ProjectSlugStr, String)| {
+        let (server_id, project_slug, csrf) = intput.clone();
 
-        async move { server_fns::delete_project(csrf, project_slug).await }
+        async move { server_fns::delete_project(csrf,server_id, project_slug).await }
     });
 
     let on_delete_project = move |_| {
@@ -62,7 +68,7 @@ pub fn ProjectSettings() -> impl IntoView {
         if !confirmed {
             return;
         }
-        delete_project_action.dispatch((project_slug, csrf()));
+        delete_project_action.dispatch((server_id(), project_slug, csrf()));
     };
     let (delete_project_action_result, set_delete_project_action_result) = signal("".to_string());
     Effect::new(move |_| {
@@ -78,7 +84,6 @@ pub fn ProjectSettings() -> impl IntoView {
     view! {
         <div class="space-y-10">
 
-            // --- Project Status & Activation ---
             <div class="section-border">
                 <h2 class="section-title">"Project Status & Activation"</h2>
                 <p class="section-desc">"Control whether your project is live and accessible."</p>
@@ -145,7 +150,6 @@ pub fn ProjectSettings() -> impl IntoView {
                         </div>
                         <iframe
                             class="mt-4 w-full h-80 border border-gray-600 rounded-lg bg-gray-800 shadow-inner"
-                            // --- Append Cache Buster to src ---
                             src=move || {
                                 format!(
                                     "http://{}.{}/?_cb={}",
@@ -155,10 +159,7 @@ pub fn ProjectSettings() -> impl IntoView {
                                 )
                             }
                             title=format!("Live preview for project: {}", slug())
-                        >
-                            // sandbox=MaybeSignal::Static("allow-scripts allow-same-origin".to_string()) // Example sandbox prop
-                            "Your browser does not support iframes."
-                        </iframe>
+                        />
                     </div>
                 </Show>
 
@@ -185,7 +186,6 @@ pub fn ProjectSettings() -> impl IntoView {
                         "Delete Project"
                     </button>
                 </div>
-                // Feedback for delete action
                 <div class="mt-2 text-sm text-right min-h-[1.25em]">
                     {delete_project_action_result}
                 </div>
@@ -197,7 +197,7 @@ pub fn ProjectSettings() -> impl IntoView {
 
 pub mod server_fns {
     use crate::AppResult;
-    use common::ProjectSlugStr;
+    use common::{ProjectSlugStr, ServerId};
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
     
@@ -215,6 +215,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
     ) -> AppResult<()> {
         handle_project_permission_request(
@@ -250,14 +251,15 @@ pub mod server_fns {
                     .await?
                     .active_snapshot_id;
                 if active_id.is_some() {
-                    request_server_project_action(project_slug.clone(), ProjectSnapshotAction::UnmountProd.into()).await?;
+                    request_server_project_action(server_id,project_slug.clone(), ProjectSnapshotAction::UnmountProd.into()).await?;
                 }
                 for snapshot in snapshot_names {
-                    request_server_project_action(project_slug.clone(), ProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
+                    request_server_project_action(server_id,project_slug.clone(), ProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into()).await?;
                 }
 
 
                 request_user_action(
+                    server_id,
                     ServerUserAction::RemoveProject {
                         user_slugs,
                         project_slug,

@@ -8,7 +8,7 @@ pub mod tarpc{
     use crate::hosting_command::{HostingCommand, HostingResponse};
     use crate::ProjectSlugStr;
     use crate::tarpc_client::{TarpcClient, TarpcClientError};
-
+    pub const HOSTING_SOCKET_PATH: &str ="/run/hivehost_server_hosting/server_hosting.sock";
     #[tarpc::service]
     pub trait ServerHosting {
         async fn hosting(project_slug:ProjectSlugStr, action: HostingCommand) -> HostingResponse;

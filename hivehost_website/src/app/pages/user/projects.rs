@@ -110,17 +110,17 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                                         view! {
                                             <For
                                                 each=move || projects.clone()
-                                                key=move |project| project.id
-                                                children=move |project| {
+                                                key=move |(project_id, _)| *project_id
+                                                children=move |(_, slug)| {
                                                     view! {
                                                         <option
-                                                            value=project.slug.clone()
+                                                            value=slug.clone()
                                                             selected=move || {
-                                                                project.slug.clone()
+                                                                slug.clone()
                                                                     == current_project_slug.get().unwrap_or_default()
                                                             }
                                                         >
-                                                            {project.slug.clone()}
+                                                            {slug.clone()}
                                                         </option>
                                                     }
                                                 }
@@ -150,10 +150,10 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
 }
 
 pub mod server_fns {
-    use crate::models::Project;
     use crate::AppResult;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
+    use common::{ProjectId, ProjectSlugStr};
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
             use crate::security::utils::ssr::get_auth_session_user_id;
@@ -161,15 +161,18 @@ pub mod server_fns {
     }}
 
     #[server(input=Bincode, output=Bincode)]
-    pub async fn get_projects() -> AppResult<Vec<Project>> {
+    pub async fn get_projects() -> AppResult<Vec<(ProjectId, ProjectSlugStr)>> {
         let pool = crate::ssr::pool()?;
         let auth = crate::ssr::auth(false)?;
-        let projects = sqlx::query_as!(Project,
-        "SELECT id,name,active_snapshot_id, slug FROM projects WHERE id IN (SELECT project_id FROM permissions WHERE user_id = $1)",
+        let projects = sqlx::query!(
+        "SELECT id,slug FROM projects WHERE id IN (SELECT project_id FROM permissions WHERE user_id = $1)",
         get_auth_session_user_id(&auth).unwrap()
     )
             .fetch_all(&pool)
             .await?;
-        Ok(projects)
+        Ok(projects
+            .into_iter()
+            .map(|project| (project.id, project.slug))
+            .collect())
     }
 }

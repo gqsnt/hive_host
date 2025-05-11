@@ -3,6 +3,7 @@
 
 use std::fmt;
 use std::future::Future;
+
 use std::pin::Pin;
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
@@ -45,7 +46,7 @@ pub type TarpcClientResult<T> = Result<T, TarpcClientError>;
 
 
 type Connector<T> = Box<
-    dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<T, TarpcClientError>> + Send>>
+    dyn Fn(String, Option<String>) -> Pin<Box<dyn Future<Output = Result<T, TarpcClientError>> + Send>>
     + Send
     + Sync,
 >;
@@ -54,6 +55,7 @@ type Connector<T> = Box<
 pub struct TarpcClient<T: Clone + Send + Sync + 'static> {
     inner: Arc<Mutex<Option<T>>>,
     server_addr: String,
+    token: Option<String>,
     connector: Arc<Connector<T>>,
 }
 
@@ -62,6 +64,7 @@ impl<T: Clone + Send + Sync + 'static> Clone for TarpcClient<T> {
         TarpcClient {
             inner: Arc::clone(&self.inner),
             server_addr: self.server_addr.clone(),
+            token: self.token.clone(),
             connector: Arc::clone(&self.connector),
         }
     }
@@ -79,15 +82,16 @@ impl<T: Clone + Send + Sync + 'static> fmt::Debug for TarpcClient<T> {
 
 
 impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
-    pub fn new<F, Fut>(server_addr: String, connect_fn: F) -> Self
+    pub fn new<F, Fut>(server_addr: String, token:Option<String>,connect_fn: F) -> Self
     where
-        F: Fn(String) -> Fut + Send + Sync + 'static,
+        F: Fn(String, Option<String>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<T, TarpcClientError>> + Send + 'static,
     {
-        let connector: Connector<T> = Box::new(move |addr| Box::pin(connect_fn(addr)));
+        let connector: Connector<T> = Box::new(move |addr, token| Box::pin(connect_fn(addr, token)));
         TarpcClient {
             inner: Arc::new(Mutex::new(None)),
             server_addr,
+            token,
             connector: Arc::new(connector),
         }
     }
@@ -95,9 +99,10 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
     async fn establish_connection(
         connector: Arc<Connector<T>>,
         server_addr: String,
+        token: Option<String>,
     ) -> Result<T, TarpcClientError> {
         println!("Establishing connection to server at {server_addr}...", );
-        connector(server_addr).await // Call the stored connector function
+        connector(server_addr, token).await // Call the stored connector function
     }
 
 
@@ -109,7 +114,7 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         }
         
         info!("Client not connected, attempting synchronous connection to {}...", self.server_addr);
-        match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone()).await {
+        match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone(), self.token.clone()).await {
             Ok(new_client) => {
                 println!("Successfully connected to {}.", self.server_addr);
                 *inner_guard = Some(new_client.clone()); // Store the new client
@@ -137,7 +142,7 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
             self.server_addr
         );
 
-        match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone()).await {
+        match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone(), self.token.clone()).await {
             Ok(client_instance) => {
                 *inner_guard = Some(client_instance);
                 println!("Explicit connect: Successfully connected to {}.", self.server_addr);

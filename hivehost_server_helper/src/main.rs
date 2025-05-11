@@ -10,7 +10,7 @@ use tarpc::{server};
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use common::helper_command::tarpc::ServerHelper;
+use common::helper_command::tarpc::{ServerHelper, HELPER_SOCKET_PATH};
 
 #[tokio::main]
 async fn main() -> ServerHelperResult<()> {
@@ -23,13 +23,11 @@ async fn main() -> ServerHelperResult<()> {
         .init();
 
     LazyLock::force(&BTRFS_DEVICE);
-    let server_helper_socket_path =
-        dotenvy::var("SERVER_HELPER_SOCKET_PATH").expect("HELPER_ADDR not set");
-    let _ = tokio::fs::remove_file(server_helper_socket_path.clone()).await;
+    let _ = tokio::fs::remove_file(HELPER_SOCKET_PATH).await;
 
-    info!("Server helper socket path: {}", server_helper_socket_path);
+    info!("Server helper socket path: {}", HELPER_SOCKET_PATH);
     let mut listener =
-        tarpc::serde_transport::unix::listen(server_helper_socket_path.clone(), Bincode::default)
+        tarpc::serde_transport::unix::listen(HELPER_SOCKET_PATH, Bincode::default)
             .await?;
     listener.config_mut().max_frame_length(usize::MAX);
     listener

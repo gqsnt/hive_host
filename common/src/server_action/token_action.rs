@@ -28,8 +28,12 @@ impl IsProjectServerAction for TokenAction {
     }
 }
 
+#[derive(Debug,  Clone, PartialEq, Eq,Deserialize,Serialize)]
+pub enum TokenActionResponse{
+    Ok(String),
+    Error(String),
+}
 
-pub type TokenActionResponse = String;
 
 
 #[derive(Debug,  Clone, PartialEq, Eq,Deserialize,Serialize)]

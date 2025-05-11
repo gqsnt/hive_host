@@ -21,7 +21,7 @@ use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::security::permission::request_server_project_action_front;
 use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
 use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
-use common::ProjectSlugStr;
+use common::{ProjectSlugStr, ServerId};
 use leptos::html::Input;
 use leptos::logging::log;
 use leptos::prelude::{expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased};
@@ -84,6 +84,8 @@ pub fn ProjectFiles() -> impl IntoView {
     log!("Perm slug signal: {:?}", permission_signal.get());
 
     let slug = Signal::derive(move || project_slug_signal.read().0.clone());
+    let server_id =Signal::derive( move || global_state.project().read().as_ref().unwrap().project.server_id);
+
 
     let csrf_signal = Signal::derive(move || global_state.csrf().get());
 
@@ -96,12 +98,14 @@ pub fn ProjectFiles() -> impl IntoView {
             (
                 refresh_signal.get(),
                 current_path.get(),
+                server_id(),
                 slug(),
                 server_project_action.version().get(),
             )
         },
-        |(_,path, slug, _)| {
+        |(_,path,server_id, slug, _)| {
             request_server_project_action_front(
+                server_id,
                 slug,
                 ProjectIoDirAction::Ls { path }.into(),
                 None,
@@ -143,6 +147,7 @@ pub fn ProjectFiles() -> impl IntoView {
             return;
         }
         server_project_action.dispatch((
+            server_id(),
             slug(),
             ProjectIoDirAction::Create {
                 path: format!("{}{}", current_path.get(), folder_name),
@@ -165,6 +170,7 @@ pub fn ProjectFiles() -> impl IntoView {
             return;
         }
         server_project_action.dispatch((
+                                           server_id(),
             slug(),
             ProjectIoFileAction::Create {
                 path: format!("{}{}", current_path.get(), file_name),
@@ -302,7 +308,7 @@ pub fn ProjectFiles() -> impl IntoView {
 
                     // --- Upload Files Area ---
                     // This will now be the third column
-                    <FileUploadArea slug current_path csrf_signal refresh_signal />
+                    <FileUploadArea slug current_path csrf_signal refresh_signal server_id />
                 </div>
             </div>
 
@@ -346,6 +352,7 @@ pub fn ProjectFiles() -> impl IntoView {
                                         on_select_file=handle_select_file
                                         server_project_action=server_project_action
                                         permission_signal=permission_signal
+                                        server_id
                                     />
 
                                 </div>
@@ -359,6 +366,7 @@ pub fn ProjectFiles() -> impl IntoView {
                         selected_file=selected_file.into()
                         slug=slug
                         permission_signal=permission_signal
+                        server_id
                     />
                 </div>
             </div>
@@ -369,7 +377,9 @@ pub fn ProjectFiles() -> impl IntoView {
 
 #[component]
 pub fn FileUploadArea(
+    server_id: Signal<ServerId>,
     slug: Signal<ProjectSlugStr>,
+    
     current_path: Signal<String>,
     csrf_signal: Signal<Option<String>>,
     refresh_signal:RwSignal<u32>
@@ -401,6 +411,7 @@ pub fn FileUploadArea(
 
                 spawn_local(async move {
                     match get_action_token_action(
+                        server_id(),
                         slug(),
                         TokenAction::UploadFiles { path: current_path() },
                         csrf_signal(),

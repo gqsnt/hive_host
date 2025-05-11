@@ -15,6 +15,7 @@ use leptos::prelude::{ElementChild, Read, Show};
 use leptos::{component, view, IntoView};
 use leptos_router::components::A;
 use web_sys::SubmitEvent;
+use common::ServerId;
 
 pub type FileListSignal = ReadSignal<Option<Vec<LsElement>>>;
 
@@ -22,6 +23,7 @@ pub type FileListSignal = ReadSignal<Option<Vec<LsElement>>>;
 pub fn ProjectFilesSidebar(
     file_list: FileListSignal,
     current_path: Signal<String>,
+    server_id:Signal<ServerId>,
     slug: Signal<String>,
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
@@ -99,6 +101,7 @@ pub fn ProjectFilesSidebar(
                                                         server_project_action=server_project_action
                                                         on_select_file=on_select_file
                                                         permission_signal=permission_signal
+                                                        server_id
                                                     />
                                                 }
                                             })
@@ -120,6 +123,7 @@ pub fn ProjectFilesSidebar(
 pub fn ProjectFilesSidebarItem(
     csrf_signal: Signal<Option<String>>,
     slug: Signal<String>,
+    server_id: Signal<ServerId>,
     current_path: Signal<String>,
     item: LsElement,
     server_project_action: ServerProjectActionFront,
@@ -138,6 +142,7 @@ pub fn ProjectFilesSidebarItem(
             ProjectIoFileAction::Delete { path: item_path() }.into()
         };
         server_project_action.dispatch((
+            server_id(),
             slug(),
             action,
             Some(
@@ -171,6 +176,7 @@ pub fn ProjectFilesSidebarItem(
             .into()
         };
         server_project_action.dispatch((
+            server_id(),
             slug(),
             action,
             Some(

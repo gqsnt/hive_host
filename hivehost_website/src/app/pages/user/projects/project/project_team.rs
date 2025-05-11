@@ -26,6 +26,7 @@ pub fn ProjectTeam() -> impl IntoView {
     let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
     let slug = move || project_slug_signal.read().0.clone();
+    let server_id = move || global_state.project().read().as_ref().unwrap().project.server_id;
     let update_member = ServerAction::<server_fns::UpdateProjectTeamPermission>::new();
     let add_member = ServerAction::<server_fns::AddProjectTeamPermission>::new();
     let delete_member = ServerAction::<server_fns::DeleteProjectTeamMember>::new();
@@ -59,6 +60,7 @@ pub fn ProjectTeam() -> impl IntoView {
         update_member.dispatch(server_fns::UpdateProjectTeamPermission {
             csrf: global_state.csrf().get().unwrap_or_default(),
             project_slug: slug(),
+            server_id: server_id(),
             user_id,
             permission: Permission::from(permission.as_str()),
         });
@@ -68,6 +70,7 @@ pub fn ProjectTeam() -> impl IntoView {
         event.prevent_default();
         delete_member.dispatch(server_fns::DeleteProjectTeamMember {
             csrf: global_state.csrf().get().unwrap_or_default(),
+            server_id: server_id(),
             project_slug: slug(),
             user_id,
         });
@@ -78,6 +81,7 @@ pub fn ProjectTeam() -> impl IntoView {
         add_member.dispatch(server_fns::AddProjectTeamPermission {
             csrf: global_state.csrf().get().unwrap_or_default(),
             project_slug: slug(),
+            server_id: server_id(),
             email: add_member_email_ref
                 .get()
                 .expect("<input> should be mounted")
@@ -276,7 +280,7 @@ pub fn ProjectTeam() -> impl IntoView {
 pub mod server_fns {
     use crate::AppResult;
     use common::server_action::permission::Permission;
-    use common::{ProjectId, ProjectSlugStr, UserId, UserSlugStr};
+    use common::{ProjectId, ProjectSlugStr, ServerId, UserId, UserSlugStr};
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
     use serde::{Deserialize, Serialize};
@@ -294,6 +298,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project_team_member(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
         user_id: UserId,
     ) -> AppResult<()> {
@@ -322,6 +327,7 @@ pub mod server_fns {
                 let user_slug = Slug::new(user_id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
+                    server_id,
                     project_slug,
                     ProjectPermissionAction::Revoke { user_slug }.into(),
                 )
@@ -335,6 +341,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn update_project_team_permission(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
         user_id: UserId,
         permission: Permission,
@@ -365,6 +372,7 @@ pub mod server_fns {
                 let user_slug = Slug::new(user_id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
+                    server_id,
                     project_slug,
                     ProjectPermissionAction::Update {
                         user_slug,
@@ -382,6 +390,7 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn add_project_team_permission(
         csrf: String,
+        server_id:ServerId,
         project_slug: ProjectSlugStr,
         email: String,
         permission: Permission,
@@ -424,6 +433,7 @@ pub mod server_fns {
                 let user_slug = Slug::new(other_user.id, other_user.username);
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
+                    server_id,
                     project_slug,
                     ProjectPermissionAction::Grant {
                         user_slug,

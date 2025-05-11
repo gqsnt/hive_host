@@ -6,8 +6,12 @@ pub mod permission;
 pub mod user_action;
 pub mod token_action;
 
+
+
+
 #[cfg(feature = "tarpc-website-to-server")]
 pub mod tarpc{
+    use serde::{Deserialize, Serialize};
     use tarpc::context;
     use tarpc::client::RpcError;
     use crate::ProjectSlugStr;
@@ -16,6 +20,12 @@ pub mod tarpc{
     use crate::server_action::user_action::{ServerUserAction, ServerUserResponse};
     use crate::tarpc_client::{TarpcClient, TarpcClientError};
 
+    #[derive(Debug,  Clone, PartialEq, Eq,Deserialize,Serialize)]
+    pub enum AuthResponse{
+        Ok,
+        Error,
+    }
+
     #[tarpc::service]
     pub trait WebsiteToServer {
         
@@ -23,9 +33,21 @@ pub mod tarpc{
         
         async fn user_action(action: ServerUserAction) -> ServerUserResponse;
         async fn project_action(project_slug: ProjectSlugStr, action: ProjectAction) -> ProjectResponse;
+        
+        async fn auth(token:String) -> AuthResponse;
     }
 
     impl TarpcClient<WebsiteToServerClient>{
+        
+        
+        pub async fn auth(&self, token:String) -> Result<bool, TarpcClientError> {
+            let client = self.get_or_connect_client().await?;
+            match client.auth(context::current(), token.clone()).await{
+                Ok(AuthResponse::Ok) => Ok(true),
+                _ => Ok(false),
+            }
+        }
+        
         
         pub async fn token_action(
             &self,
