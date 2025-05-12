@@ -1,4 +1,4 @@
-# HiveHost
+# HiveHost 
 
 HiveHost is a platform designed for self-hosting applications, providing a streamlined way to manage and deploy various projects with integrated features for development, collaboration, and serving.
 
