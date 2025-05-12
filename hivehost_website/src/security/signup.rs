@@ -82,7 +82,7 @@ pub async fn signup(
         handle: Handle::current(),
     };
     form.validate_with_args(&context)?;
-    
+
     let password = secrecy::SecretString::from(password.as_str());
     let user = sqlx::query!(
         r#"INSERT INTO users (email, password, role, username) VALUES ($1, $2, $3, $4) returning id"#,
@@ -113,6 +113,6 @@ pub async fn signup(
         }
 
     }
-    
+
     Ok(())
 }
