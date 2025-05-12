@@ -16,3 +16,4 @@ hivehost_website/Cargo.lock
 condense
 output.txt
 .env
+hivehost-git.private-key.pem
