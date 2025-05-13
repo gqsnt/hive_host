@@ -108,7 +108,7 @@ pub async fn signup(
         )
             .await?;
         if !project_created{
-            create_project(*client.key(), user_slug.clone(), "default".to_string()).await?;
+            create_project(*client.key(), user_slug.clone(), "default".to_string(), None).await?;
             project_created = true;
         }
 

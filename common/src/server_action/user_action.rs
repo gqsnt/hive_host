@@ -11,6 +11,7 @@ pub enum ServerUserAction {
     AddProject {
         user_slug: Slug,
         project_slug: Slug,
+        github_info:Option<(Option<String>, String, String)>
     },
     RemoveProject {
         user_slugs: Vec<Slug>,

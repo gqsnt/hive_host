@@ -10,7 +10,10 @@ tower-http = { workspace = true, features = ["fs", "compression-full", "cors"] }
 moka = { workspace = true, features = ["future"] }
 tarpc = {workspace = true}
 futures = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-tls", "json"]}
 dashmap = { workspace = true }
+async-compression={version = "0.4.23", features = ["tokio", "gzip"]}
+
 async-broadcast = "0.7.1"
 common = { path = "../common", features = [
     "website-to-server",

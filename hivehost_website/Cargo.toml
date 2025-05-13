@@ -23,7 +23,7 @@ secrecy = { workspace = true, features = ["serde"] }
 blake2 = { version = "0.10.6", optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"], optional = true }
 
-reqwest = { version = "0.12.15", features = ["rustls-tls", "json"], optional = true }
+reqwest = { workspace = true, features = ["rustls-tls", "json"], optional = true }
 common = { path = "../common", features = ["website-to-server", "hosting"] }
 
 tower = { workspace = true, optional = true }
@@ -56,6 +56,9 @@ async-trait = { version = "0.1.88", optional = true }
 web-sys = { version = "0.3.70", features = ["AbortController", "AbortSignal", "Request", "Response", "FileList", "FormData", "File"] }
 tarpc={workspace = true, optional = true}
 bytes = "1.10.1"
+octocrab = {version = "0.44.1", features = ["tokio"], optional = true}
+jsonwebtoken={version = "9.3.1", features = ["pem"], optional = true}
+
 
 [features]
 hydrate = [
@@ -96,7 +99,9 @@ ssr = [
     "dep:sqlx",
     "dep:deadpool",
     "dep:dashmap",
-    "dep:serde_json"
+    "dep:serde_json",
+    "dep:octocrab",
+    "dep:jsonwebtoken",
 ]
 
 # Defines a size-optimized profile for the WASM bundle in release mode

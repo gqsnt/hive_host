@@ -49,7 +49,7 @@
     }
 
     .btn-secondary {
-        @apply bg-gray-600 text-white hover:bg-gray-500 focus-visible:outline-gray-600;
+        @apply bg-gray-700 text-white hover:bg-gray-600 focus-visible:outline-gray-700;
     }
 
     .btn {

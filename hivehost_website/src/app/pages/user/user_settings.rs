@@ -1,13 +1,14 @@
 use leptos::control_flow::For;
-use leptos::either::Either;
+use leptos::either::{Either, EitherOf3};
 
-use leptos::prelude::{expect_context, ElementChild, NodeRef, NodeRefAttribute, OnAttribute};
+use leptos::prelude::{expect_context, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, OnAttribute, Show};
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, Effect, Set};
 use leptos::prelude::{ClassAttribute, Get, Resource, ServerAction, Signal, Suspense};
 use leptos::text_prop::TextProp;
 use leptos::{component, view, IntoView};
 use leptos::html::{Input, Textarea};
+use leptos::server::OnceResource;
 use reactive_stores::Store;
 use web_sys::SubmitEvent;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
@@ -28,6 +29,8 @@ pub fn UserSettingsPage() -> impl IntoView {
         },
         |_| server_fns::get_ssh_keys(),
     );
+    
+    let user_githubs = OnceResource::new_bincode(server_fns::get_user_githubs());
 
 
     let old_password_ref = NodeRef::<Input>::default();
@@ -120,21 +123,17 @@ pub fn UserSettingsPage() -> impl IntoView {
     });
 
     view! {
-        // --- Profile Section (Empty as requested) ---
         <div class="h-full">
             <h2 class="section-title">"Profile"</h2>
             <p class="section-desc">
                 "This section is currently empty. Future profile settings will appear here."
             </p>
-            // </div>
             <div class="mt-10"></div>
 
-            // --- Security Section (Password Change) ---
             <div class="section-border">
                 <h2 class="section-title">"Security"</h2>
                 <p class="section-desc">"Update your account password."</p>
 
-                // Separate form for password change for clarity
                 <form on:submit=on_password_update>
                     <div class="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
                         <div class="sm:col-span-4">
@@ -183,9 +182,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                         </div>
                     </div>
 
-                    // --- Action Feedback and Submit Button ---
                     <div class="mt-6 flex items-center justify-end gap-x-6">
-                        // Feedback area
                         <div class="text-sm mr-auto">{password_change_result}</div>
                         <button
                             type="submit"
@@ -199,29 +196,134 @@ pub fn UserSettingsPage() -> impl IntoView {
 
             </div>
             <div class="section-border">
+                <h2 class="section-title">"GitHub Integration"</h2>
+                <p class="section-desc mb-4">
+                    "Link your GitHub account(s) to allow access based on repository permissions."
+                </p>
+
+                <Suspense fallback=move || {
+                    view! {
+                        <p class="text-gray-400 text-center py-4">"Loading GitHub accounts..."</p>
+                    }
+                }>
+                    {move || {
+                        user_githubs
+                            .get()
+                            .map(|result| match result {
+                                Ok(accounts) => {
+                                    if accounts.is_empty() {
+                                        EitherOf3::A(
+                                            view! {
+                                                <div class="text-center py-6">
+                                                    <p class="section-desc mb-4">
+                                                        "No GitHub accounts linked yet."
+                                                    </p>
+                                                    <p class="section-desc mb-4 text-xs">
+                                                        "To remove an account later, you'll need to remove the 'hive_host' application access from your GitHub account settings."
+                                                    </p>
+                                                    <a
+                                                        href="https://github.com/apps/hivehost-git"
+                                                        class="btn btn-primary inline-flex items-center gap-x-2"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        "Link New GitHub Account"
+                                                    </a>
+                                                </div>
+                                            },
+                                        )
+                                    } else {
+                                        EitherOf3::B(
+                                            view! {
+                                                <p class="section-desc mb-4 text-xs">
+                                                    "To remove/suspend an account, remove/suspend the 'hive_host' application access from your GitHub account settings."
+                                                </p>
+                                                <ul class="divide-y divide-gray-700 mb-6">
+                                                    <For
+                                                        each=move || accounts.clone()
+                                                        key=|account| account.id
+                                                        children=move |account| {
+                                                            view! {
+                                                                <li
+                                                                    class="flex items-center justify-between py-4"
+                                                                    class:opacity-60=account.suspended
+                                                                >
+                                                                    <div class="flex items-center gap-x-3">
+                                                                        <img
+                                                                            src=account.avatar_url.clone()
+                                                                            alt=format!("{} GitHub avatar", account.login)
+                                                                            class="w-8 h-8 rounded-full flex-shrink-0"
+                                                                            class:filter-grayscale=account.suspended
+                                                                        />
+                                                                        <a
+                                                                            href=account.html_url.clone()
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            class="text-indigo-400 hover:text-indigo-300 hover:underline font-medium text-sm"
+                                                                        >
+                                                                            {account.login.clone()}
+                                                                        </a>
+
+                                                                        <Show when=move || account.suspended fallback=|| view! {}>
+                                                                            <span
+                                                                                class="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-yellow-600 text-white"
+                                                                                title="This integration is currently suspended on GitHub."
+                                                                            >
+                                                                                "Suspended"
+                                                                            </span>
+                                                                        </Show>
+                                                                    </div>
+                                                                </li>
+                                                            }
+                                                        }
+                                                    />
+                                                </ul>
+                                                <div class="flex justify-center mt-4">
+                                                    <a
+                                                        href="https://github.com/apps/hivehost-git"
+                                                        // Use secondary style maybe? Or keep primary. Added flex for icon.
+                                                        class="btn btn-secondary inline-flex items-center gap-x-2"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        "Link Another GitHub Account"
+                                                    </a>
+                                                </div>
+                                            },
+                                        )
+                                    }
+                                }
+                                Err(e) => {
+                                    EitherOf3::C(
+                                        // --- Error State ---
+                                        view! {
+                                            <div class="text-red-400 text-center py-6">
+                                                {format!("Error loading linked GitHub accounts: {}", e)}
+                                            </div>
+                                        },
+                                    )
+                                }
+                            })
+                    }}
+                </Suspense>
+            </div>
+
+            <div class="section-border">
                 <h2 class="section-title">"SSH Keys"</h2>
                 <p class="section-desc">
                     "Manage SSH keys used for accessing your account SFTP via SSH"
                 </p>
 
-                // --- Flex container for List and Form ---
-                // Stacks vertically on small screens, row on medium+
-                // Adjust gap and padding as needed
                 <div class="mt-8 flex flex-col md:flex-row md:gap-x-8">
 
-                    // --- Left Side: List of Existing Keys ---
-                    // Use flex-1 to allow it to grow, or set a specific width like md:w-3/5
                     <div class="flex-1 mb-8 md:mb-0">
                         <h3 class="text-base font-medium text-white mb-4">"Existing Keys"</h3>
-                        // Keep flow-root for potential overflow handling within the table container
                         <div class="flow-root">
                             <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
                                 <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
                                     <table class="min-w-full divide-y divide-gray-700">
-                                        // --- Refactored thead ---
                                         <thead>
                                             <tr>
-                                                // Single header spanning the content area
                                                 <th
                                                     scope="col"
                                                     class="py-3.5 pr-3 pl-4 text-left text-sm font-semibold text-white sm:pl-0"
@@ -252,21 +354,13 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                                 <For
                                                                                     each=move || keys.clone()
                                                                                     key=|key| key.id
-                                                                                    // Using children prop syntax
                                                                                     children=move |key| {
                                                                                         let key_name_to_delete = key.name.clone();
-
                                                                                         view! {
                                                                                             <tr>
-                                                                                                // --- Refactored td using flex ---
                                                                                                 <td class="py-4 pr-3 pl-4 text-sm font-medium whitespace-nowrap text-white sm:pl-0">
-                                                                                                    // Use justify-between to push items apart
                                                                                                     <div class="flex items-center justify-between gap-x-4">
-                                                                                                        // Key Name on the left
-                                                                                                        // Use truncate if names can be long
                                                                                                         <span class="truncate">{key.name}</span>
-
-                                                                                                        // Delete Button on the right
                                                                                                         <form on:submit=move |e| on_delete_ssh_click(
                                                                                                             e,
                                                                                                             key.id,
@@ -294,11 +388,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                             }
                                                             Err(e) => {
                                                                 Either::Right(
-                                                                    // End children closure
-                                                                    // End For component
-                                                                    // End Either::Right view!
-                                                                    // End else
-                                                                    // End Either::Left Ok case
                                                                     view! {
                                                                         <SingleColMessageRow
                                                                             message=format!("Error loading SSH keys: {}", e)
@@ -315,22 +404,14 @@ pub fn UserSettingsPage() -> impl IntoView {
                                 </div>
                             </div>
                         </div>
-                    // End Left Side
                     </div>
 
-                    // --- Separator ---
-                    // Visible on medium screens and up
                     <div class="hidden md:block border-l border-white/10"></div>
 
-                    // --- Right Side: Form to Add New Key ---
-                    // Use flex-1 or set a specific width like md:w-2/5
-                    // Add padding left on medium+ to visually separate from border
                     <div class="flex-1 md:pl-2">
                         <h3 class="text-base font-medium text-white mb-4">"Add New SSH Key"</h3>
                         <form on:submit=add_ssh_key>
-                            // Keep grid for form layout
                             <div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-6">
-                                // Adjust span if needed based on parent width
                                 <div class="sm:col-span-6">
                                     <label for="ssh_key_name" class="form-label">
                                         "Key Name / Label"
@@ -354,7 +435,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                                     <div class="mt-2">
                                         <textarea
                                             name="ssh_key_value"
-                                            // Adjust rows as needed for space
                                             rows="5"
                                             required
                                             node_ref=add_ssh_key_value_ref
@@ -365,7 +445,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                                 </div>
                             </div>
 
-                            // --- Action Feedback and Submit Button ---
                             <div class="mt-6 flex items-center justify-end gap-x-6">
                                 <button
                                     type="submit"
@@ -378,12 +457,10 @@ pub fn UserSettingsPage() -> impl IntoView {
                             <div>{new_ssh_key_result}</div>
 
                         </form>
-                    // End Right Side
                     </div>
 
                 // End Flex Container
                 </div>
-            // End SSH Keys Section
             </div>
         </div>
     }
@@ -452,10 +529,11 @@ pub mod server_fns {
 
     }}
 
-    use crate::models::SshKeyInfo;
+    use crate::models::{SshKeyInfo, UserGithub};
     use crate::AppResult;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
+    use serde::{Deserialize, Serialize};
 
     #[cfg(feature = "ssr")]
     mod ssr {
@@ -475,6 +553,26 @@ pub mod server_fns {
             pub git_ssh_key_value: String,
         }
     }
+
+
+
+    
+    #[server(input=Bincode, output=Bincode)]
+    pub async fn get_user_githubs() -> AppResult<Vec<UserGithub>> {
+        let auth = auth(false)?;
+        let pool = pool()?;
+        let user_id = get_auth_session_user_id(&auth).unwrap();
+        Ok(sqlx::query_as!(
+            UserGithub,
+            r#"
+        SELECT id, login, avatar_url, html_url, installation_id,suspended FROM user_githubs WHERE user_id = $1 order by login asc
+        "#,
+            user_id
+        )
+        .fetch_all(&pool)
+        .await?)
+    }
+    
 
     #[server(input=Bincode, output=Bincode)]
     pub async fn get_ssh_keys() -> AppResult<Vec<SshKeyInfo>> {

@@ -54,6 +54,7 @@ pub enum HelperCommand {
     CreateProject {
         project_slug: String,
         service_user: String,
+        with_index_html:bool,
     },
     DeleteProject {
         project_slug: String,

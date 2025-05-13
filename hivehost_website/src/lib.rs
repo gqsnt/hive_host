@@ -19,7 +19,7 @@ pub mod models;
 pub mod rate_limiter;
 pub mod security;
 pub mod tasks;
-
+pub mod github;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -189,6 +189,7 @@ pub mod ssr {
     use sqlx::PgPool;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
+    use bytes::Bytes;
     use dashmap::DashMap;
     use tarpc::{client, context};
     use tarpc::tokio_serde::formats::Bincode;
@@ -196,6 +197,7 @@ pub mod ssr {
     use common::tarpc_client::{TarpcClient, TarpcClientError};
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
+    pub type GithubInstallCache = Arc<Cache<i64, (String ,String, String)>>;
 
     pub type WsClient =  TarpcClient<WebsiteToServerClient>;
     pub type WsClients =  DashMap<ServerId, WsClient>;
@@ -207,6 +209,7 @@ pub mod ssr {
         pub leptos_options: LeptosOptions,
         pub routes: Vec<AxumRouteListing>,
         pub permissions: Permissions,
+        pub github_install_cache: GithubInstallCache,
         pub server_vars: ServerVars,
         pub rate_limiter: Arc<RateLimiter>,
         pub ws_clients:WsClients
@@ -215,13 +218,16 @@ pub mod ssr {
     #[derive(Debug, Clone)]
     pub struct ServerVars {
         pub csrf_server: Arc<CsrfServer>,
+        pub git_pem:Arc<Vec<u8>>,
+        pub github_client_id:Arc<String>,
     }
     
-
-    impl Default for ServerVars{
-        fn default() -> Self {
+    impl ServerVars{
+        pub fn new(github_client_id:String) -> Self {
             Self {
                 csrf_server: Arc::new(CsrfServer::default()),
+                git_pem: Arc::new(include_bytes!("../../hivehost-git.private-key.pem").to_vec()),
+                github_client_id: Arc::new(github_client_id),
             }
         }
     }

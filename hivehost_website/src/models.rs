@@ -86,6 +86,18 @@ impl Project {
     }
 }
 
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
+pub struct UserGithub{
+    pub id: i64,
+    pub login: String,
+    pub installation_id: i64,
+    pub avatar_url: String,
+    pub html_url: String,
+    pub suspended: bool,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct SshKeyInfo {

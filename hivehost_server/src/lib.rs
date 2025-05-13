@@ -43,6 +43,8 @@ pub enum ServerError {
     StripPrefixError(#[from] StripPrefixError),
     #[error("Rpc error: {0}")]
     RpcError(#[from] client::RpcError),
+    #[error("Reqwest error: {0}")]
+    ReqwestError(#[from] reqwest::Error),
     #[error("Command failed: {0}")]
     CommandFailed(String),
     #[error("Unauthorized")]

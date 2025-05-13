@@ -7,7 +7,12 @@ use common::{
     ProjectSlugStr, UserSlugStr,
 };
 use std::path::Path;
+use async_compression::tokio::bufread::GzipDecoder;
+use reqwest::header::HeaderValue;
+use tokio::fs::File;
 use tracing::info;
+use common::command::run_external_command;
+use crate::project_action::ensure_path_in_project_path;
 
 pub async fn handle_user_action(
     server_helper: TarpcHelperClient,
@@ -20,7 +25,8 @@ pub async fn handle_user_action(
         ServerUserAction::AddProject {
             user_slug,
             project_slug,
-        } => create_project(server_helper, user_slug.to_string(), project_slug.to_string()).await?,
+            github_info,
+        } => create_project(server_helper, user_slug.to_string(), project_slug.to_string(),github_info).await?,
         ServerUserAction::RemoveProject {
             user_slugs,
             project_slug,
@@ -60,23 +66,30 @@ pub async fn create_project(
     server_helper:TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
+    github_info: Option<(Option<String>, String, String)>,
 ) -> ServerResult<HelperResponse> {
-    let project_slug_clone = project_slug.clone();
-    let user_slug_clone = user_slug.clone();
     let dev_path = get_project_dev_path(&project_slug);
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
-    let dev_path_clone = dev_path.clone();
-
-    Ok(server_helper.execute(vec![
+    server_helper.execute(vec![
         HelperCommand::CreateProject {
-            project_slug: project_slug_clone,
-            service_user: user_slug_clone,
+            project_slug: project_slug.clone(),
+            service_user: user_slug.clone(),
+            with_index_html: github_info.is_none(),
         },
         HelperCommand::BindMountUserProject {
-            source_path: dev_path_clone,
+            source_path: dev_path.clone(),
             target_path: user_project_path.clone(),
         }
-    ]).await?)
+    ]).await?;
+    if let Some((token, full_name, branch)) = github_info {
+            let token = token.map(|token| format!("oauth2:{token}@")).unwrap_or_default();
+                let url = format!("https://{token}github.com/{full_name}.git");
+                let r= run_external_command( 
+                    "git",
+                    &["clone", &url, "--branch", &branch, "--single-branch", "--depth", "1", &dev_path],
+                ).await?;
+    }
+    Ok(HelperResponse::Ok)
 
 }
 

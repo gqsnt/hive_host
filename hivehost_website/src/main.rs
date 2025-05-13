@@ -1,7 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr};
+use anyhow::Context;
+use axum::routing::post;
 use dashmap::DashMap;
 use common::server_action::tarpc::WebsiteToServerClient;
 use common::SERVER_PORT;
+
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
@@ -9,6 +12,7 @@ async fn main() -> hivehost_website::AppResult<()> {
     use leptos::logging::error;
     use common::tarpc_client::TarpcClient;
     use hivehost_website::ssr::{connect_website_client};
+    use hivehost_website::github::ssr::github_post_install_callback;
     use axum::{routing::get, Router};
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
@@ -29,7 +33,7 @@ async fn main() -> hivehost_website::AppResult<()> {
     use std::net::SocketAddr;
     use std::sync::Arc;
     use std::time::Duration;
-    
+    use hivehost_website::github::ssr::github_webhook;
     dotenvy::dotenv().ok();
 
     let database_url = dotenvy::var("DATABASE_URL")?;
@@ -48,8 +52,9 @@ async fn main() -> hivehost_website::AppResult<()> {
     conf.leptos_options.site_addr = addr;
     let leptos_options = conf.leptos_options;
     // Generate the list of routes in your Leptos App
+    let github_client_id= dotenvy::var("GITHUB_CLIENT_ID")?;
     let routes = generate_route_list(App);
-    let server_vars = ServerVars::default();
+    let server_vars = ServerVars::new(github_client_id);
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
@@ -81,6 +86,11 @@ async fn main() -> hivehost_website::AppResult<()> {
                 .time_to_live(Duration::from_secs(900)) // 15 minutes
                 .build(),
         ),
+        github_install_cache: Arc::new(
+            Cache::builder()
+                .time_to_live(Duration::from_secs(20))
+                .build(),
+        ),
         ws_clients,
     };
 
@@ -90,7 +100,7 @@ async fn main() -> hivehost_website::AppResult<()> {
         task_director.run().await;
     });
 
-    let app = Router::new()
+    let app = Router::<AppState>::new()
         // .nest(
         //     "/assets",
         //     MemoryServe::new(load_assets!("../target/site/assets"))
@@ -109,6 +119,8 @@ async fn main() -> hivehost_website::AppResult<()> {
             "/api/{*wildcard}",
             get(server_fn_handler).post(server_fn_handler),
         )
+        .route("/api/github_webhook", post(github_webhook))
+        .route("/api/github_post_install_callback", get(github_post_install_callback))
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
         // .layer(
@@ -126,6 +138,7 @@ async fn main() -> hivehost_website::AppResult<()> {
         //                 .and(NotForContentType::const_new("text/css")),
         //         ),
         // )
+       
         .layer(
             AuthSessionLayer::<User, UserId, SessionPgPool, PgPool>::new(Some(pool.clone()))
                 .with_config(auth_config),

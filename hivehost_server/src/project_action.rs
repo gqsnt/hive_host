@@ -18,6 +18,7 @@ use common::server_action::project_action::{ProjectAction, ProjectResponse};
 use common::{get_project_dev_path, get_project_prod_path, get_project_snapshot_path, get_user_project_path, ProjectSlugStr};
 use std::path::PathBuf;
 use tracing::info;
+use common::server_action::project_action::git_action::ProjectGitAction;
 
 pub async fn handle_server_project_action(
     hosting_client: TarpcHostingClient,
@@ -40,9 +41,36 @@ pub async fn handle_server_project_action(
             )
             .await
         }
+        ProjectAction::Git(git) => {
+            handle_server_project_action_git(
+                hosting_client,
+                helper_client,
+                project_slug,
+                git,
+            )
+                .await
+        }
     }
 }
-// helper_client.execute(|c,cx|async move {}).await;
+
+pub async fn handle_server_project_action_git(
+    hosting_client: TarpcHostingClient,
+    helper_client: TarpcHelperClient,
+    project_slug: ProjectSlugStr,
+    action: ProjectGitAction,
+) -> ServerResult<ProjectResponse> {
+    Ok(match action{
+        ProjectGitAction::Pull { branch, clean_untracked } => {
+            todo!()
+        }
+        ProjectGitAction::PullWithMountToProd { branch, clean_untracked, snapshot_name, should_umount_first } => {
+            todo!()
+        }
+    })
+    
+}
+
+
 pub async fn handle_server_project_action_snapshot(
     hosting_client: TarpcHostingClient,
     helper_client: TarpcHelperClient,
