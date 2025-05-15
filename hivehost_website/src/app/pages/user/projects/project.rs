@@ -174,7 +174,6 @@ pub fn ProjectPage(
                         Ok((permission, project)) => {
                             global_state
                                 .project_state()
-
                                 .update(|inner| {
                                     *inner = Some(
                                         ProjectState::new(project.get_slug(), permission, project),
@@ -185,6 +184,7 @@ pub fn ProjectPage(
                             global_state.project_state().update(|inner| *inner = None);
                         }
                     }
+
                     view! { <Outlet /> }
                 })}
             </Transition>

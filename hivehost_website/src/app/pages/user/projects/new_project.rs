@@ -467,11 +467,8 @@ pub fn NewProjectPrivateGithub(
                                                     .into_iter()
                                                     .map(|git_account| {
                                                         view! {
-                                                            <option
-                                                                value=git_account.id
-                                                            >
-                                                                {git_account.login.clone()}
-                                                            </option>
+                                                            <option value=git_account
+                                                                .id>{git_account.login.clone()}</option>
                                                         }
                                                     })
                                                     .collect::<Vec<_>>()}
@@ -515,9 +512,9 @@ pub fn NewProjectPrivateGithub(
                                                                                     .into_iter()
                                                                                     .map(|repo| {
                                                                                         view! {
-                                                                                            <option
-                                                                                                value=repo.full_name.clone()
-                                                                                            >
+                                                                                            <option value=repo
+                                                                                                .full_name
+                                                                                                .clone()>
                                                                                                 {repo.name.clone()}
                                                                                                 {if repo.private {
                                                                                                     view! {

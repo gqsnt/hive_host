@@ -177,376 +177,350 @@ pub fn ProjectSettings() -> impl IntoView {
 
     view! {
         <div class="space-y-10">
-             <Show
+            <Show
                 when=move || has_git_projet()
-                            fallback=move || {
-                                view! {
-                                    <div class="text-gray-400">
-                                        "Project is not linked to GitHub."
-                                    </div>
-                                }
-                            }
-                        >
-                           <div class="section-border">
-                                        <h2 class="section-title">"Project GitHub Repository"</h2>
-                                        <p class="section-desc">
-                                            {format!(
-                                                "Linked to: {} (Branch: {})",
-                                                repo_full_name(),
-                                                branch_name(),
-                                            )}
-                                        </p>
-                                        <div class="mt-6 space-y-4">
-                                            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
-                                                <div>
-                                                    <p class="font-medium text-white">
-                                                        {
-                                                            format!(
-                                                                "Production Status{}",
-                                                                current_prod_branch()
-                                                                    .map(|b| format!(" (Branch: {b})"))
-                                                                    .unwrap_or_default(),
-                                                            )
-                                                        }
-                                                    </p>
-                                                    {move || match (
-                                                        prod_is_behind(),
-                                                        current_prod_commit().is_some(),
-                                                    ) {
-                                                        (_, false) => {
-                                                            EitherOf3::B(
-                                                                view! {
-                                                                    <p class="text-sm text-gray-400">
-                                                                        "Not yet deployed from Git."
-                                                                    </p>
-                                                                },
-                                                            )
-                                                        }
-                                                        (false, true) => {
-                                                            EitherOf3::A(
-                                                                view! {
-                                                                    <p class="text-sm text-green-400">
-                                                                        {format!(
-                                                                            "Up-to-date (Commit: {})",
-                                                                            commit_display(&current_prod_commit().unwrap_or_default()),
-                                                                        )}
-                                                                    </p>
-                                                                },
-                                                            )
-                                                        }
-                                                        (true, true) => {
-                                                            EitherOf3::C(
-                                                                view! {
-                                                                    <p class="text-sm text-yellow-400">
-                                                                        {format!(
-                                                                            "Behind. Current: {}, Latest: {}",
-                                                                            commit_display(&current_prod_commit().unwrap_or_default()),
-                                                                            commit_display(&last_commit()),
-                                                                        )}
-                                                                    </p>
-                                                                },
-                                                            )
-                                                        }
-                                                    }}
-                                                </div>
-                                                <button
-                                                    class="btn btn-success"
-                                                    on:click=move |_| {
-                                                        deploy_prod_action
-                                                            .dispatch((csrf(), server_id(), slug(), !is_auto_deploy()));
-                                                        project_update_signal
-                                                            .write_only()
-                                                            .set(project_update_signal.read_only().get().tick());
-                                                    }
-                                                    disabled=deploy_prod_action.pending().get()
-                                                >
-                                                    {move || if deploy_prod_action.pending().get() {
-                                                        if is_auto_deploy() {
-                                                            "Disabling Auto Deploy..."
-                                                        } else {
-                                                            "Enabling Auto Deploy..."
-                                                        }
-                                                    } else if is_auto_deploy() {
-                                                         "Disable Auto Deploy"
-                                                    }else {
-                                                            "Enable Auto Deploy"
-                                                        }}
-                                                </button>
-                                            </div>
-
-                                            // Development Status
-                                            <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
-                                                <div>
-                                                    <p class="font-medium text-white">Development Status</p>
-                                                    <Show
-                                                        when=move || dev_is_behind()
-                                                        fallback=move || {
-                                                            view! {
-                                                                <p class="text-sm text-green-400">
-                                                                    {format!(
-                                                                        "Up-to-date (Commit: {})",
-                                                                        commit_display(&current_dev_commit()),
-                                                                    )}
-                                                                </p>
-                                                            }
-                                                        }
-                                                    >
-                                                        <p class="text-sm text-yellow-400">
-                                                            {format!(
-                                                                "Behind. Synced: {}, Latest: {}",
-                                                                commit_display(&current_dev_commit()),
-                                                                commit_display(&last_commit()),
-                                                            )}
-                                                        </p>
-                                                    </Show>
-                                                </div>
-                                                <Show when=move || dev_is_behind()>
-                                                    <div class="flex space-x-2">
-                                                        <button
-                                                            class="btn btn-secondary"
-                                                            on:click=move |_| {
-                                                                sync_dev_action.dispatch((csrf(), server_id(), slug()));
-                                                                project_update_signal
-                                                                    .write_only()
-                                                                    .set(project_update_signal.read_only().get().tick());
-                                                            }
-                                                            disabled=sync_dev_action.pending().get()
-                                                        >
-                                                            {if sync_dev_action.pending().get() {
-                                                                "Syncing..."
-                                                            } else {
-                                                                "Sync Development"
-                                                            }}
-                                                        </button>
-                                                    </div>
-                                                </Show>
-                                            </div>
-
-                                            // Change Default Branch
-                                            <div class="p-3 bg-gray-800 rounded-md">
-                                                <p class="form-label">"Change Default Branch"</p>
-                                                <Transition fallback=move || {
-                                                    view! {
-                                                        <p class="text-sm text-gray-400">"Loading branches..."</p>
-                                                    }
-                                                }>
-                                                    {move || Suspend::new(async move {
-                                                        let branches = branches_resource.try_get().flatten();
-                                                        match branches {
-                                                            Some(Ok(branches)) => {
-                                                                if branches.is_empty() {
-                                                                    EitherOf4::A(
-                                                                        view! {
-                                                                            <p class="text-sm text-yellow-400">
-                                                                                "No other branches found."
-                                                                            </p>
-                                                                        },
-                                                                    )
-                                                                } else {
-                                                                    let branch_select_ref = NodeRef::<Select>::new();
-                                                                    EitherOf4::B(
-                                                                        view! {
-                                                                            <div class="flex items-end space-x-2 mt-2">
-                                                                                <select
-                                                                                    class="form-select flex-grow"
-                                                                                    node_ref=branch_select_ref
-                                                                                >
-                                                                                    <option value="">"-- Select new branch --"</option>
-                                                                                    {branches
-                                                                                        .into_iter()
-                                                                                        .filter(|b| b.name != branch_name())
-                                                                                        .map(|branch| {
-                                                                                            // Don't show current branch as an option to switch to
-                                                                                            view! {
-                                                                                                <option value=format!(
-                                                                                                    "{}={}",
-                                                                                                    branch.name.clone(),
-                                                                                                    branch.commit,
-                                                                                                )>{branch.name.clone()}</option>
-                                                                                            }
-                                                                                        })
-                                                                                        .collect::<Vec<_>>()}
-                                                                                </select>
-                                                                                <button
-                                                                                    class="btn btn-warning min-w-[8rem]"
-                                                                                    on:click=move |_| {
-                                                                                        if let Some(select_el) = branch_select_ref.get() {
-                                                                                            let val = select_el.value();
-                                                                                            if !val.is_empty() {
-                                                                                                let parts: Vec<&str> = val.split('=').collect();
-                                                                                                if parts.len() == 2 {
-                                                                                                    let branch_name = parts[0].to_string();
-                                                                                                    let branch_commit = parts[1].to_string();
-                                                                                                    update_branch_action
-                                                                                                        .dispatch((
-                                                                                                            csrf(),
-                                                                                                            server_id(),
-                                                                                                            slug(),
-                                                                                                            branch_name.clone(),
-                                                                                                            branch_commit.clone(),
-                                                                                                        ));
-                                                                                                    project_update_signal
-                                                                                                        .write_only()
-                                                                                                        .set(project_update_signal.read_only().get().tick());
-                                                                                                }
-                                                                                            }
-                                                                                        }
-                                                                                    }
-                                                                                    disabled=update_branch_action.pending().get()
-                                                                                >
-                                                                                    {if update_branch_action.pending().get() {
-                                                                                        "Updating..."
-                                                                                    } else {
-                                                                                        "Update Branch"
-                                                                                    }}
-                                                                                </button>
-                                                                            </div>
-                                                                        },
-                                                                    )
-                                                                }
-                                                            }
-                                                            Some(Err(e)) => {
-                                                                EitherOf4::C(
-                                                                    view! {
-                                                                        <p class="text-sm text-red-400">
-                                                                            {format!("Error loading branches: {e}")}
-                                                                        </p>
-                                                                    },
-                                                                )
-                                                            }
-                                                            None => {
-                                                                EitherOf4::D(
-                                                                    view! {
-                                                                        <p class="text-sm text-gray-400">"Loading branches..."</p>
-                                                                    },
-                                                                )
-                                                            }
-                                                        }
-                                                    })}
-                                                </Transition>
-                                            </div>
-                                        </div>
-                                    </div>
-                        </Show>
-                        <div class="section-border">
-                            <h2 class="section-title">"Project Status & Activation"</h2>
-                            <p class="section-desc">
-                                "Control whether your project is live and accessible."
-                            </p>
-                            <Show
-                                when=move || is_active()
-                                fallback=move || {
-                                    view! {
-                                        <div class="flex items-center my-2">
-                                            <p class="text-sm font-medium text-white">
-                                                "Project is not live"
-                                            </p>
-                                            <p class="text-xs text-gray-400 ml-4">
-                                                "Set a Snapshot as active to make it live."
-                                            </p>
-                                        </div>
+                fallback=move || {
+                    view! { <div class="text-gray-400">"Project is not linked to GitHub."</div> }
+                }
+            >
+                <div class="section-border">
+                    <h2 class="section-title">"Project GitHub Repository"</h2>
+                    <p class="section-desc">
+                        {format!("Linked to: {} (Branch: {})", repo_full_name(), branch_name())}
+                    </p>
+                    <div class="mt-6 space-y-4">
+                        <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
+                            <div>
+                                <p class="font-medium text-white">
+                                    {format!(
+                                        "Production Status{}",
+                                        current_prod_branch()
+                                            .map(|b| format!(" (Branch: {b})"))
+                                            .unwrap_or_default(),
+                                    )}
+                                </p>
+                                {move || match (prod_is_behind(), current_prod_commit().is_some()) {
+                                    (_, false) => {
+                                        EitherOf3::B(
+                                            view! {
+                                                <p class="text-sm text-gray-400">
+                                                    "Not yet deployed from Git."
+                                                </p>
+                                            },
+                                        )
                                     }
+                                    (false, true) => {
+                                        EitherOf3::A(
+                                            view! {
+                                                <p class="text-sm text-green-400">
+                                                    {format!(
+                                                        "Up-to-date (Commit: {})",
+                                                        commit_display(&current_prod_commit().unwrap_or_default()),
+                                                    )}
+                                                </p>
+                                            },
+                                        )
+                                    }
+                                    (true, true) => {
+                                        EitherOf3::C(
+                                            view! {
+                                                <p class="text-sm text-yellow-400">
+                                                    {format!(
+                                                        "Behind. Current: {}, Latest: {}",
+                                                        commit_display(&current_prod_commit().unwrap_or_default()),
+                                                        commit_display(&last_commit()),
+                                                    )}
+                                                </p>
+                                            },
+                                        )
+                                    }
+                                }}
+                            </div>
+                            <button
+                                class="btn btn-success"
+                                on:click=move |_| {
+                                    deploy_prod_action
+                                        .dispatch((csrf(), server_id(), slug(), !is_auto_deploy()));
+                                    project_update_signal
+                                        .write_only()
+                                        .set(project_update_signal.read_only().get().tick());
                                 }
+                                disabled=deploy_prod_action.pending().get()
                             >
-
-                                <div class="mt-6 pt-6 border-t border-gray-700 space-y-4">
-                                    <div class="flex justify-between items-center">
-                                        <h3 class="text-base font-semibold leading-6 text-white">
-                                            "Live Preview & Link"
-                                        </h3>
-                                        <button
-                                            class="btn btn-secondary"
-                                            on:click=move |_| refresh_preview()
-                                        >
-                                            // Optional: Refresh Icon
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                viewBox="0 0 20 20"
-                                                fill="currentColor"
-                                                class="w-4 h-4 mr-1"
-                                            >
-                                                <path
-                                                    fill-rule="evenodd"
-                                                    d="M15.312 11.424a5.5 5.5 0 0 1-9.201-4.42 1.75 1.75 0 1 1 2.971 1.506 2.001 2.001 0 0 0 3.26 1.415 1.75 1.75 0 1 1 2.97 1.5Z"
-                                                    clip-rule="evenodd"
-                                                />
-                                                <path d="M4.688 8.576a5.5 5.5 0 0 1 9.201 4.42 1.75 1.75 0 1 1-2.971-1.506 2.001 2.001 0 0 0-3.26-1.415 1.75 1.75 0 1 1-2.97-1.5Z" />
-                                            </svg>
-                                            "Refresh Preview"
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <a
-                                            class="inline-flex items-center gap-x-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition duration-150 ease-in-out"
-
-                                            href=move || {
-                                                format!("http://{}.{}/", slug(), hosting_url())
-                                            }
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            "View Live Project"
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                viewBox="0 0 20 20"
-                                                fill="currentColor"
-                                                class="w-4 h-4"
-                                                aria-hidden="true"
-                                            >
-                                                <path
-                                                    fill-rule="evenodd"
-                                                    d="M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h4a.75.75 0 0 1 0 1.5h-4Zm6.5-1.75a.75.75 0 0 0 0-1.5h4.5a.75.75 0 0 0 .75-.75V1a.75.75 0 0 0-1.5 0v3.75h-3.75a.75.75 0 0 0-.75.75Z"
-                                                    clip-rule="evenodd"
-                                                />
-                                            </svg>
-                                        </a>
-                                    </div>
-                                    <iframe
-                                        class="mt-4 w-full h-80 border border-gray-600 rounded-lg bg-gray-800 shadow-inner"
-                                        src=move || {
-                                            format!(
-                                                "http://{}.{}/?_cb={}",
-                                                slug(),
-                                                hosting_url(),
-                                                preview_version.get(),
-                                            )
+                                {move || {
+                                    if deploy_prod_action.pending().get() {
+                                        if is_auto_deploy() {
+                                            "Disabling Auto Deploy..."
+                                        } else {
+                                            "Enabling Auto Deploy..."
                                         }
-                                        title=format!("Live preview for project: {}", slug())
-                                    />
+                                    } else if is_auto_deploy() {
+                                        "Disable Auto Deploy"
+                                    } else {
+                                        "Enable Auto Deploy"
+                                    }
+                                }}
+                            </button>
+                        </div>
+
+                        // Development Status
+                        <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
+                            <div>
+                                <p class="font-medium text-white">Development Status</p>
+                                <Show
+                                    when=move || dev_is_behind()
+                                    fallback=move || {
+                                        view! {
+                                            <p class="text-sm text-green-400">
+                                                {format!(
+                                                    "Up-to-date (Commit: {})",
+                                                    commit_display(&current_dev_commit()),
+                                                )}
+                                            </p>
+                                        }
+                                    }
+                                >
+                                    <p class="text-sm text-yellow-400">
+                                        {format!(
+                                            "Behind. Synced: {}, Latest: {}",
+                                            commit_display(&current_dev_commit()),
+                                            commit_display(&last_commit()),
+                                        )}
+                                    </p>
+                                </Show>
+                            </div>
+                            <Show when=move || dev_is_behind()>
+                                <div class="flex space-x-2">
+                                    <button
+                                        class="btn btn-secondary"
+                                        on:click=move |_| {
+                                            sync_dev_action.dispatch((csrf(), server_id(), slug()));
+                                            project_update_signal
+                                                .write_only()
+                                                .set(project_update_signal.read_only().get().tick());
+                                        }
+                                        disabled=sync_dev_action.pending().get()
+                                    >
+                                        {if sync_dev_action.pending().get() {
+                                            "Syncing..."
+                                        } else {
+                                            "Sync Development"
+                                        }}
+                                    </button>
                                 </div>
                             </Show>
-
                         </div>
 
-                        // --- Danger Zone ---
-                        // Subtle red border hint
-                        <div class="pb-6" class=("hidden", move || !permission_signal().is_owner())>
-                            // Red title
-                            <h2 class="section-title text-red-400">"Danger Zone"</h2>
-                            <p class="section-desc">
-                                "These actions are permanent and cannot be undone."
-                            </p>
-                            <div class="mt-6 flex items-center justify-between">
-                                <div>
-                                    <p class="text-sm font-medium text-white">
-                                        "Delete this project"
-                                    </p>
-                                    <p class="text-xs text-gray-400">
-                                        "All associated data and files will be permanently removed."
-                                    </p>
-                                </div>
-                                <button
-                                    class="btn btn-danger"
-                                    on:click=on_delete_project
-                                    disabled=move || delete_project_action.pending().get()
+                        // Change Default Branch
+                        <div class="p-3 bg-gray-800 rounded-md">
+                            <p class="form-label">"Change Default Branch"</p>
+                            <Transition fallback=move || {
+                                view! { <p class="text-sm text-gray-400">"Loading branches..."</p> }
+                            }>
+                                {move || Suspend::new(async move {
+                                    let branches = branches_resource.try_get().flatten();
+                                    match branches {
+                                        Some(Ok(branches)) => {
+                                            if branches.is_empty() {
+                                                EitherOf4::A(
+                                                    view! {
+                                                        <p class="text-sm text-yellow-400">
+                                                            "No other branches found."
+                                                        </p>
+                                                    },
+                                                )
+                                            } else {
+                                                let branch_select_ref = NodeRef::<Select>::new();
+                                                EitherOf4::B(
+                                                    view! {
+                                                        <div class="flex items-end space-x-2 mt-2">
+                                                            <select
+                                                                class="form-select flex-grow"
+                                                                node_ref=branch_select_ref
+                                                            >
+                                                                <option value="">"-- Select new branch --"</option>
+                                                                {branches
+                                                                    .into_iter()
+                                                                    .filter(|b| b.name != branch_name())
+                                                                    .map(|branch| {
+                                                                        // Don't show current branch as an option to switch to
+                                                                        view! {
+                                                                            <option value=format!(
+                                                                                "{}={}",
+                                                                                branch.name.clone(),
+                                                                                branch.commit,
+                                                                            )>{branch.name.clone()}</option>
+                                                                        }
+                                                                    })
+                                                                    .collect::<Vec<_>>()}
+                                                            </select>
+                                                            <button
+                                                                class="btn btn-warning min-w-[8rem]"
+                                                                on:click=move |_| {
+                                                                    if let Some(select_el) = branch_select_ref.get() {
+                                                                        let val = select_el.value();
+                                                                        if !val.is_empty() {
+                                                                            let parts: Vec<&str> = val.split('=').collect();
+                                                                            if parts.len() == 2 {
+                                                                                let branch_name = parts[0].to_string();
+                                                                                let branch_commit = parts[1].to_string();
+                                                                                update_branch_action
+                                                                                    .dispatch((
+                                                                                        csrf(),
+                                                                                        server_id(),
+                                                                                        slug(),
+                                                                                        branch_name.clone(),
+                                                                                        branch_commit.clone(),
+                                                                                    ));
+                                                                                project_update_signal
+                                                                                    .write_only()
+                                                                                    .set(project_update_signal.read_only().get().tick());
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                disabled=update_branch_action.pending().get()
+                                                            >
+                                                                {if update_branch_action.pending().get() {
+                                                                    "Updating..."
+                                                                } else {
+                                                                    "Update Branch"
+                                                                }}
+                                                            </button>
+                                                        </div>
+                                                    },
+                                                )
+                                            }
+                                        }
+                                        Some(Err(e)) => {
+                                            EitherOf4::C(
+                                                view! {
+                                                    <p class="text-sm text-red-400">
+                                                        {format!("Error loading branches: {e}")}
+                                                    </p>
+                                                },
+                                            )
+                                        }
+                                        None => {
+                                            EitherOf4::D(
+                                                view! {
+                                                    <p class="text-sm text-gray-400">"Loading branches..."</p>
+                                                },
+                                            )
+                                        }
+                                    }
+                                })}
+                            </Transition>
+                        </div>
+                    </div>
+                </div>
+            </Show>
+            <div class="section-border">
+                <h2 class="section-title">"Project Status & Activation"</h2>
+                <p class="section-desc">"Control whether your project is live and accessible."</p>
+                <Show
+                    when=move || is_active()
+                    fallback=move || {
+                        view! {
+                            <div class="flex items-center my-2">
+                                <p class="text-sm font-medium text-white">"Project is not live"</p>
+                                <p class="text-xs text-gray-400 ml-4">
+                                    "Set a Snapshot as active to make it live."
+                                </p>
+                            </div>
+                        }
+                    }
+                >
+
+                    <div class="mt-6 pt-6 border-t border-gray-700 space-y-4">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-base font-semibold leading-6 text-white">
+                                "Live Preview & Link"
+                            </h3>
+                            <button class="btn btn-secondary" on:click=move |_| refresh_preview()>
+                                // Optional: Refresh Icon
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                    class="w-4 h-4 mr-1"
                                 >
-                                    "Delete Project"
-                                </button>
-                            </div>
-                            <div class="mt-2 text-sm text-right min-h-[1.25em]">
-                                {delete_project_action_result}
-                            </div>
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M15.312 11.424a5.5 5.5 0 0 1-9.201-4.42 1.75 1.75 0 1 1 2.971 1.506 2.001 2.001 0 0 0 3.26 1.415 1.75 1.75 0 1 1 2.97 1.5Z"
+                                        clip-rule="evenodd"
+                                    />
+                                    <path d="M4.688 8.576a5.5 5.5 0 0 1 9.201 4.42 1.75 1.75 0 1 1-2.971-1.506 2.001 2.001 0 0 0-3.26-1.415 1.75 1.75 0 1 1-2.97-1.5Z" />
+                                </svg>
+                                "Refresh Preview"
+                            </button>
                         </div>
+                        <div>
+                            <a
+                                class="inline-flex items-center gap-x-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition duration-150 ease-in-out"
+
+                                href=move || { format!("http://{}.{}/", slug(), hosting_url()) }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                "View Live Project"
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                    class="w-4 h-4"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        fill-rule="evenodd"
+                                        d="M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h4a.75.75 0 0 1 0 1.5h-4Zm6.5-1.75a.75.75 0 0 0 0-1.5h4.5a.75.75 0 0 0 .75-.75V1a.75.75 0 0 0-1.5 0v3.75h-3.75a.75.75 0 0 0-.75.75Z"
+                                        clip-rule="evenodd"
+                                    />
+                                </svg>
+                            </a>
+                        </div>
+                        <iframe
+                            class="mt-4 w-full h-80 border border-gray-600 rounded-lg bg-gray-800 shadow-inner"
+                            src=move || {
+                                format!(
+                                    "http://{}.{}/?_cb={}",
+                                    slug(),
+                                    hosting_url(),
+                                    preview_version.get(),
+                                )
+                            }
+                            title=format!("Live preview for project: {}", slug())
+                        />
+                    </div>
+                </Show>
+
+            </div>
+
+            // --- Danger Zone ---
+            // Subtle red border hint
+            <div class="pb-6" class=("hidden", move || !permission_signal().is_owner())>
+                // Red title
+                <h2 class="section-title text-red-400">"Danger Zone"</h2>
+                <p class="section-desc">"These actions are permanent and cannot be undone."</p>
+                <div class="mt-6 flex items-center justify-between">
+                    <div>
+                        <p class="text-sm font-medium text-white">"Delete this project"</p>
+                        <p class="text-xs text-gray-400">
+                            "All associated data and files will be permanently removed."
+                        </p>
+                    </div>
+                    <button
+                        class="btn btn-danger"
+                        on:click=on_delete_project
+                        disabled=move || delete_project_action.pending().get()
+                    >
+                        "Delete Project"
+                    </button>
+                </div>
+                <div class="mt-2 text-sm text-right min-h-[1.25em]">
+                    {delete_project_action_result}
+                </div>
+            </div>
         </div>
     }
 }

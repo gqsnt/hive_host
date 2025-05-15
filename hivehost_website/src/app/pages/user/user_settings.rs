@@ -264,7 +264,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                             {account.login.clone()}
                                                                         </a>
 
-                                                                        <Show when=move || account.suspended >
+                                                                        <Show when=move || account.suspended>
                                                                             <span
                                                                                 class="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-yellow-600 text-white"
                                                                                 title="This integration is currently suspended on GitHub."
@@ -281,7 +281,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                 <div class="flex justify-center mt-4">
                                                     <a
                                                         href="https://github.com/apps/hivehost-git"
-                                                        // Use secondary style maybe? Or keep primary. Added flex for icon.
                                                         class="btn btn-secondary inline-flex items-center gap-x-2"
                                                         target="_blank"
                                                         rel="noopener noreferrer"
@@ -295,7 +294,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                                 }
                                 Err(e) => {
                                     EitherOf3::C(
-                                        // --- Error State ---
                                         view! {
                                             <div class="text-red-400 text-center py-6">
                                                 {format!("Error loading linked GitHub accounts: {e}")}
