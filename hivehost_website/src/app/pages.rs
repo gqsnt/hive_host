@@ -1,7 +1,8 @@
 use crate::models::{Project, User};
 use common::server_action::permission::Permission;
 use common::Slug;
-use reactive_stores::Store;
+use reactive_stores::{ Store};
+
 
 pub mod home;
 pub mod login;
@@ -12,7 +13,7 @@ pub mod user;
 pub struct GlobalState {
     pub csrf: Option<String>,
     pub user: Option<(Slug, User)>,
-    pub project: Option<ProjectState>,
+    pub project_state: Option<ProjectState>,
 }
 
 

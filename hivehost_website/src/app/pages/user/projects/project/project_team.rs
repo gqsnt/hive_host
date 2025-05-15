@@ -4,7 +4,7 @@ use crate::app::IntoView;
 
 use common::server_action::permission::Permission;
 
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectStateStoreFields};
 use leptos::either::EitherOf3;
 use leptos::logging::log;
 use leptos::prelude::{CollectView, NodeRef, NodeRefAttribute, OnAttribute};
@@ -17,7 +17,7 @@ use leptos::prelude::{
 use leptos::prelude::{signal, Effect, Read, Set, Signal, Transition};
 use leptos::{component, view};
 use leptos::html::{Input, Select};
-use reactive_stores::Store;
+use reactive_stores::{OptionStoreExt, Store};
 use strum::IntoEnumIterator;
 use common::UserId;
 
@@ -26,7 +26,7 @@ pub fn ProjectTeam() -> impl IntoView {
     let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
     let slug = move || project_slug_signal.read().0.clone();
-    let server_id = move || global_state.project().read().as_ref().unwrap().project.server_id;
+    let server_id = move || global_state.project_state().unwrap().project().read().server_id;
     let update_member = ServerAction::<server_fns::UpdateProjectTeamPermission>::new();
     let add_member = ServerAction::<server_fns::AddProjectTeamPermission>::new();
     let delete_member = ServerAction::<server_fns::DeleteProjectTeamMember>::new();
@@ -36,11 +36,10 @@ pub fn ProjectTeam() -> impl IntoView {
 
     let permission_signal = Signal::derive(move || 
         global_state
-            .project()
+            .project_state()
+            .unwrap()
             .read()
-            .as_ref()
-            .map(|p| p.permission)
-            .unwrap_or_default()
+            .permission
     );
 
     let team_res = Resource::new_bincode(

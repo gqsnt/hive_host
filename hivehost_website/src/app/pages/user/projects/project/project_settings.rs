@@ -1,26 +1,24 @@
 use crate::app::pages::user::projects::project::{ProjectSlugSignal, ProjectUpdateSignal};
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectStateStoreFields};
 use crate::app::{commit_display, IntoView};
 use common::{ProjectSlugStr, ServerId};
-use leptos::prelude::{IntoMaybeErased, NodeRef, NodeRefAttribute, Read, Resource, RwSignal, Set, Suspend, Suspense, Transition, Update, Write};
+use leptos::prelude::{IntoMaybeErased, NodeRef, NodeRefAttribute, Read, Resource, RwSignal, Set, Suspend, Transition};
 use leptos::prelude::{expect_context, Action, ElementChild, Signal};
 use leptos::prelude::{signal, ClassAttribute, OnAttribute};
 use leptos::prelude::{CustomAttribute, Effect};
 use leptos::prelude::{Get, GlobalAttributes, Show};
 use leptos::{component, view};
 use leptos::either::{EitherOf3, EitherOf4};
-use leptos::html::{Input, Select};
-use reactive_stores::Store;
+use leptos::html::{Select};
+use reactive_stores::{OptionStoreExt, Store};
 use crate::app::pages::user::projects::new_project::server_fns::get_github_repo_branches;
-
-
-
+use crate::models::{GitProjectStoreFields, ProjectStoreFields};
 
 #[component]
 pub fn ProjectSettings() -> impl IntoView {
     let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
-    let project_update_signal : RwSignal<ProjectUpdateSignal> = expect_context();
+    let project_update_signal: RwSignal<ProjectUpdateSignal> = expect_context();
     let slug = move ||
         project_slug_signal.get().0;
 
@@ -66,76 +64,122 @@ pub fn ProjectSettings() -> impl IntoView {
         }
     });
 
+    let server_id = move || global_state.project_state().unwrap().project().read().server_id;
+
+    let git_project = move || global_state
+        .project_state()
+        .unwrap()
+        .project()
+        .git_project();
+
+    let has_git_projet = Signal::derive(move ||
+        git_project()
+            .read()
+            .is_some()
+    );
+    let is_active = Signal::derive(move ||
+        global_state.project_state().unwrap().project()
+            .active_snapshot_id().read().is_some()
+    );
+    let permission_signal = Signal::derive(move ||
+        global_state
+            .project_state().unwrap()
+            .read().permission
+    );
+    let hosting_url = Signal::derive(move ||
+        global_state.project_state().unwrap().project()
+            .hosting_address().get()
+    );
+    let on_delete_project = move |_| {
+        let project_slug = slug();
+        let confirmed = web_sys::window()
+            .map(|window| {
+                window
+                    .confirm_with_message(
+                        &format!(
+                            "Are you sure you want to delete the project '{project_slug}'?",
+                        ),
+                    )
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false);
+        if !confirmed {
+            return;
+        }
+        delete_project_action.dispatch((server_id(), project_slug, csrf()));
+    };
+
+    let current_prod_commit = Signal::derive(move ||
+        git_project()
+            .unwrap()
+            .prod_branch_commit()
+            .get()
+            .map(|(_, prod_commit)| prod_commit)
+    );
+    let current_prod_branch = Signal::derive(move ||
+        git_project()
+            .unwrap()
+            .prod_branch_commit()
+            .get()
+            .map(|(branch_name, _)| branch_name)
+    );
+    let current_dev_commit = Signal::derive(move ||
+         git_project()
+                                                    .unwrap()
+                                                    .dev_commit()
+                                                    .get()
+    );
+    let last_commit = Signal::derive(move ||
+        git_project()
+            .unwrap()
+            .last_commit()
+            .get()
+    );
+    let repo_full_name = Signal::derive(move ||
+        git_project()
+            .unwrap()
+            .repo_full_name()
+            .get()
+    );
+    let branch_name = Signal::derive(move ||
+        git_project()
+            .unwrap()
+            .branch_name()
+            .get()
+    );
+    let is_auto_deploy = Signal::derive(move ||
+        git_project()
+            .unwrap()
+            .auto_deploy()
+            .get()
+    );
+
+    let user_githubs_id = Signal::derive(move ||
+        git_project()
+            .unwrap()
+            .user_githubs_id()
+            .get()
+    );
+    let branches_resource = Resource::new_bincode(
+        move || { (csrf(), user_githubs_id(), repo_full_name()) },
+        |(csrf, user_githubs_id, repo)| {
+            get_github_repo_branches(csrf, Some(user_githubs_id), repo)
+        },
+    );
+    let prod_is_behind = Signal::derive(move || {
+        let prod_commit = current_prod_commit();
+        prod_commit.is_none()
+            || !prod_commit.unwrap().eq(&last_commit())
+    });
+    let dev_is_behind = Signal::derive(move || {
+        !current_dev_commit().eq(&last_commit())
+    });
 
     view! {
         <div class="space-y-10">
-            <Transition fallback=move || {
-                view! { "Loading ..." }
-            }>
-                {move || Suspend::new(async move {
-                    let server_id = move || {
-                        global_state
-                            .project()
-                            .read()
-                            .as_ref()
-                            .map(|p| p.project.server_id)
-                            .unwrap_or_default()
-                    };
-                    let has_git_projet = Signal::derive(move || {
-                        global_state
-                            .project()
-                            .read()
-                            .as_ref()
-                            .map(|inner| inner.project.git_project.is_some())
-                            .unwrap_or_default()
-                    });
-                    let is_active = Signal::derive(move || {
-                        global_state
-                            .project()
-                            .read()
-                            .as_ref()
-                            .and_then(|inner| inner.project.active_snapshot_id)
-                            .is_some()
-                    });
-                    let permission_signal = Signal::derive(move || {
-                        global_state
-                            .project()
-                            .read()
-                            .as_ref()
-                            .map(|p| p.permission)
-                            .unwrap_or_default()
-                    });
-                    let hosting_url = Signal::derive(move || {
-                        global_state
-                            .project()
-                            .read()
-                            .as_ref()
-                            .map(|p| p.project.hosting_address.clone())
-                            .unwrap_or_default()
-                    });
-                    let on_delete_project = move |_| {
-                        let project_slug = slug();
-                        let confirmed = web_sys::window()
-                            .map(|window| {
-                                window
-                                    .confirm_with_message(
-                                        &format!(
-                                            "Are you sure you want to delete the project '{project_slug}'?",
-                                        ),
-                                    )
-                                    .unwrap_or(false)
-                            })
-                            .unwrap_or(false);
-                        if !confirmed {
-                            return;
-                        }
-                        delete_project_action.dispatch((server_id(), project_slug, csrf()));
-                    };
-
-                    view! {
-                        <Show
-                            when=move || has_git_projet()
-                            fallback=|| {
+             <Show
+                when=move || has_git_projet()
+                            fallback=move || {
                                 view! {
                                     <div class="text-gray-400">
                                         "Project is not linked to GitHub."
@@ -143,153 +187,7 @@ pub fn ProjectSettings() -> impl IntoView {
                                 }
                             }
                         >
-                            {
-                                let current_prod_commit = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner
-                                                .project
-                                                .git_project
-                                                .as_ref()
-                                                .and_then(|g| {
-                                                    g.prod_branch_commit.as_ref().map(|prod| prod.1.clone())
-                                                })
-                                        })
-                                };
-                                let current_prod_branch = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner
-                                                .project
-                                                .git_project
-                                                .as_ref()
-                                                .and_then(|g| {
-                                                    g.prod_branch_commit.as_ref().map(|prod| prod.0.clone())
-                                                })
-                                        })
-                                };
-                                let current_dev_commit = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner
-                                                .project
-                                                .git_project
-                                                .as_ref()
-                                                .map(|g| g.dev_commit.clone())
-                                        })
-                                        .unwrap_or_default()
-                                };
-                                let last_commit = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner
-                                                .project
-                                                .git_project
-                                                .as_ref()
-                                                .map(|g| g.last_commit.clone())
-                                        })
-                                        .unwrap_or_default()
-                                };
-                                let repo_full_name = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner
-                                                .project
-                                                .git_project
-                                                .as_ref()
-                                                .map(|g| g.repo_full_name.clone())
-                                        })
-                                        .unwrap_or_default()
-                                };
-                                let branch_name = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner
-                                                .project
-                                                .git_project
-                                                .as_ref()
-                                                .map(|g| g.branch_name.clone())
-                                        })
-                                        .unwrap_or_default()
-                                };
-                                let is_auto_deploy = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner.project.git_project.as_ref().map(|g| g.auto_deploy)
-                                        })
-                                        .unwrap_or_default()
-                                };
-                                let installation_id = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner
-                                                .project
-                                                .git_project
-                                                .as_ref()
-                                                .map(|g| g.installation_id)
-                                        })
-                                        .unwrap_or_default()
-                                };
-                                let user_githubs_id = move || {
-                                    global_state
-                                        .project()
-                                        .read()
-                                        .as_ref()
-                                        .and_then(|inner| {
-                                            inner
-                                                .project
-                                                .git_project
-                                                .as_ref()
-                                                .map(|g| g.user_githubs_id)
-                                        })
-                                        .unwrap_or_default()
-                                };
-                                let branches_resource = Resource::new_bincode(
-                                    move || { (csrf(), user_githubs_id(), repo_full_name()) },
-                                    |(csrf, user_githubs_id, repo)| {
-                                        get_github_repo_branches(csrf, Some(user_githubs_id), repo)
-                                    },
-                                );
-                                let prod_is_behind = move || {
-                                    let prod_commit = current_prod_commit();
-                                    prod_commit.is_none()
-                                        || !prod_commit.unwrap().eq(&last_commit())
-                                };
-                                let dev_is_behind = move || {
-                                    !current_dev_commit().eq(&last_commit())
-                                };
-                                let can_deploy_to_prod = move || {
-                                    !current_dev_commit()
-                                        .eq(&current_prod_commit().unwrap_or_default())
-                                };
-                                let delete_untracked_ref = NodeRef::<Input>::new();
-
-                                view! {
-                                    <div class="section-border">
+                           <div class="section-border">
                                         <h2 class="section-title">"Project GitHub Repository"</h2>
                                         <p class="section-desc">
                                             {format!(
@@ -302,14 +200,14 @@ pub fn ProjectSettings() -> impl IntoView {
                                             <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
                                                 <div>
                                                     <p class="font-medium text-white">
-                                                        {move || {
+                                                        {
                                                             format!(
                                                                 "Production Status{}",
                                                                 current_prod_branch()
-                                                                    .map(|b| format!(" (Branch: {})", b))
+                                                                    .map(|b| format!(" (Branch: {b})"))
                                                                     .unwrap_or_default(),
                                                             )
-                                                        }}
+                                                        }
                                                     </p>
                                                     {move || match (
                                                         prod_is_behind(),
@@ -362,19 +260,17 @@ pub fn ProjectSettings() -> impl IntoView {
                                                     }
                                                     disabled=deploy_prod_action.pending().get()
                                                 >
-                                                    {if deploy_prod_action.pending().get() {
+                                                    {move || if deploy_prod_action.pending().get() {
                                                         if is_auto_deploy() {
                                                             "Disabling Auto Deploy..."
                                                         } else {
                                                             "Enabling Auto Deploy..."
                                                         }
-                                                    } else {
-                                                        if is_auto_deploy() {
-                                                            "Disable Auto Deploy"
-                                                        } else {
+                                                    } else if is_auto_deploy() {
+                                                         "Disable Auto Deploy"
+                                                    }else {
                                                             "Enable Auto Deploy"
-                                                        }
-                                                    }}
+                                                        }}
                                                 </button>
                                             </div>
 
@@ -531,8 +427,6 @@ pub fn ProjectSettings() -> impl IntoView {
                                             </div>
                                         </div>
                                     </div>
-                                }
-                            }
                         </Show>
                         <div class="section-border">
                             <h2 class="section-title">"Project Status & Activation"</h2>
@@ -653,22 +547,15 @@ pub fn ProjectSettings() -> impl IntoView {
                                 {delete_project_action_result}
                             </div>
                         </div>
-                    }
-                })}
-            </Transition>
         </div>
     }
 }
 
 pub mod server_fns {
-    use leptos::logging::log;
     use crate::AppResult;
     use common::{ProjectSlugStr, ServerId};
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
-    use common::server_action::project_action::git_action::ProjectGitAction;
-    use crate::app::pages::user::projects::new_project::server_fns::get_github_repo_branches;
-    use crate::models::GitProject;
 
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
@@ -680,6 +567,7 @@ pub mod server_fns {
         use common::server_action::project_action::snapshot::ProjectSnapshotAction;
         use common::server_action::user_action::ServerUserAction;
             use crate::ssr::ws_clients;
+        use crate::ssr::server_vars;
     }}
 
     #[server(input=Bincode, output=Bincode)]
@@ -694,7 +582,17 @@ pub mod server_fns {
             Some(csrf.clone()),
             move |_, db, proj_slug| async move {
                 let project_git = sqlx::query!(
-                    "SELECT p.id as project_id,  pgi.id as project_github_id, pgi.last_commit as last_commit, pgi.branch_name as branch_name  FROM projects p left join projects_github pgi on p.project_github_id = pgi.id  WHERE p.id = $1",
+                    r#"SELECT
+                            p.id as project_id,
+                            pgi.id as project_github_id,
+                            pgi.last_commit as last_commit,
+                            pgi.branch_name as branch_name,
+                            pgi.repo_full_name as repo_full_name,
+                            ug.installation_id as installation_id
+                        FROM projects p
+                            left join projects_github pgi on p.project_github_id = pgi.id
+                            left join user_githubs ug on pgi.user_githubs_id = ug.id
+                        WHERE p.id = $1"#,
                     proj_slug.id
                 )
                     .fetch_one(&db)
@@ -702,6 +600,9 @@ pub mod server_fns {
                 ssr::inner_update_dev_with_git(
                     &db,
                     ws_clients()?,
+                    &server_vars()?,
+                    project_git.installation_id,
+                    project_git.repo_full_name,
                     server_id,
                     proj_slug,
                     project_git.project_github_id,
@@ -709,7 +610,7 @@ pub mod server_fns {
                     project_git.last_commit,
                 ).await?;
 
-                
+
                 Ok(())
             },
         )
@@ -727,7 +628,7 @@ pub mod server_fns {
             project_slug,
             Permission::Owner,
             Some(csrf),
-            move |auth_user_id, db, proj_slug| async move {
+            move |_, db, proj_slug| async move {
                 let project_git = sqlx::query!(
                     "SELECT
                         p.id as project_id,
@@ -735,10 +636,14 @@ pub mod server_fns {
                         pgi.last_commit as last_commit,
                         pgi.dev_commit as dev_commit,
                         pgi.branch_name as branch_name,
-                        ps.git_commit as prod_commit
+                        ps.git_commit as prod_commit,
+                        pgi.repo_full_name as repo_full_name,
+                        ug.installation_id as installation_id
+
                     FROM projects p 
                         left join projects_github pgi on p.project_github_id = pgi.id
                         left join projects_snapshots ps on ps.project_id = p.id
+                        left join user_githubs ug on pgi.user_githubs_id = ug.id
                     WHERE p.id = $1",
                     proj_slug.id
                 )
@@ -755,6 +660,9 @@ pub mod server_fns {
                     ssr::handle_auto_deploy_git(
                         &db,
                         ws_clients()?,
+                        &server_vars()?,
+                        project_git.installation_id,
+                        project_git.repo_full_name,
                         server_id,
                         proj_slug,
                         project_git.project_github_id,
@@ -782,45 +690,55 @@ pub mod server_fns {
             project_slug,
             Permission::Write,
             Some(csrf),
-            move |auth_user_id, db, proj_slug| async move {
+            move |_, db, proj_slug| async move {
                 let project_git = sqlx::query!(
                     "SELECT 
                         pgi.id as project_github_id, 
                         pgi.auto_deploy as auto_deploy,
-                        ps.git_commit as prod_commit
+                        ps.git_commit as prod_commit,
+                        pgi.dev_commit as dev_commit,
+                        ug.installation_id as installation_id,
+                        pgi.repo_full_name as repo_full_name
                     FROM projects p 
                         left join projects_github pgi on p.project_github_id = pgi.id
                         left join projects_snapshots ps on ps.project_id = p.id
+                        left join user_githubs ug on pgi.user_githubs_id = ug.id
                     WHERE p.id = $1",
                     proj_slug.id
                 )
                     .fetch_one(&db)
                     .await?;
-                let dev_commit = sqlx::query!(
-                    "UPDATE projects_github SET branch_name = $1, last_commit = $2 WHERE id = $3 returning dev_commit",
+                 sqlx::query!(
+                    "UPDATE projects_github SET branch_name = $1, last_commit = $2 WHERE id = $3",
                     new_branch_name,
                     new_branch_commit,
                     project_git.project_github_id,
                 )
-                    .fetch_one(&db)
+                    .execute(&db)
                     .await?;
-                
+
                 if project_git.auto_deploy {
                     ssr::handle_auto_deploy_git(
                         &db,
                         ws_clients()?,
+                        &server_vars()?,
+                        project_git.installation_id,
+                        project_git.repo_full_name,
                         server_id,
                         proj_slug,
                         project_git.project_github_id,
                         new_branch_name.clone(),
-                        dev_commit.dev_commit,
+                        project_git.dev_commit,
                         project_git.prod_commit,
                         new_branch_commit,
                     ).await?;
-                }else{
+                } else {
                     ssr::inner_update_dev_with_git(
                         &db,
                         ws_clients()?,
+                        &server_vars()?,
+                        project_git.installation_id,
+                        project_git.repo_full_name,
                         server_id,
                         proj_slug,
                         project_git.project_github_id,
@@ -828,7 +746,7 @@ pub mod server_fns {
                         new_branch_commit,
                     ).await?;
                 }
-               
+
                 Ok(())
             },
         )
@@ -900,25 +818,28 @@ pub mod server_fns {
 
     #[cfg(feature = "ssr")]
     pub mod ssr {
-        use common::{ProjectSlugStr, ServerId, Slug};
+        use common::{ServerId, Slug};
         use common::server_action::project_action::git_action::ProjectGitAction;
         use crate::api::ssr::request_server_project_action;
-        use crate::app::pages::user::projects::project::project_settings::commit_display;
-        use crate::app::pages::user::projects::project::project_settings::server_fns::ssr;
         use crate::app::pages::user::projects::project::project_snapshots::server_fns::ssr::inner_set_snapshot_prod;
         use crate::app::pages::user::projects::project::project_snapshots::server_fns::ssr::inner_create_snapshot;
         use crate::AppResult;
-        use crate::ssr::WsClients;
+        use crate::github::ssr::get_authenticated_git_client;
+        use crate::ssr::{ServerVars, WsClients};
 
+        #[allow(clippy::too_many_arguments)]
         pub async fn inner_update_dev_with_git(
-            pool:&sqlx::PgPool,
+            pool: &sqlx::PgPool,
             ws_clients: WsClients,
-            server_id:ServerId,
-            project_slug:Slug,
-            project_github_id:i64,
-            branch_name:String,
-            last_commit:String,
-        )->AppResult<()>{
+            server_vars:&ServerVars,
+            installation_id:i64,
+            repo_full_name:String,
+            server_id: ServerId,
+            project_slug: Slug,
+            project_github_id: i64,
+            branch_name: String,
+            last_commit: String,
+        ) -> AppResult<()> {
             sqlx::query!(
                 "UPDATE projects_github SET dev_commit = $1 WHERE id = $2",
                 last_commit,
@@ -926,49 +847,57 @@ pub mod server_fns {
             )
                 .execute(pool)
                 .await?;
-
+            let (token , _ ) = get_authenticated_git_client(server_vars, installation_id).await?;
             request_server_project_action(
                 server_id,
                 project_slug,
                 ProjectGitAction::Pull {
                     branch: branch_name,
                     commit: last_commit,
+                    token,
+                    repo_full_name,
                 }.into(),
                 Some(ws_clients),
             ).await?;
             Ok(())
         }
-        
 
+        #[allow(clippy::too_many_arguments)]
         pub async fn handle_auto_deploy_git(
             pool: &sqlx::PgPool,
             ws_clients: WsClients,
+            server_vars:&ServerVars,
+            installation_id:i64,
+            repo_full_name:String,
             server_id: ServerId,
             project_slug: Slug,
             project_github_id: i64,
-            branch_name:String,
-            dev_commit:String,
-            prod_commit:Option<String>,
-            last_commit:String,
+            branch_name: String,
+            dev_commit: String,
+            prod_commit: Option<String>,
+            last_commit: String,
         ) -> AppResult<()> {
             let mut dev_commit = dev_commit;
-            if !dev_commit.eq(&last_commit){
+            if !dev_commit.eq(&last_commit) {
                 inner_update_dev_with_git(
                     pool,
                     ws_clients.clone(),
+                    server_vars,
+                    installation_id,
+                    repo_full_name,
                     server_id,
                     project_slug.clone(),
                     project_github_id,
                     branch_name.clone(),
                     last_commit.clone(),
                 ).await?;
-                dev_commit =  last_commit;
+                dev_commit = last_commit;
             }
             if prod_commit.is_none() || !prod_commit.clone().unwrap_or_default().eq(&dev_commit) {
-                let project_snapshot_id = inner_create_snapshot(pool,ws_clients.clone(), server_id, project_slug.clone(), None, None,Some(branch_name.clone()), Some(dev_commit.clone())).await?;
-                inner_set_snapshot_prod(pool,ws_clients.clone(), server_id, project_slug.clone(), project_snapshot_id).await?;
+                let project_snapshot_id = inner_create_snapshot(pool, ws_clients.clone(), server_id, project_slug.clone(), None, None, Some(branch_name.clone()), Some(dev_commit.clone())).await?;
+                inner_set_snapshot_prod(pool, ws_clients.clone(), server_id, project_slug.clone(), project_snapshot_id).await?;
             }
-            
+
             Ok(())
         }
     }

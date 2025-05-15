@@ -1,6 +1,6 @@
 use crate::server_action::permission::Permission;
 use crate::server_action::project_action::{IsProjectServerAction, ProjectAction};
-use crate::{Slug, impl_chain_from};
+use crate::{impl_chain_from};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -8,6 +8,9 @@ pub enum ProjectGitAction {
     Pull {
         branch: String,
         commit: String,
+        repo_full_name:String,
+        token:String,
+        
     }
 }
 

@@ -1,11 +1,11 @@
 use crate::app::pages::user::projects::project::project_snapshots::server_fns::{CreateProjectSnapshot, DeleteProjectSnapshot, RestoreProjectSnapshot, SetActiveProjectSnapshot, UnsetActiveProjectSnapshot};
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectStateStoreFields};
 use crate::app::{commit_display, IntoView};
 use leptos::either::{Either, EitherOf3};
 use leptos::html::{Input, Textarea};
 use leptos::prelude::*;
-use reactive_stores::Store;
+use reactive_stores::{OptionStoreExt, Store};
 use web_sys::SubmitEvent;
 
 #[component]
@@ -15,23 +15,23 @@ pub fn ProjectSnapshots() -> impl IntoView {
 
     let permission_signal = Signal::derive(move || {
         global_state
-            .project()
+            .project_state()
+            .unwrap()
             .read()
-            .as_ref()
-            .map(|p| p.permission)
-            .unwrap_or_default()
+            .permission
     });
 
     let slug_signal = Signal::derive(move || project_slug_signal.get().0);
-    let server_id = move || global_state.project().read().as_ref().unwrap().project.server_id;
+    let server_id = move || global_state.project_state().unwrap().project().read().server_id;
 
     let csrf_signal = Signal::derive(move || global_state.csrf().get());
     let active_snapshot_id_signal = Signal::derive(move || {
         global_state
+            .project_state()
+            .unwrap()
             .project()
             .read()
-            .as_ref()
-            .and_then(|p| p.project.active_snapshot_id)
+            .active_snapshot_id
     });
 
     // --- Actions ---
@@ -164,7 +164,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
             project_slug: slug_signal(),
             snapshot_id,
         });
-        global_state.project().update(|project_opt| {
+        global_state.project_state().update(|project_opt| {
             match project_opt{
                 None => {}
                 Some(p_state) => {
@@ -180,7 +180,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
             csrf: csrf_signal.get().unwrap_or_default(),
             project_slug: slug_signal(),
         });
-        global_state.project().update(|project_opt| {
+        global_state.project_state().update(|project_opt| {
             match project_opt{
                 None => {}
                 Some(p_state) => {
@@ -493,7 +493,7 @@ pub mod server_fns {
     
     use crate::models::ProjectSnapshot;
     use crate::AppResult;
-    use common::{ProjectSlugStr, ServerId, Slug};
+    use common::{ProjectSlugStr, ServerId};
     
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
@@ -758,7 +758,8 @@ pub mod server_fns {
         use common::{ServerId, Slug};
         use crate::api::ssr::request_server_project_action;
         use crate::ssr::WsClients;
-
+        
+        #[allow(clippy::too_many_arguments)]
         pub async fn inner_create_snapshot(
             pool: &sqlx::PgPool,
             ws_clients:WsClients,

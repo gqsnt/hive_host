@@ -173,7 +173,8 @@ pub fn ProjectPage(
                     match project {
                         Ok((permission, project)) => {
                             global_state
-                                .project()
+                                .project_state()
+
                                 .update(|inner| {
                                     *inner = Some(
                                         ProjectState::new(project.get_slug(), permission, project),
@@ -181,7 +182,7 @@ pub fn ProjectPage(
                                 });
                         }
                         Err(_) => {
-                            global_state.project().update(|inner| *inner = None);
+                            global_state.project_state().update(|inner| *inner = None);
                         }
                     }
                     view! { <Outlet /> }
@@ -218,7 +219,7 @@ fn SectionNav(
 }
 
 pub mod server_fns {
-    use crate::models::{GitProject, Project};
+    use crate::models::{Project};
     use crate::AppResult;
     use common::server_action::permission::Permission;
     use common::ProjectSlugStr;
@@ -226,6 +227,7 @@ pub mod server_fns {
     use leptos::server_fn::codec::Bincode;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+        use crate::models::GitProject;
         use crate::security::utils::ssr::get_auth_session_user_id;
     }}
 

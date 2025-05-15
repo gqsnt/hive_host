@@ -17,7 +17,7 @@ use leptos::either::Either;
 
 use leptos::prelude::{ElementChild, Memo, Read, Suspend, Transition};
 
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectStateStoreFields};
 use crate::security::permission::request_server_project_action_front;
 use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
 use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
@@ -32,7 +32,7 @@ use leptos::{component, view, Params};
 use leptos_router::components::A;
 use leptos_router::hooks::{use_navigate, use_params};
 use leptos_router::params::ParamsError;
-use reactive_stores::Store;
+use reactive_stores::{OptionStoreExt, Store};
 use wasm_bindgen::JsCast;
 use web_sys::{FormData, HtmlFormElement, SubmitEvent};
 
@@ -74,17 +74,16 @@ pub fn ProjectFiles() -> impl IntoView {
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
     let permission_signal = Signal::derive(move || {
         global_state
-            .project()
+            .project_state()
+            .unwrap()
             .read()
-            .as_ref()
-            .map(|p| p.permission)
-            .unwrap_or_default()
+            .permission
     });
 
     log!("Perm slug signal: {:?}", permission_signal.get());
 
     let slug = Signal::derive(move || project_slug_signal.read().0.clone());
-    let server_id =Signal::derive( move || global_state.project().read().as_ref().unwrap().project.server_id);
+    let server_id = Signal::derive(move || global_state.project_state().unwrap().project().read().server_id);
 
 
     let csrf_signal = Signal::derive(move || global_state.csrf().get());

@@ -1,6 +1,4 @@
-use crate::project_action::ensure_path_in_project_path;
 use crate::{ServerResult, TarpcHelperClient};
-use async_compression::tokio::bufread::GzipDecoder;
 use common::command::run_external_command;
 use common::helper_command::{HelperCommand, HelperResponse};
 use common::server_action::permission::Permission;
@@ -9,9 +7,7 @@ use common::{
     get_project_dev_path, get_user_path, get_user_project_path, get_user_projects_path,
     ProjectSlugStr, UserSlugStr,
 };
-use reqwest::header::HeaderValue;
 use std::path::Path;
-use tokio::fs::File;
 use tracing::info;
 
 pub async fn handle_user_action(

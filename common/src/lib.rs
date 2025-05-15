@@ -30,6 +30,7 @@ pub mod helper_command;
 
 use std::num::ParseIntError;
 use std::str::FromStr;
+use reactive_stores::Patch;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -110,7 +111,7 @@ pub type UserId = i64;
 
 pub type UserSlugStr = String;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize,Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize,Serialize, Patch)]
 pub struct Slug {
     pub id: i64,
     pub slug: String,

@@ -40,27 +40,22 @@ pub struct GithubBranchCommitApi{
 
 #[cfg(feature = "ssr")]
 pub mod ssr{
-    use std::ops::{Add, Sub, SubAssign};
+    use std::ops::{Add, Sub};
     use axum::body::to_bytes;
-    use axum::extract::{FromRequest, Query, Request, State};
-    use axum::Json;
+    use axum::extract::{Query, Request, State};
     use axum::response::{IntoResponse, Redirect};
     use chrono::TimeDelta;
     use http::StatusCode;
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-    use leptos::either::EitherOf14::N;
     use leptos::leptos_dom::log;
-    use leptos_axum::redirect;
     use octocrab::models::webhook_events::{EventInstallation, WebhookEvent, WebhookEventPayload, WebhookEventType};
     use octocrab::models::webhook_events::payload::InstallationWebhookEventAction;
-    use reqwest::{Client, ClientBuilder};
+    use reqwest::{Client};
     use serde::{Deserialize, Serialize};
-    use serde_json::Value;
     use common::{Slug, GITHUB_APP_NAME};
     use crate::app::pages::user::projects::project::project_settings::server_fns::ssr::handle_auto_deploy_git;
     use crate::AppResult;
     use crate::github::GithubRepo;
-    use crate::models::User;
     use crate::security::ssr::AppAuthSession;
     use crate::ssr::{AppState, ServerVars};
 
@@ -136,7 +131,7 @@ pub mod ssr{
             &EncodingKey::from_rsa_pem(&server_vars.git_pem).unwrap()
         ).unwrap();
         let token:GithubAppToken = client
-            .post(format!("https://api.github.com/app/installations/{}/access_tokens", installation_id))
+            .post(format!("https://api.github.com/app/installations/{installation_id}/access_tokens"))
             .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
             .send()
             .await?
@@ -186,7 +181,6 @@ pub mod ssr{
         State(app_state): State<AppState>,
         auth:AppAuthSession,
         Query(query): Query<GithubSetupCallbackQuery>,
-        request: Request,
     ) -> impl IntoResponse {
         match auth.current_user{
             None => {
@@ -240,7 +234,7 @@ pub mod ssr{
                                 log!("Received push event with no branch name");
                                 return (StatusCode::OK, "".to_string());
                             }
-                            Some((before, after)) => {
+                            Some((_, after)) => {
                                 let (ref_type, branch_name) = after.split_once('/').unwrap();
                                 if ref_type != "heads"{
                                     log!("Received push event with no branch name");
@@ -277,7 +271,16 @@ pub mod ssr{
                         for (git_project_id, git_dev_commit) in git_projects_auto_deploy{
                             log!("Found git project {} with branch {} and commit {} to audodeploy", repo_full_name, branch_name, commit);
                             let project = sqlx::query!(
-                                r#"select * from projects where project_github_id = $1"#,
+                                r#"select
+                                    p.server_id as server_id,
+                                    p.id as id,
+                                    p.name as name,
+                                    pgi.repo_full_name as repo_full_name,
+                                    ug.installation_id as installation_id
+                                    from projects as p
+                                        left join projects_github pgi on p.project_github_id = pgi.id
+                                        left join user_githubs ug on pgi.user_githubs_id = ug.id
+                                    where p.project_github_id = $1"#,
                                 git_project_id
                             )
                                 .fetch_one(&pool)
@@ -293,6 +296,9 @@ pub mod ssr{
                             match handle_auto_deploy_git(
                                 &pool,
                                 app_state.ws_clients.clone(),
+                                &app_state.server_vars,
+                                project.installation_id,
+                                project.repo_full_name,
                                 project.server_id,
                                 Slug::new(project.id, project.name),
                                 git_project_id,

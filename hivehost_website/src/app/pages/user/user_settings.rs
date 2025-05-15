@@ -4,7 +4,7 @@ use leptos::either::{Either, EitherOf3};
 use leptos::prelude::{expect_context, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, OnAttribute, Show, Transition};
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, Effect, Set};
-use leptos::prelude::{ClassAttribute, Get, Resource, ServerAction, Signal, Suspense};
+use leptos::prelude::{ClassAttribute, Get, Resource, ServerAction, Signal};
 use leptos::text_prop::TextProp;
 use leptos::{component, view, IntoView};
 use leptos::html::{Input, Textarea};
@@ -264,7 +264,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                                             {account.login.clone()}
                                                                         </a>
 
-                                                                        <Show when=move || account.suspended fallback=|| view! {}>
+                                                                        <Show when=move || account.suspended >
                                                                             <span
                                                                                 class="ml-2 px-1.5 py-0.5 rounded text-xs font-semibold bg-yellow-600 text-white"
                                                                                 title="This integration is currently suspended on GitHub."
@@ -298,7 +298,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                         // --- Error State ---
                                         view! {
                                             <div class="text-red-400 text-center py-6">
-                                                {format!("Error loading linked GitHub accounts: {}", e)}
+                                                {format!("Error loading linked GitHub accounts: {e}")}
                                             </div>
                                         },
                                     )
@@ -533,7 +533,6 @@ pub mod server_fns {
     use crate::AppResult;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
-    use serde::{Deserialize, Serialize};
 
     #[cfg(feature = "ssr")]
     mod ssr {

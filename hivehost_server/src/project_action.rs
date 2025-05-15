@@ -49,11 +49,6 @@ pub async fn handle_server_project_action(
     }
 }
 
-async fn git_pull(dev_path:&str, branch: &str, commit:&str) -> ServerResult<()> {
-    run_external_command("git",  &vec!["-C", dev_path,"fetch", "origin", branch]).await?;
-    run_external_command("git", &vec!["-C", dev_path,"reset", "--hard", commit]).await?;
-    Ok(())
-}
 
 
 pub async fn handle_server_project_action_git(
@@ -61,9 +56,12 @@ pub async fn handle_server_project_action_git(
     action: ProjectGitAction,
 ) -> ServerResult<ProjectResponse> {
     Ok(match action {
-        ProjectGitAction::Pull { branch, commit } => {
+        ProjectGitAction::Pull { branch, commit,repo_full_name, token } => {
             let dev_path = get_project_dev_path(&project_slug);
-            git_pull(&dev_path ,&branch,&commit).await?;
+            let token = format!("oauth2:{token}@");
+            let url = format!("https://{token}github.com/{repo_full_name}.git");
+            run_external_command("git",  &["-C", &dev_path,"fetch", &url, &branch]).await?;
+            run_external_command("git", &["-C", &dev_path,"reset", "--hard", &commit]).await?;
             ProjectResponse::Ok
         }
     })

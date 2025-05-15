@@ -1,6 +1,6 @@
 use common::server_action::permission::Permission;
 use common::{ProjectId, ProjectSlugStr, ServerId, Slug, UserId, UserSlugStr};
-use reactive_stores::Store;
+use reactive_stores::{Patch, Store};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ impl Default for User {
     }
 }
 
-#[derive(Debug, Clone,Default, PartialEq, Eq, Store, Serialize, Deserialize)]
+#[derive(Store, Patch,Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Project {
     pub id: ProjectId,
@@ -60,7 +60,7 @@ pub struct Project {
     pub git_project: Option<GitProject>,
 }
 
-#[derive(Debug, Clone,Default, PartialEq, Eq, Store, Serialize, Deserialize)]
+#[derive(Store, Patch,Debug, Clone,  Serialize, Deserialize)]
 pub struct GitProject{
     pub id:i64,
     pub repo_full_name: String,
