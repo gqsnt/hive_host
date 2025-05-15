@@ -8,11 +8,7 @@ use leptos::either::{Either, EitherOf3};
 use leptos::ev::Targeted;
 use leptos::html::{Input, Select};
 use leptos::logging::log;
-use leptos::prelude::{
-    event_target_value, expect_context, signal, Effect, ElementChild, Get, GetUntracked, NodeRef,
-    NodeRefAttribute, OnAttribute, OnceResource, ReadSignal, Set, Show, StyleAttribute, Suspend,
-    Suspense, Transition, WriteSignal,
-};
+use leptos::prelude::{event_target_value, expect_context, signal, Effect, ElementChild, Get, GetUntracked, NodeRef, NodeRefAttribute, OnAttribute, OnceResource, ReadSignal, Set, Show, StyleAttribute, Suspend, Suspense, Transition, WriteSignal};
 use leptos::prelude::{ClassAttribute, IntoMaybeErased};
 use leptos::prelude::{OnTargetAttribute, Resource, Update};
 use leptos::server::ServerAction;
@@ -231,18 +227,18 @@ pub fn NewProjectPublicGithub(
     github_info: ReadSignal<Option<GithubInfo>>,
     set_github_info: WriteSignal<Option<GithubInfo>>,
 ) -> impl IntoView {
-    let (public_repo_full_name, set_public_repo_full_name) = signal(String::new());
+    let (repo_full_name, set_repo_full_name) = signal(String::new());
     let (public_branch, set_public_branch) = signal(None::<GithubBranch>);
 
     let public_branches_resource = Resource::new_bincode(
         move || {
             (
                 global_store.csrf().get().unwrap_or_default(),
-                public_repo_full_name(),
+                repo_full_name(),
             )
         },
-        |(csrf, public_repo_full_name)| {
-            server_fns::get_github_public_branches(csrf, public_repo_full_name)
+        |(csrf, repo_full_name)| {
+            server_fns::get_github_repo_branches(csrf, None, repo_full_name)
         },
     );
 
@@ -258,10 +254,10 @@ pub fn NewProjectPublicGithub(
                             type="text"
                             on:change=move |ev| {
                                 let value = event_target_value(&ev);
-                                if !value.eq(&public_repo_full_name()) && github_info().is_some() {
+                                if !value.eq(&repo_full_name()) && github_info().is_some() {
                                     set_github_info(None);
                                 }
-                                set_public_repo_full_name(value);
+                                set_repo_full_name(value);
                             }
                             name="public_repo_full_name"
                             placeholder="username/repository-name"
@@ -271,19 +267,21 @@ pub fn NewProjectPublicGithub(
                 </div>
                 <div class="">
                     <Show when=move || {
-                        !public_repo_full_name().is_empty() && public_repo_full_name().contains('/')
+                        !repo_full_name().is_empty() && repo_full_name().contains('/')
                     }>
                         <label for="github_public_branch" class="form-label">
                             "Select Branch"
                         </label>
-                        <Suspense fallback=|| {
+                        <Transition fallback=|| {
                             view! {
                                 <div class="mt-2 text-sm text-gray-400">"Loading branches ..."</div>
                             }
                         }>
                             {move || Suspend::new(async move {
                                 let branches = public_branches_resource.await;
-                                let handle_branch_change = move |ev: Targeted<Event, HtmlSelectElement>, branches:Arc<Vec<GithubBranch>>|
+                                let handle_branch_change = move |
+                                    ev: Targeted<Event, HtmlSelectElement>,
+                                    branches: Arc<Vec<GithubBranch>>|
                                 {
                                     let value = ev.target().value();
                                     if value.is_empty() {
@@ -293,19 +291,17 @@ pub fn NewProjectPublicGithub(
                                         let branch = branches
                                             .iter()
                                             .find(|branch| branch.commit == value)
-                                        .map(|branch| branch.clone()).unwrap();
+                                            .map(|branch| branch.clone())
+                                            .unwrap();
                                         set_public_branch(Some(branch.clone()));
-                                        set_github_info(
-                                            Some((None, public_repo_full_name(), branch)),
-                                        );
+                                        set_github_info(Some((None, repo_full_name(), branch)));
                                     }
                                 };
                                 match branches {
                                     Ok(inner_branches) => {
                                         let inner_branches = Arc::new(inner_branches);
                                         let inner_branches_clone = inner_branches.clone();
-                                        if inner_branches.is_empty()
-                                            && !public_repo_full_name().is_empty()
+                                        if inner_branches.is_empty() && !repo_full_name().is_empty()
                                         {
                                             Either::Right(
                                                 view! {
@@ -320,18 +316,19 @@ pub fn NewProjectPublicGithub(
                                                     <select
                                                         name="github_public_branch"
                                                         class="form-select mt-2"
-                                                        on:change:target=move |ev|handle_branch_change(ev, inner_branches_clone.clone())
+                                                        on:change:target=move |ev| handle_branch_change(
+                                                            ev,
+                                                            inner_branches_clone.clone(),
+                                                        )
                                                     >
                                                         <option value="">"Select a branch..."</option>
                                                         {inner_branches
                                                             .iter()
                                                             .map(|branch| {
                                                                 view! {
-                                                                    <option
-                                                                        value=branch.commit.clone()
-                                                                    >
-                                                                        {branch.name.clone()}
-                                                                    </option>
+                                                                    <option value=branch
+                                                                        .commit
+                                                                        .clone()>{branch.name.clone()}</option>
                                                                 }
                                                             })
                                                             .collect::<Vec<_>>()}
@@ -351,7 +348,7 @@ pub fn NewProjectPublicGithub(
                                     }
                                 }
                             })}
-                        </Suspense>
+                        </Transition>
                     </Show>
                 </div>
             </div>
@@ -386,7 +383,7 @@ pub fn NewProjectPrivateGithub(
             )
         },
         |(csrf, account_id, repo)| {
-            server_fns::get_github_installation_branches(csrf, account_id, repo)
+            server_fns::get_github_repo_branches(csrf, account_id, repo.unwrap_or_default())
         },
     );
     let handle_account_change = move |ev: Targeted<Event, HtmlSelectElement>| {
@@ -503,7 +500,7 @@ pub fn NewProjectPrivateGithub(
                                                 <label for="github_repo" class="form-label">
                                                     "Select Repository"
                                                 </label>
-                                                <Suspense fallback=|| {
+                                                <Transition fallback=|| {
                                                     view! {
                                                         <div class="mt-2 text-sm text-gray-400">
                                                             "Loading repositories ..."
@@ -572,7 +569,7 @@ pub fn NewProjectPrivateGithub(
                                                             }
                                                         }
                                                     })}
-                                                </Suspense>
+                                                </Transition>
                                             </div>
                                         </Show>
 
@@ -584,7 +581,7 @@ pub fn NewProjectPrivateGithub(
                                                 <label for="github_branch" class="form-label">
                                                     "Select Branch"
                                                 </label>
-                                                <Suspense fallback=|| {
+                                                <Transition fallback=|| {
                                                     view! {
                                                         <div class="mt-2 text-sm text-gray-400">
                                                             "Loading branches ..."
@@ -595,8 +592,8 @@ pub fn NewProjectPrivateGithub(
                                                         let branches = branches_resource.await;
                                                         match branches {
                                                             Ok(inner_branches) => {
-                                                                let inner_branches= Arc::new(inner_branches);
-                                                                let inner_branches_clone = inner_branches.clone(); 
+                                                                let inner_branches = Arc::new(inner_branches);
+                                                                let inner_branches_clone = inner_branches.clone();
                                                                 if inner_branches.is_empty() {
                                                                     Either::Right(
                                                                         view! {
@@ -611,7 +608,10 @@ pub fn NewProjectPrivateGithub(
                                                                             <select
                                                                                 name="github_branch"
                                                                                 class="form-select mt-2"
-                                                                                on:change:target=move |ev| handle_branch_change(ev, inner_branches_clone.clone())
+                                                                                on:change:target=move |ev| handle_branch_change(
+                                                                                    ev,
+                                                                                    inner_branches_clone.clone(),
+                                                                                )
                                                                             >
                                                                                 <option value="">"Select branch..."</option>
                                                                                 {inner_branches
@@ -619,11 +619,9 @@ pub fn NewProjectPrivateGithub(
                                                                                     .map(|branch| {
                                                                                         let branch_name = branch.clone();
                                                                                         view! {
-                                                                                            <option
-                                                                                                value=branch.commit.clone()
-                                                                                            >
-                                                                                                {branch.name.clone()}
-                                                                                            </option>
+                                                                                            <option value=branch
+                                                                                                .commit
+                                                                                                .clone()>{branch.name.clone()}</option>
                                                                                         }
                                                                                     })
                                                                                     .collect::<Vec<_>>()}
@@ -643,7 +641,7 @@ pub fn NewProjectPrivateGithub(
                                                             }
                                                         }
                                                     })}
-                                                </Suspense>
+                                                </Transition>
                                             </div>
                                         </Show>
                                     </div>
@@ -736,56 +734,17 @@ pub mod server_fns {
             auth.current_user.unwrap().id
         ).fetch_all(&pool).await?)
     }
+    
 
     #[server(input=Bincode, output=Bincode)]
-    pub async fn get_github_public_branches(
-        csrf: String,
-        public_repo_full_name: String,
-    ) -> AppResult<Vec<GithubBranch>> {
-        if public_repo_full_name.is_empty() {
-            return Ok(vec![]);
-        }
-
-        let auth = crate::ssr::auth(false)?;
-        let server_vars = crate::ssr::server_vars()?;
-        verify_easy_hash(
-            auth.session.get_session_id().to_string(),
-            server_vars.csrf_server.to_secret(),
-            csrf,
-        )?;
-        let client = get_git_client();
-
-        let branches: Vec<GithubBranchApi> = client
-            .get(format!(
-                "https://api.github.com/repos/{}/branches",
-                public_repo_full_name
-            ))
-            .send()
-            .await?
-            .json()
-            .await?;
-
-        Ok(branches.into_iter().map(|b| b.into()).collect())
-    }
-
-    #[server(input=Bincode, output=Bincode)]
-    pub async fn get_github_installation_branches(
+    pub async fn get_github_repo_branches(
         csrf: String,
         user_githubs_id: Option<i64>,
-        full_name: Option<String>,
+        full_name: String,
     ) -> AppResult<Vec<GithubBranch>> {
-        let (user_githubs_id, repo_full_name) = match (user_githubs_id, full_name) {
-            (None, _) => {
-                return Ok(vec![]);
-            }
-            (Some(user_github_id), Some(full_name)) => (user_github_id, full_name),
-            _ => {
-                return Ok(vec![]);
-            }
-        };
-
         let auth = crate::ssr::auth(false)?;
         let server_vars = crate::ssr::server_vars()?;
+        let user_id = get_auth_session_user_id(&auth).unwrap();
         verify_easy_hash(
             auth.session.get_session_id().to_string(),
             server_vars.csrf_server.to_secret(),
@@ -793,21 +752,34 @@ pub mod server_fns {
         )?;
 
         let pool = crate::ssr::pool()?;
-        let user_id = get_auth_session_user_id(&auth).unwrap();
-        let github_account = sqlx::query_as!(
-            UserGithub,
-            "SELECT id, login, avatar_url, html_url, installation_id,suspended FROM user_githubs WHERE id = $1 and user_id = $2",
-            user_githubs_id,
-            user_id,
-        ).fetch_one(&pool).await?;
-        let (token, client) =
-            get_authenticated_git_client(&server_vars, github_account.installation_id).await?;
-        let branches: Vec<GithubBranchApi> = client
-            .get(format!(
-                "https://api.github.com/repos/{}/branches",
-                repo_full_name
-            ))
-            .header(reqwest::header::AUTHORIZATION, format!("token {token}"))
+        let (token , client) = match user_githubs_id {
+            None => {
+                (None, get_git_client())
+            }
+            Some(user_github_id) => {
+                let user_id = get_auth_session_user_id(&auth).unwrap();
+                let github_account = sqlx::query_as!(
+                    UserGithub,
+                    "SELECT id, login, avatar_url, html_url, installation_id,suspended FROM user_githubs WHERE id = $1 and user_id = $2",
+                    user_github_id,
+                    user_id,
+                ).fetch_one(&pool).await?;
+                let (token, client) =
+                    get_authenticated_git_client(&server_vars, github_account.installation_id).await?;
+                (Some(token), client)
+            }
+        };
+        let builder = client.get(format!(
+            "https://api.github.com/repos/{}/branches",
+            full_name
+        ));
+        let builder = if let Some(token)= token{
+            builder
+                .header(reqwest::header::AUTHORIZATION, format!("token {token}"))
+        } else {
+            builder
+        };
+        let branches:Vec<GithubBranchApi> = builder
             .send()
             .await?
             .json()
@@ -922,7 +894,7 @@ pub mod server_fns {
                         }
                     };
                     let project_github =sqlx::query!(
-                        "INSERT INTO projects_github (user_githubs_id, repo_full_name, branch_name, current_commit,last_commit) VALUES ($1, $2, $3,$4,$5) returning id",
+                        "INSERT INTO projects_github (user_githubs_id, repo_full_name, branch_name, dev_commit,last_commit) VALUES ($1, $2, $3,$4,$5) returning id",
                         account_id,
                         full_name,
                         branch.name,

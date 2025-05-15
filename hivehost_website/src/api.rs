@@ -81,18 +81,33 @@ pub mod ssr {
     use common::server_action::user_action::{ServerUserAction, ServerUserResponse};
     use common::{ServerId, Slug};
     use common::tarpc_client::TarpcClientError;
+    use crate::ssr::WsClients;
 
     pub async fn request_server_project_action(
         server_id: i64,
         project_slug: Slug,
         action: ProjectAction,
+        client:Option<WsClients>,
     ) -> AppResult<ProjectResponse> {
-        match crate::ssr::ws_clients()?.get(&server_id){
-            None => Err(AppError::TrpcClientError(TarpcClientError::NotConnected)),
-            Some(client) => {
-                client.project_action( project_slug.to_string(), action).await.map_err(Into::into)
+        let handle_client = |client:WsClients|async move {
+            match client.get(&server_id){
+                None => Err(AppError::TrpcClientError(TarpcClientError::NotConnected)),
+                Some(client) => {
+                    client.project_action( project_slug.to_string(), action).await.map_err(Into::into)
+                }
             }
+        };
+        
+        match client{
+            Some(client) => {
+                handle_client(client).await
+            },
+            None =>{
+                let client = crate::ssr::ws_clients()?;
+                handle_client(client).await
+            } 
         }
+        
     }
 
     pub async fn request_user_action(server_id: ServerId,action: ServerUserAction) -> AppResult<ServerUserResponse> {

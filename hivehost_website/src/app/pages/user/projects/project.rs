@@ -1,4 +1,4 @@
-use leptos::prelude::{expect_context, Read, Resource, Signal, Transition, Update};
+use leptos::prelude::{expect_context, Read, Resource, RwSignal, Signal, Transition, Update};
 use leptos::prelude::{AddAnyAttr, Suspend};
 use std::fmt::Display;
 pub mod project_dashboard;
@@ -91,6 +91,17 @@ impl Display for ProjectSection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectSlugSignal(pub String);
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectUpdateSignal(pub i64);
+
+impl ProjectUpdateSignal {
+    pub fn tick(mut self) -> Self {
+        self.0 += 1;
+        self
+    }
+}
+
+
 #[component]
 pub fn ProjectPage(
 ) -> impl IntoView {
@@ -104,11 +115,11 @@ pub fn ProjectPage(
             .expect("Project slug not found")
     });
     provide_context(project_slug_signal);
-
-
+    let project_update_signal = RwSignal::new(ProjectUpdateSignal(0));
+    provide_context(project_update_signal);
     let project_resource = Resource::new_bincode(
-        move || { project_slug_signal() },
-        move |s| get_project(s.0),
+        move || ( project_slug_signal(), project_update_signal.get() ),
+        move |(s, _ ) | get_project(s.0),
     );
     
     let active_project_section = Memo::new(move |_| {
@@ -207,7 +218,7 @@ fn SectionNav(
 }
 
 pub mod server_fns {
-    use crate::models::Project;
+    use crate::models::{GitProject, Project};
     use crate::AppResult;
     use common::server_action::permission::Permission;
     use common::ProjectSlugStr;
@@ -227,12 +238,67 @@ pub mod server_fns {
             |auth, pool, project_slug| async move {
                 let user_id = get_auth_session_user_id(&auth).unwrap();
                 let record = sqlx::query!(
-                        r#"SELECT pr.id,pr.name,pr.active_snapshot_id, pr.slug, pe.permission as "permission: Permission", pr.server_id as server_id, s.hosting_address as hosting_address  FROM projects pr inner join servers s on pr.server_id = s.id  inner join permissions pe on pr.id = pe.project_id and pe.user_id = $1  WHERE pr.id = $2"#,
+                        r#"SELECT 
+                            pr.id,
+                            pr.name,
+                            pr.active_snapshot_id, 
+                            pr.slug, 
+                            pe.permission as "permission: Permission", 
+                            pr.server_id as server_id, 
+                            s.hosting_address as hosting_address,
+                            pr.project_github_id as project_github_id,
+                            pgi.repo_full_name as repo_full_name,
+                            pgi.branch_name as branch_name,
+                            pgi.dev_commit as dev_commit,
+                            pgi.last_commit as last_commit,
+                            pgi.auto_deploy as auto_deploy,
+                            ug.installation_id as installation_id,
+                            ug.id as user_githubs_id
+                        FROM projects pr 
+                            inner join servers s on pr.server_id = s.id  
+                            inner join permissions pe on pr.id = pe.project_id and pe.user_id = $1 
+                            left join projects_github  pgi on pr.project_github_id = pgi.id
+                            left join user_githubs ug on ug.id = pgi.user_githubs_id
+                        WHERE pr.id = $2"#,
                         user_id,
                         project_slug.id
                     )
                     .fetch_one(&pool)
                     .await?;
+                let prod_branch_commit = if let Some(snapshot_id) = record.active_snapshot_id {
+                    let ps_record = sqlx::query!(
+                        r#"SELECT git_commit, git_branch
+                        FROM projects_snapshots
+                        WHERE id = $1"#,
+                        snapshot_id
+                    )
+                    .fetch_one(&pool)
+                    .await?;
+                    if let (Some(git_commit), Some(git_branch)) = (ps_record.git_commit, ps_record.git_branch) {
+                        Some((git_branch, git_commit))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                
+                    
+                let git_project = if record.project_github_id.is_some(){
+                    Some(GitProject{
+                        id: record.project_github_id.unwrap(),
+                        repo_full_name: record.repo_full_name,
+                        branch_name: record.branch_name,
+                        dev_commit: record.dev_commit,
+                        prod_branch_commit,
+                        last_commit: record.last_commit,
+                        auto_deploy:record.auto_deploy,
+                        installation_id: record.installation_id,
+                        user_githubs_id: record.user_githubs_id,
+                    })
+                }else{
+                    None
+                };
                 let project = Project {
                     id: record.id,
                     name: record.name,
@@ -240,6 +306,7 @@ pub mod server_fns {
                     active_snapshot_id: record.active_snapshot_id,
                     server_id: record.server_id,
                     hosting_address: record.hosting_address,
+                    git_project
                 };
 
                 Ok((record.permission,project))

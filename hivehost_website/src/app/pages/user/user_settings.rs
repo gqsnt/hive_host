@@ -1,7 +1,7 @@
 use leptos::control_flow::For;
 use leptos::either::{Either, EitherOf3};
 
-use leptos::prelude::{expect_context, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, OnAttribute, Show};
+use leptos::prelude::{expect_context, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, OnAttribute, Show, Transition};
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{signal, Effect, Set};
 use leptos::prelude::{ClassAttribute, Get, Resource, ServerAction, Signal, Suspense};
@@ -201,7 +201,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                     "Link your GitHub account(s) to allow access based on repository permissions."
                 </p>
 
-                <Suspense fallback=move || {
+                <Transition fallback=move || {
                     view! {
                         <p class="text-gray-400 text-center py-4">"Loading GitHub accounts..."</p>
                     }
@@ -305,7 +305,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                 }
                             })
                     }}
-                </Suspense>
+                </Transition>
             </div>
 
             <div class="section-border">
@@ -333,7 +333,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-gray-800">
-                                            <Suspense fallback=move || {
+                                            <Transition fallback=move || {
                                                 view! { <SingleColLoadingRow /> }
                                             }>
                                                 {move || {
@@ -398,7 +398,7 @@ pub fn UserSettingsPage() -> impl IntoView {
                                                             }
                                                         })
                                                 }}
-                                            </Suspense>
+                                            </Transition>
                                         </tbody>
                                     </table>
                                 </div>

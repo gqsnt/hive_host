@@ -64,7 +64,7 @@ pub async fn execute_command(
         HelperCommand::CreateProject {
             project_slug: project_slug_str,
             service_user,
-            with_index_html,
+            with_index_html
         } => {
             let dev_path = get_project_dev_path(&project_slug_str);
             let prod_path = get_project_prod_path(&project_slug_str);
@@ -85,6 +85,7 @@ pub async fn execute_command(
             run_external_command("mkdir", &["-p", &prod_path]).await?;
             run_external_command("chown", &["root:root", &prod_path]).await?;
             run_external_command("chmod", &["755", &prod_path]).await?;
+            
             if with_index_html{
                 let index_file_path = format!("{dev_path}/index.html");
                 let mut index_file = OpenOptions::new()

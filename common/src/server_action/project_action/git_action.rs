@@ -7,14 +7,8 @@ use serde::{Deserialize, Serialize};
 pub enum ProjectGitAction {
     Pull {
         branch: String,
-        clean_untracked: bool,
-    },
-    PullWithMountToProd {
-        branch: String,
-        clean_untracked: bool,
-        snapshot_name: String,
-        should_umount_first: bool,
-    },
+        commit: String,
+    }
 }
 
 impl_chain_from!(ProjectAction, ProjectAction::Git => ProjectGitAction);
@@ -23,7 +17,6 @@ impl IsProjectServerAction for ProjectGitAction {
     fn permission(&self) -> Permission {
         match self {
             ProjectGitAction::Pull { .. } => Permission::Write,
-            ProjectGitAction::PullWithMountToProd { .. } => Permission::Owner,
         }
     }
 

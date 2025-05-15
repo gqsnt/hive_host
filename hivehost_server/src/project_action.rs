@@ -3,22 +3,24 @@ use crate::server_action::{
 };
 use crate::{ServerError, ServerResult, TarpcHelperClient, TarpcHostingClient};
 
+use common::command::run_external_command;
 use common::helper_command::{HelperCommand, HelperResponse};
 use common::hosting_command::HostingCommand;
+use common::server_action::project_action::git_action::ProjectGitAction;
 use common::server_action::project_action::io_action::dir_action::{
     LsElement, ProjectIoDirAction, ServerProjectIoDirActionLsResponse,
 };
-use common::server_action::project_action::io_action::file_action::{
-    ProjectIoFileAction,
-};
+use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
 use common::server_action::project_action::io_action::ProjectIoAction;
 use common::server_action::project_action::permission::ProjectPermissionAction;
 use common::server_action::project_action::snapshot::ProjectSnapshotAction;
 use common::server_action::project_action::{ProjectAction, ProjectResponse};
-use common::{get_project_dev_path, get_project_prod_path, get_project_snapshot_path, get_user_project_path, ProjectSlugStr};
+use common::{
+    get_project_dev_path, get_project_prod_path, get_project_snapshot_path, get_user_project_path,
+    ProjectSlugStr,
+};
 use std::path::PathBuf;
 use tracing::info;
-use common::server_action::project_action::git_action::ProjectGitAction;
 
 pub async fn handle_server_project_action(
     hosting_client: TarpcHostingClient,
@@ -42,34 +44,30 @@ pub async fn handle_server_project_action(
             .await
         }
         ProjectAction::Git(git) => {
-            handle_server_project_action_git(
-                hosting_client,
-                helper_client,
-                project_slug,
-                git,
-            )
-                .await
+            handle_server_project_action_git(project_slug, git).await
         }
     }
 }
 
+async fn git_pull(dev_path:&str, branch: &str, commit:&str) -> ServerResult<()> {
+    run_external_command("git",  &vec!["-C", dev_path,"fetch", "origin", branch]).await?;
+    run_external_command("git", &vec!["-C", dev_path,"reset", "--hard", commit]).await?;
+    Ok(())
+}
+
+
 pub async fn handle_server_project_action_git(
-    hosting_client: TarpcHostingClient,
-    helper_client: TarpcHelperClient,
     project_slug: ProjectSlugStr,
     action: ProjectGitAction,
 ) -> ServerResult<ProjectResponse> {
-    Ok(match action{
-        ProjectGitAction::Pull { branch, clean_untracked } => {
-            todo!()
-        }
-        ProjectGitAction::PullWithMountToProd { branch, clean_untracked, snapshot_name, should_umount_first } => {
-            todo!()
+    Ok(match action {
+        ProjectGitAction::Pull { branch, commit } => {
+            let dev_path = get_project_dev_path(&project_slug);
+            git_pull(&dev_path ,&branch,&commit).await?;
+            ProjectResponse::Ok
         }
     })
-    
 }
-
 
 pub async fn handle_server_project_action_snapshot(
     hosting_client: TarpcHostingClient,
@@ -78,19 +76,17 @@ pub async fn handle_server_project_action_snapshot(
     action: ProjectSnapshotAction,
 ) -> ServerResult<ProjectResponse> {
     Ok(match action {
-        ProjectSnapshotAction::Create { snapshot_name } => {
-            ProjectResponse::HelperResponses(
-                helper_client
-                    .execute(vec![HelperCommand::CreateSnapshot {
-                        snapshot_path: get_project_snapshot_path(&snapshot_name),
-                        path: get_project_dev_path(&project_slug),
-                    }])
-                    .await?,
-            )
-        },
+        ProjectSnapshotAction::Create { snapshot_name } => ProjectResponse::HelperResponses(
+            helper_client
+                .execute(vec![HelperCommand::CreateSnapshot {
+                    snapshot_path: get_project_snapshot_path(&snapshot_name),
+                    path: get_project_dev_path(&project_slug),
+                }])
+                .await?,
+        ),
         ProjectSnapshotAction::Delete { snapshot_name } => ProjectResponse::HelperResponses(
             helper_client
-                .execute( vec![HelperCommand::DeleteSnapshot {
+                .execute(vec![HelperCommand::DeleteSnapshot {
                     snapshot_path: get_project_snapshot_path(&snapshot_name),
                 }])
                 .await?,
@@ -113,9 +109,7 @@ pub async fn handle_server_project_action_snapshot(
                 snapshot_name,
             });
 
-            let helper_response = helper_client
-                .execute(helper_commands)
-                .await?;
+            let helper_response = helper_client.execute(helper_commands).await?;
             if helper_response == HelperResponse::Ok {
                 let hosting_response = hosting_client
                     .hosting(project_slug, HostingCommand::ServeReloadProject)
@@ -141,7 +135,10 @@ pub async fn handle_server_project_action_snapshot(
                 ProjectResponse::HelperResponses(helper_response)
             }
         }
-        ProjectSnapshotAction::Restore { snapshot_name, users_slug } => {
+        ProjectSnapshotAction::Restore {
+            snapshot_name,
+            users_slug,
+        } => {
             let users_project_path = users_slug
                 .into_iter()
                 .map(|s| get_user_project_path(&s, &project_slug))
@@ -150,7 +147,7 @@ pub async fn handle_server_project_action_snapshot(
                 .execute(vec![HelperCommand::RestoreSnapshot {
                     snapshot_path: get_project_snapshot_path(&snapshot_name),
                     path: get_project_dev_path(&project_slug),
-                    users_project_path
+                    users_project_path,
                 }])
                 .await?;
             ProjectResponse::HelperResponses(helper_response)
@@ -178,7 +175,10 @@ pub async fn handle_server_project_action_permission(
         }
         ProjectPermissionAction::Revoke { user_slug } => {
             helper_client
-                .execute( remove_user_from_project_commands(user_slug.to_string(), project_slug))
+                .execute(remove_user_from_project_commands(
+                    user_slug.to_string(),
+                    project_slug,
+                ))
                 .await?
         }
         ProjectPermissionAction::Update {
@@ -202,8 +202,7 @@ pub async fn handle_server_project_action_io(
 ) -> ServerResult<ProjectResponse> {
     match action {
         ProjectIoAction::Dir(dir) => handle_server_project_action_dir(project_slug, dir).await,
-        ProjectIoAction::File(file) => handle_server_project_action_file(project_slug, file).await
-        
+        ProjectIoAction::File(file) => handle_server_project_action_file(project_slug, file).await,
     }
 }
 

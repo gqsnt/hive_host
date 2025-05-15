@@ -56,7 +56,8 @@ pub mod ssr{
     use reqwest::{Client, ClientBuilder};
     use serde::{Deserialize, Serialize};
     use serde_json::Value;
-    use common::GITHUB_APP_NAME;
+    use common::{Slug, GITHUB_APP_NAME};
+    use crate::app::pages::user::projects::project::project_settings::server_fns::ssr::handle_auto_deploy_git;
     use crate::AppResult;
     use crate::github::GithubRepo;
     use crate::models::User;
@@ -231,7 +232,86 @@ pub mod ssr{
         let header = parts.headers.get("X-GitHub-Event").unwrap().to_str().unwrap();
         let event = WebhookEvent::try_from_header_and_body(header, &body).unwrap();
         match event.kind {
-            WebhookEventType::Push => log!("Received a push event"),
+            WebhookEventType::Push => {
+                if let Some(repo) = event.repository{
+                    if let WebhookEventPayload::Push(payload) = event.specific{
+                        let branch_name = match payload.r#ref.split_once('/'){
+                            None => {
+                                log!("Received push event with no branch name");
+                                return (StatusCode::OK, "".to_string());
+                            }
+                            Some((before, after)) => {
+                                let (ref_type, branch_name) = after.split_once('/').unwrap();
+                                if ref_type != "heads"{
+                                    log!("Received push event with no branch name");
+                                    return (StatusCode::OK, "".to_string());
+                                }
+                                branch_name.to_string()
+                            }
+                        };
+                        let commit = payload.after;
+                        let repo_full_name = repo.full_name.unwrap_or_default();
+                        log!("Received push event for repo {} with branch {} and commit {}", repo_full_name, branch_name, commit);
+                        let pool = app_state.pool.clone();
+                        let git_projects_auto_deploy = sqlx::query!(
+                            r#"update projects_github set last_commit = $1 where repo_full_name = $2 and branch_name = $3 and auto_deploy = true returning id, dev_commit"#,
+                             commit.clone(),
+                            repo_full_name,
+                            branch_name
+                        )
+                            .fetch_all(&pool)
+                            .await
+                            .unwrap()
+                            .into_iter()
+                            .map(|row|(row.id, row.dev_commit))
+                            .collect::<Vec<_>>();
+                         let _update_no_auto_deploy_result = sqlx::query!(
+                            r#"update projects_github set last_commit = $1 where repo_full_name = $2 and branch_name = $3 and auto_deploy = false"#,
+                            commit.clone(),
+                            repo_full_name,
+                            branch_name
+                        )
+                            .execute(&pool)
+                            .await
+                            .unwrap();
+                        for (git_project_id, git_dev_commit) in git_projects_auto_deploy{
+                            log!("Found git project {} with branch {} and commit {} to audodeploy", repo_full_name, branch_name, commit);
+                            let project = sqlx::query!(
+                                r#"select * from projects where project_github_id = $1"#,
+                                git_project_id
+                            )
+                                .fetch_one(&pool)
+                                .await
+                                .unwrap();
+                            let last_snapshot = sqlx::query!(
+                                r#"select git_commit from projects_snapshots where project_id = $1 order by created_at desc limit 1"#,
+                                project.id
+                            )
+                                .fetch_optional(&pool)
+                                .await
+                                .unwrap();
+                            match handle_auto_deploy_git(
+                                &pool,
+                                app_state.ws_clients.clone(),
+                                project.server_id,
+                                Slug::new(project.id, project.name),
+                                git_project_id,
+                                branch_name.clone(),
+                                git_dev_commit,
+                                last_snapshot.and_then(|ls|ls.git_commit),
+                                commit.clone(),
+                            ).await{
+                                Ok(_) => {
+                                    log!("Auto deploy git project {} with commit {}", repo_full_name, commit);
+                                }
+                                Err(e) => {
+                                    log!("Error auto deploying git project {} with commit {}: {}", repo_full_name, commit, e);
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             WebhookEventType::Installation => {
                 if let Some(EventInstallation::Full(installation)) = event.installation{
                     if let  WebhookEventPayload::Installation(specific) = event.specific{

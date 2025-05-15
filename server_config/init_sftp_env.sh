@@ -93,6 +93,13 @@ setfacl -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE"
 setfacl -d -m "u:$SERVICE_USER:rwx" "$PROD_MOUNT_BASE" # Allow creating mount dirs
 
 
+mkdir -p home/"$SERVICE_USER"
+chown "$SERVICE_USER":"$SERVICE_GROUP" home/"$SERVICE_USER"
+chmod 700 home/"$SERVICE_USER"
+echo "[safe]
+    directory = *" > home/"$SERVICE_USER"/.gitconfig
+
+
 
 echo "✅ Initialization Script Completed."
 echo "Base directories created under '$HIVEHOST_BASE'."

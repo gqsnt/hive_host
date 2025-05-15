@@ -57,7 +57,24 @@ pub struct Project {
     pub name: String,
     pub slug: ProjectSlugStr,
     pub active_snapshot_id: Option<i64>,
+    pub git_project: Option<GitProject>,
 }
+
+#[derive(Debug, Clone,Default, PartialEq, Eq, Store, Serialize, Deserialize)]
+pub struct GitProject{
+    pub id:i64,
+    pub repo_full_name: String,
+    pub branch_name:String,
+    pub dev_commit:String,
+    pub prod_branch_commit:Option<(String, String)>, // (branch, commit)
+    pub last_commit:String,
+    pub auto_deploy:bool,
+    pub installation_id:i64,
+    pub user_githubs_id:i64,
+}
+
+
+
 
 
 #[derive(Debug, Clone,Default, PartialEq, Eq, Store, Serialize, Deserialize)]
@@ -75,8 +92,11 @@ pub struct ProjectSnapshot {
     pub id: i64,
     pub project_id: ProjectId,
     pub name: String,
+    pub version: i64,
     pub snapshot_name: String,
     pub description: Option<String>,
+    pub git_commit: Option<String>,
+    pub git_branch: Option<String>,
     pub created_at: String,
 }
 

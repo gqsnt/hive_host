@@ -330,6 +330,7 @@ pub mod server_fns {
                     server_id,
                     project_slug,
                     ProjectPermissionAction::Revoke { user_slug }.into(),
+                    None,
                 )
                 .await?;
                 Ok(())
@@ -379,6 +380,7 @@ pub mod server_fns {
                         permission,
                     }
                     .into(),
+                    None,
                 )
                 .await?;
                 Ok(())
@@ -440,6 +442,7 @@ pub mod server_fns {
                         permission,
                     }
                     .into(),
+                    None,
                 )
                 .await?;
                 Ok(())

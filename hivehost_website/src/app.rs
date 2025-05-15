@@ -124,3 +124,13 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     .into_inner()
 }
 
+
+fn commit_display(commit: &str) -> String {
+    if commit.is_empty() {
+        "N/A".to_string()
+    } else if commit.len() > 7 {
+        commit.chars().take(7).collect()
+    } else {
+        commit.to_string()
+    }
+}

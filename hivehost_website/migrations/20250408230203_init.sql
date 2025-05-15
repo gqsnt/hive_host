@@ -27,22 +27,23 @@ create table if not exists servers
 create table if not exists user_githubs
 (
     id              bigserial primary key,
-    installation_id BIGINT not null,
+    installation_id BIGINT                                         not null,
     user_id         BIGINT references users (id) on delete cascade NOT NULL,
     login           text                                           not null,
-    avatar_url      text  not null,
-    html_url        text  not null,
-    suspended      boolean default false not null
+    avatar_url      text                                           not null,
+    html_url        text                                           not null,
+    suspended       boolean default false                          not null
 );
 
 create table if not exists projects_github
 (
     id              bigserial primary key,
     user_githubs_id BIGINT references user_githubs (id) on delete cascade,
-    repo_full_name       text  not null,
-    branch_name         text  not null,
-    current_commit    text  not null,
-    last_commit      text  not null
+    repo_full_name  text                  not null,
+    branch_name     text                  not null,
+    dev_commit      text                  not null,
+    last_commit     text                  not null,
+    auto_deploy     boolean default false not null
 );
 
 
@@ -64,9 +65,12 @@ create table if not exists projects_snapshots
 (
     id            bigserial primary key,
     project_id    BIGINT references projects (id) on delete cascade NOT NULL,
-    name          text                                              not null,
+    version       bigint                                            not null,
     snapshot_name text                                              not null,
+    name          text,
     description   text,
+    git_commit    text,
+    git_branch    text,
     created_at    timestamp default now()                           not null
 );
 
@@ -107,4 +111,6 @@ INSERT INTO public.servers (id, name, ip, hosting_address, token)
 VALUES (1, 'Localhost', '127.0.0.1', 'localhost:3002', 'token_auth_pwd_bbq');
 
 
-INSERT INTO public.users (id, username, email, password, role) VALUES (1, 'caribou', 'test@user.com', '$argon2id$v=19$m=19456,t=2,p=1$Tib7k2i8Zy0GY5yPd+bh9Q$OcvwV1ThiZCq7oub3Bm0rsUD69d6lKBIaOJt1hmHO/w', 'user');
+INSERT INTO public.users (id, username, email, password, role)
+VALUES (1, 'caribou', 'test@user.com',
+        '$argon2id$v=19$m=19456,t=2,p=1$Tib7k2i8Zy0GY5yPd+bh9Q$OcvwV1ThiZCq7oub3Bm0rsUD69d6lKBIaOJt1hmHO/w', 'user');

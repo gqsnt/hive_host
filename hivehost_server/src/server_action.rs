@@ -1,4 +1,7 @@
+use crate::project_action::ensure_path_in_project_path;
 use crate::{ServerResult, TarpcHelperClient};
+use async_compression::tokio::bufread::GzipDecoder;
+use common::command::run_external_command;
 use common::helper_command::{HelperCommand, HelperResponse};
 use common::server_action::permission::Permission;
 use common::server_action::user_action::{ServerUserAction, ServerUserResponse};
@@ -6,27 +9,36 @@ use common::{
     get_project_dev_path, get_user_path, get_user_project_path, get_user_projects_path,
     ProjectSlugStr, UserSlugStr,
 };
-use std::path::Path;
-use async_compression::tokio::bufread::GzipDecoder;
 use reqwest::header::HeaderValue;
+use std::path::Path;
 use tokio::fs::File;
 use tracing::info;
-use common::command::run_external_command;
-use crate::project_action::ensure_path_in_project_path;
 
 pub async fn handle_user_action(
     server_helper: TarpcHelperClient,
     action: ServerUserAction,
 ) -> ServerResult<ServerUserResponse> {
     info!("Server action: {:?}", action);
-     let r = match action {
-        ServerUserAction::Create { user_slug } => create_user(server_helper, user_slug.to_string()).await?,
-        ServerUserAction::Delete { user_slug } => remove_user(server_helper, user_slug.to_string()).await?,
+    let r = match action {
+        ServerUserAction::Create { user_slug } => {
+            create_user(server_helper, user_slug.to_string()).await?
+        }
+        ServerUserAction::Delete { user_slug } => {
+            remove_user(server_helper, user_slug.to_string()).await?
+        }
         ServerUserAction::AddProject {
             user_slug,
             project_slug,
             github_info,
-        } => create_project(server_helper, user_slug.to_string(), project_slug.to_string(),github_info).await?,
+        } => {
+            create_project(
+                server_helper,
+                user_slug.to_string(),
+                project_slug.to_string(),
+                github_info,
+            )
+            .await?
+        }
         ServerUserAction::RemoveProject {
             user_slugs,
             project_slug,
@@ -40,7 +52,9 @@ pub async fn handle_user_action(
                     )
                 })
                 .collect::<Vec<HelperCommand>>();
-            helper_commands.push(HelperCommand::DeleteProject { project_slug:project_slug.to_string() });
+            helper_commands.push(HelperCommand::DeleteProject {
+                project_slug: project_slug.to_string(),
+            });
             server_helper.execute(helper_commands).await?
         }
     };
@@ -48,53 +62,66 @@ pub async fn handle_user_action(
 }
 
 pub async fn create_user(
-    server_helper:TarpcHelperClient,
+    server_helper: TarpcHelperClient,
     user_slug: UserSlugStr,
 ) -> ServerResult<HelperResponse> {
     let user_path = get_user_path(&user_slug);
     let user_projects_path = get_user_projects_path(&user_slug);
-    Ok(server_helper.execute(vec![
-        HelperCommand::CreateUser {
+    Ok(server_helper
+        .execute(vec![HelperCommand::CreateUser {
             user_slug,
             user_path: user_path.clone(),
             user_projects_path: user_projects_path.clone(),
-        }
-    ]).await?)
+        }])
+        .await?)
 }
 
 pub async fn create_project(
-    server_helper:TarpcHelperClient,
+    server_helper: TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
     github_info: Option<(Option<String>, String, String)>,
 ) -> ServerResult<HelperResponse> {
     let dev_path = get_project_dev_path(&project_slug);
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
-    server_helper.execute(vec![
-        HelperCommand::CreateProject {
-            project_slug: project_slug.clone(),
-            service_user: user_slug.clone(),
-            with_index_html: github_info.is_none(),
-        },
-        HelperCommand::BindMountUserProject {
-            source_path: dev_path.clone(),
-            target_path: user_project_path.clone(),
-        }
-    ]).await?;
+    server_helper
+        .execute(vec![
+            HelperCommand::CreateProject {
+                project_slug: project_slug.clone(),
+                service_user: user_slug.clone(),
+                with_index_html: github_info.is_none(),
+            },
+            HelperCommand::BindMountUserProject {
+                source_path: dev_path.clone(),
+                target_path: user_project_path.clone(),
+            },
+        ])
+        .await?;
     if let Some((token, full_name, branch)) = github_info {
-            let token = token.map(|token| format!("oauth2:{token}@")).unwrap_or_default();
-                let url = format!("https://{token}github.com/{full_name}.git");
-                let r= run_external_command( 
-                    "git",
-                    &["clone", &url, "--branch", &branch, "--single-branch", "--depth", "1", &dev_path],
-                ).await?;
+        let token = token
+            .map(|token| format!("oauth2:{token}@"))
+            .unwrap_or_default();
+        let url = format!("https://{token}github.com/{full_name}.git");
+        let r1 = run_external_command(
+            "git",
+            &[
+                "clone",
+                &url,
+                "--branch",
+                &branch,
+                "--depth",
+                "1",
+                &dev_path,
+            ],
+        )
+        .await?;
+        info!("Server successfully cloned github repo: {r1}");
     }
     Ok(HelperResponse::Ok)
-
 }
 
 pub async fn add_user_to_project(
-    server_helper:TarpcHelperClient,
+    server_helper: TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
     permission: Permission,
@@ -102,38 +129,40 @@ pub async fn add_user_to_project(
     let project_path = get_project_dev_path(&project_slug);
     let project_path_clone = project_path.clone();
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
-    Ok(server_helper.execute(vec![
-        HelperCommand::SetAcl {
-            path: project_path_clone,
-            user_slug,
-            is_read_only: permission.is_read_only(),
-        },
-        HelperCommand::BindMountUserProject {
-            source_path: project_path,
-            target_path: user_project_path,
-        }
-    ]).await?)
+    Ok(server_helper
+        .execute(vec![
+            HelperCommand::SetAcl {
+                path: project_path_clone,
+                user_slug,
+                is_read_only: permission.is_read_only(),
+            },
+            HelperCommand::BindMountUserProject {
+                source_path: project_path,
+                target_path: user_project_path,
+            },
+        ])
+        .await?)
 }
 
-pub async  fn update_user_in_project(
-    server_helper:TarpcHelperClient,
+pub async fn update_user_in_project(
+    server_helper: TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
     permission: Permission,
-) -> ServerResult<HelperResponse>{
-    Ok(server_helper.execute(vec![
-        HelperCommand::SetAcl {
+) -> ServerResult<HelperResponse> {
+    Ok(server_helper
+        .execute(vec![HelperCommand::SetAcl {
             path: get_project_dev_path(&project_slug),
             user_slug,
             is_read_only: permission.is_read_only(),
-        }
-    ]).await?)
+        }])
+        .await?)
 }
 
 pub fn remove_user_from_project_commands(
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
-) ->Vec<HelperCommand> {
+) -> Vec<HelperCommand> {
     let proj_path = get_project_dev_path(&project_slug);
     let user_project_path = get_user_project_path(&user_slug, &project_slug);
     vec![
@@ -147,9 +176,8 @@ pub fn remove_user_from_project_commands(
     ]
 }
 
-
 pub async fn remove_user(
-    server_helper:TarpcHelperClient,
+    server_helper: TarpcHelperClient,
     user_slug: UserSlugStr,
 ) -> ServerResult<HelperResponse> {
     let user_projects_path = get_user_projects_path(&user_slug);
