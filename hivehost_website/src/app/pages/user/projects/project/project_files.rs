@@ -229,14 +229,10 @@ pub fn ProjectFiles() -> impl IntoView {
                 </nav>
             </div>
             <div
-                // Adjusted border
                 class="flex-shrink-0 p-4 border-b border-gray-700"
                 class=("hidden", move || !permission_signal().can_edit())
             >
-                // Grid layout for actions
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-
-                    // --- Create New Folder ---
                     <form on:submit=on_folder_create_submit class="flex flex-col space-y-2">
                         <label for="folder_name" class="form-label text-xs">
                             "New Folder"
@@ -246,12 +242,10 @@ pub fn ProjectFiles() -> impl IntoView {
                                 type="text"
                                 name="folder_name"
                                 node_ref=folder_name_ref
-                                // Removed size specifics, rely on form-input and flex-grow
                                 class="form-input flex-grow"
                                 placeholder="Folder name..."
                             />
                             <button type="submit" class="btn btn-primary flex-shrink-0">
-                                // Slightly larger icon
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     fill="none"
@@ -270,8 +264,6 @@ pub fn ProjectFiles() -> impl IntoView {
                             </button>
                         </div>
                     </form>
-
-                    // --- Create New File ---
                     <form on:submit=on_file_create_submit class="flex flex-col space-y-2">
                         <label for="file_name" class="form-label text-xs">
                             "New Empty File"
@@ -285,7 +277,6 @@ pub fn ProjectFiles() -> impl IntoView {
                                 placeholder="File name..."
                             />
                             <button type="submit" class="btn btn-primary flex-shrink-0">
-                                // Slightly larger icon
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     fill="none"
@@ -304,9 +295,7 @@ pub fn ProjectFiles() -> impl IntoView {
                             </button>
                         </div>
                     </form>
-
-                    // --- Upload Files Area ---
-                    // This will now be the third column
+        
                     <FileUploadArea slug current_path csrf_signal refresh_signal server_id />
                 </div>
             </div>
@@ -346,8 +335,6 @@ pub fn ProjectFiles() -> impl IntoView {
                                         file_list=file_list
                                         current_path=current_path
                                         slug=slug
-                                        // on_go_up=handle_on_go_up
-                                        // on_navigate_dir=handle_navigate_dir
                                         on_select_file=handle_select_file
                                         server_project_action=server_project_action
                                         permission_signal=permission_signal
@@ -444,7 +431,6 @@ pub fn FileUploadArea(
     };
 
     view! {
-        // Main container for this section
         <div class="flex flex-col space-y-2">
             <form on:submit=handle_file_upload class="space-y-3">
                 <div>
@@ -453,17 +439,16 @@ pub fn FileUploadArea(
                     </label>
                     <input
                         node_ref=file_input_ref
-                        // Keep this name for FormData
+
                         name="input-file"
                         type="file"
                         multiple
-                        // More integrated styling
+
                         class="form-input file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer focus:outline-none"
                     />
                 </div>
                 <button
                     type="submit"
-                    // Full width for this button in its column
                     class="btn btn-primary w-full"
                     disabled=move || is_uploading.get()
                 >
@@ -486,7 +471,6 @@ pub fn FileUploadArea(
             </form>
 
             <Show when=move || !upload_messages.get().is_empty()>
-                // Added bg, padding, max-height and shadow
                 <div class="mt-2 p-3 bg-gray-800 rounded-md max-h-32 overflow-y-auto text-xs space-y-1 shadow">
                     <For
                         each=move || upload_messages.get()

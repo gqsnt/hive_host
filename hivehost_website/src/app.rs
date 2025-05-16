@@ -53,17 +53,13 @@ pub fn App() -> impl IntoView {
 
     provide_context(Store::new(GlobalState::default()));
 
-    // Provides context that manages stylesheets, titles, meta tags, etc.
 
     view! {
-        // injects a stylesheet into the document <head>
-        // id=leptos means cargo-leptos will hot-reload this stylesheet
+        
         <Stylesheet id="leptos" href="/pkg/website.css" />
-
-        // sets the document title
+        
         <Title text="Welcome to Leptos" />
-
-        // content for this welcome page
+        
         <Router>
             <div class="h-full">
                 <main class="h-full">

@@ -205,7 +205,6 @@ pub fn NewProjectPage(
                     }
                 }}
 
-                // Increased mt for separation
                 <div class="mt-8 flex items-center justify-end gap-x-6">
                     <button type="submit" class="btn btn-primary">
                         "Create Project"
@@ -440,7 +439,6 @@ pub fn NewProjectPrivateGithub(
                                     <div class="text-sm text-yellow-400 p-4 bg-yellow-900/30 rounded-md">
                                         "No GitHub accounts linked. Please link a GitHub account via your "
                                         <a
-                                            // Standard HTML link to the user settings page
                                             href="/user/settings"
                                             class="font-medium text-yellow-300 hover:text-yellow-200 underline transition-colors duration-150 ease-in-out"
                                         >

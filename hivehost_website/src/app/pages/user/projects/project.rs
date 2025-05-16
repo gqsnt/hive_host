@@ -1,4 +1,4 @@
-use leptos::prelude::{expect_context, Read, Resource, RwSignal, Signal, Transition, Update};
+use leptos::prelude::{expect_context, Read, Resource, Signal, Transition, Update};
 use leptos::prelude::{AddAnyAttr, Suspend};
 use std::fmt::Display;
 pub mod project_dashboard;
@@ -91,15 +91,8 @@ impl Display for ProjectSection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectSlugSignal(pub String);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProjectUpdateSignal(pub i64);
 
-impl ProjectUpdateSignal {
-    pub fn tick(mut self) -> Self {
-        self.0 += 1;
-        self
-    }
-}
+
 
 
 #[component]
@@ -115,21 +108,19 @@ pub fn ProjectPage(
             .expect("Project slug not found")
     });
     provide_context(project_slug_signal);
-    let project_update_signal = RwSignal::new(ProjectUpdateSignal(0));
-    provide_context(project_update_signal);
+    
+    #[allow(clippy::redundant_closure)]
     let project_resource = Resource::new_bincode(
-        move || ( project_slug_signal(), project_update_signal.get() ),
-        move |(s, _ ) | get_project(s.0),
+        
+        move || project_slug_signal() ,
+        move |s  | get_project(s.0),
     );
     
     let active_project_section = Memo::new(move |_| {
         let current_path = use_location().pathname.get();
         let segments: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
-        // Expected structure: "user", "projects", "{project_slug}", "{section_segment}", ...
 
         if let Some(projects_idx) = segments.iter().position(|&seg| seg == "projects") {
-            // Project slug is at projects_idx + 1
-            // Section segment starts at projects_idx + 2
             if segments.len() > projects_idx + 2 {
                 ProjectSection::from_first_segment(segments[projects_idx + 2])
             } else {

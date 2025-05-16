@@ -456,8 +456,6 @@ pub fn UserSettingsPage() -> impl IntoView {
 
                         </form>
                     </div>
-
-                // End Flex Container
                 </div>
             </div>
         </div>
@@ -665,8 +663,7 @@ pub mod server_fns {
         password_form.validate()?;
         let pool = pool()?;
         let user_id = get_auth_session_user_id(&auth).unwrap();
-
-        // check old pwd
+        
         let result = sqlx::query!(
             r#"
         SELECT password FROM users WHERE id = $1
@@ -678,8 +675,7 @@ pub mod server_fns {
         let password = secrecy::SecretString::from(old_password.as_str());
         password_auth::verify_password(password.expose_secret().as_bytes(), &result.password)
             .map_err(|_| crate::AppError::InvalidCredentials)?;
-
-        // update password
+        
         sqlx::query!(
             r#"
         UPDATE users SET password = $1 WHERE id = $2

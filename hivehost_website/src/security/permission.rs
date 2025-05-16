@@ -128,7 +128,7 @@ pub mod ssr {
         project_slug_str: ProjectSlugStr,
         required_permission: Permission,
         csrf: Option<String>,
-        handler: F, // The closure containing specific logic
+        handler: F,
     ) -> AppResult<T>
     where
         F: FnOnce(AppAuthSession, PgPool, Slug) -> Fut,

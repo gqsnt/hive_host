@@ -37,9 +37,6 @@ pub async fn server_project_action_token(
                     let original_filename = match field.file_name() {
                         Some(name) => name.to_string(),
                         None => {
-                            // This part might be a non-file form field, or an issue with the upload.
-                            // Log or decide how to handle. For now, skip.
-                            // It's important that the frontend sends files with proper names.
                             continue;
                         }
                     };
@@ -60,7 +57,7 @@ pub async fn server_project_action_token(
                     // ensure_path_in_project_path could be used here again if it checks containment.
                     // For now, assuming base_upload_path + sanitized_filename is safe.
 
-                    match field.bytes().await { // Reads entire file into memory. For very large files, stream to disk.
+                    match field.bytes().await {
                         Ok(bytes) => {
                             match tokio::fs::write(&final_path, &bytes).await {
                                 Ok(_) => {
@@ -144,7 +141,7 @@ pub async fn server_project_action_token(
                     Err(e) => {
                         return Json(UsedTokenActionResponse::Error(format!("Error: {e}")))
                     }
-                };                // Create a zip file
+                };
                 Json(UsedTokenActionResponse::Ok)
             }
             TokenAction::UpdateFile { path } => {

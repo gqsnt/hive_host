@@ -32,7 +32,7 @@ async fn main() -> ServerResult<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
     let token_action_auth = SecretString::from(dotenvy::var("TOKEN_AUTH")?);
-    // build our application with a route
+
     
     
     let server_helper_client = Arc::new(TarpcClient::new(HELPER_SOCKET_PATH.to_string(), None, connect_server_helper_client));
@@ -100,7 +100,6 @@ async fn main() -> ServerResult<()> {
         .with_state(app_state);
 
 
-    // run our app with hyper, listening globally on port 3000
     let tcp_addr_token = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), SERVER_TOKEN_PORT);
     let listener_token = tokio::net::TcpListener::bind(&tcp_addr_token).await?;
     info!("Token Listener on {}", tcp_addr_token);

@@ -1,6 +1,3 @@
-// Suggested location: e.g., hivehost_website/src/proxy_client.rs
-// Or potentially common crate if used more widely, but ensure dependencies match.
-
 use std::fmt;
 use std::future::Future;
 
@@ -21,9 +18,9 @@ pub enum TarpcClientError {
     #[error("Client not connected. Reconnection attempt might be in progress or will be triggered if not.")]
     NotConnected,
     #[error("Inner client application error: {0}")]
-    ClientError(String), // Captures application-level errors returned by the RPC call
+    ClientError(String), 
     #[error("Connection establishment error: {0}")]
-    ConnectionError(String), // Changed to String to avoid making ProxyError generic over transport error
+    ConnectionError(String),
     #[error("RPC error: {0}")]
     RpcError(String),
 }
@@ -34,7 +31,7 @@ impl From<tarpc::client::RpcError> for TarpcClientError {
     }
 }
 
-// Handle potential IO errors during connect specifically
+
 impl From<std::io::Error> for TarpcClientError {
     fn from(err: std::io::Error) -> Self {
         TarpcClientError::ConnectionError(err.to_string())
@@ -74,7 +71,7 @@ impl<T: Clone + Send + Sync + 'static> fmt::Debug for TarpcClient<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ProxyClient")
             .field("server_addr", &self.server_addr)
-            .field("inner", &"Arc<Mutex<Option<...>>>") // Avoid showing T directly unless T: Debug
+            .field("inner", &"Arc<Mutex<Option<...>>>")
             .field("connector", &"Arc<Connector<...>>")
             .finish()
     }
@@ -102,7 +99,7 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         token: Option<String>,
     ) -> Result<T, TarpcClientError> {
         println!("Establishing connection to server at {server_addr}...", );
-        connector(server_addr, token).await // Call the stored connector function
+        connector(server_addr, token).await
     }
 
 
@@ -117,7 +114,7 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone(), self.token.clone()).await {
             Ok(new_client) => {
                 println!("Successfully connected to {}.", self.server_addr);
-                *inner_guard = Some(new_client.clone()); // Store the new client
+                *inner_guard = Some(new_client.clone());
                 Ok(new_client)
             }
             Err(e) => {
@@ -130,7 +127,7 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
     
     
     pub async fn connect(&self) -> Result<(), TarpcClientError> {
-        let mut inner_guard = self.inner.lock().await; // Lock mutex
+        let mut inner_guard = self.inner.lock().await; 
 
         if inner_guard.is_some() {
             println!("Explicit connect: Client is already connected to {}.", self.server_addr);

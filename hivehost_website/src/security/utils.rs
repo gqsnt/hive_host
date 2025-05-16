@@ -28,12 +28,8 @@ pub mod ssr {
             } else if c.is_uppercase() {
                 has_uppercase = true;
             } else if c.is_ascii_digit() {
-                // Use is_ascii_digit for clarity with typical password rules
                 has_digit = true;
             } else {
-                // Consider what characters you count as "symbols".
-                // This example counts anything that isn't alphanumeric or underscore.
-                // Adjust this logic based on your allowed/required symbol set.
                 if !c.is_whitespace() && !c.is_control() {
                     has_symbol = true;
                 }
@@ -42,7 +38,6 @@ pub mod ssr {
         let mut password_strength_errors = vec![];
 
         if !has_lowercase {
-            // Provide a specific error code/message if desired
             password_strength_errors.push(String::from("lowercase letter"));
         }
         if !has_uppercase {

@@ -82,7 +82,6 @@ pub struct BodyWeighter;
 
 impl Weighter<KeyType, BodyType> for BodyWeighter {
     fn weight(&self, _key: &KeyType, val: &BodyType) -> u64 {
-        // Be cautions out about zero weights!
         val.len().max(1) as u64
     }
 }
@@ -177,7 +176,6 @@ pub async fn handle_request(
                 Ok(buf) => Bytes::from(buf),
                 Err(e) => {
                     error!("Failed to read file {}: {}", file_info.full_path, e);
-                    // Return Internal Server Error
                     return internal_error_response();
                 }
             };
@@ -190,15 +188,13 @@ pub async fn handle_request(
                         let reader = BufReader::new(file);
                         let mut encoder = BrotliEncoder::new(reader);
                         let mut compressed_buffer = Vec::new();
-                        // Use AsyncReadExt::read_to_end
                         if let Err(e) = encoder.read_to_end(&mut compressed_buffer).await {
                             error!("Failed to compress file {} with Brotli: {}", full_path, e);
-                            return; // Don't insert partial data
+                            return;
                         }
-                        // Shutdown is important for BrotliEncoder
                         if let Err(e) = encoder.shutdown().await {
                             error!("Failed to shutdown Brotli encoder for {}: {}", full_path, e);
-                            return; // Don't insert potentially corrupt data
+                            return;
                         }
                         project_cache.insert(path_clone, Bytes::from(compressed_buffer));
                     }

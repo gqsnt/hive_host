@@ -22,10 +22,9 @@ pub fn FileContentView(
     selected_file: Signal<Option<String>>,
     slug: Signal<ProjectSlugStr>,
     server_id:Signal<ServerId>,
-    csrf_signal: Signal<Option<String>>, // Assuming this provides the CSRF token string
+    csrf_signal: Signal<Option<String>>,
     permission_signal: Signal<Permission>,
 ) -> impl IntoView {
-    // Resource to fetch file content
     let file_content_resource = LocalResource::new(
         move || async move {
             match selected_file.get() {
@@ -55,7 +54,7 @@ pub fn FileContentView(
     let (current_file_path_for_form, set_current_file_path_for_form) = signal(String::new());
 
     
-    let server_save_action = get_action_server_project_action(); // Assuming this is a general action for project ops
+    let server_save_action = get_action_server_project_action();
     let node_ref: NodeRef<Textarea> = NodeRef::new();
     
     let handle_download_file= move |file_path:Arc<String>|{
@@ -70,7 +69,6 @@ pub fn FileContentView(
                 .await
             {
                 Ok(UsedTokenActionResponse::Content(buff)) => {
-                    // Handle the content download, e.g., create a Blob and trigger download
                     let file_name = file_path.split('/').next_back().unwrap_or("downloaded_file");
                     let buff_value = JsValue::from(buff);
                     let array = js_sys::Array::from_iter(std::iter::once(&buff_value));
@@ -82,14 +80,13 @@ pub fn FileContentView(
                     a.set_attribute("href", &url).unwrap();
                     a.set_attribute("download", file_name).unwrap();
                     a.dyn_ref::<web_sys::HtmlAnchorElement>().unwrap().click();
-                    web_sys::Url::revoke_object_url(&url).unwrap(); // Clean up URL
+                    web_sys::Url::revoke_object_url(&url).unwrap();
                 }
                 Err(e) => {
                     leptos::logging::error!("Error downloading file: {e:?}");
                 }
                 _ => {
                     leptos::logging::error!("Error downloading file");
-                    // Show error to user
                 }
             }
         });
@@ -98,12 +95,11 @@ pub fn FileContentView(
     let handle_on_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         
-        let form_data = FormData::new().unwrap(); // Create new FormData
-        // Append the content from the signal, not just relying on form field
+        let form_data = FormData::new().unwrap();
         form_data.append_with_str("file_content", &node_ref.get().unwrap().value()).unwrap();
 
         let path_to_save = current_file_path_for_form.get_untracked();
-        let csrf_token_val = csrf_signal.get_untracked(); // Get current value
+        let csrf_token_val = csrf_signal.get_untracked();
 
         spawn_local(async move {
             match get_action_token_action(
@@ -116,19 +112,13 @@ pub fn FileContentView(
                 .await
             {
                 Ok(UsedTokenActionResponse::Ok) => {
-                    // Successfully saved
-                    // Optionally, re-fetch or update content display if server modifies it
-                    // For now, just clear dirty flag. User sees their own changes.
                     log!("File saved successfully.");
-                    // file_content_resource.refetch(); // To get fresh last_modified, etc.
                 }
                 Ok(UsedTokenActionResponse::Error(e)) => {
                     leptos::logging::error!("Error saving file: {:?}", e);
-                    // Show error to user
                 }
                 Err(e) => {
                     leptos::logging::error!("Server error saving file: {:?}", e);
-                    // Show error to user
                 }
                 _ => {
                     leptos::logging::warn!("Unexpected response type after saving file.");
@@ -155,7 +145,6 @@ pub fn FileContentView(
                     }
                     (Some(_), None) => {
                         EitherOf4::B(
-                            // Still loading resource
                             view! { <p class="text-gray-400">"Fetching file details..."</p> },
                         )
                     }
@@ -176,14 +165,12 @@ pub fn FileContentView(
                         EitherOf4::D(
                             view! {
                                 <div class="flex flex-col h-full">
-                                    // --- Enhanced Header ---
                                     <div class="flex flex-wrap justify-between items-center gap-x-4 gap-y-2 mb-4 pb-4 border-b border-white/10 flex-shrink-0">
                                         <h3
                                             class="text-lg font-semibold text-white truncate mr-auto"
                                             title=file_info.path.clone()
                                         >
                                             {file_info.name.clone()}
-                                        // {if can_edit { "*" } else { "" }}
                                         </h3>
                                         <div class="flex items-center gap-x-3 text-sm text-gray-400">
                                             <span>
@@ -201,10 +188,7 @@ pub fn FileContentView(
                                             </span>
                                         </div>
                                         <Show when=move || can_edit && has_content>
-                                            // Use "contents" to not break flex layout
                                             <form on:submit=handle_on_submit class="contents">
-                                                // Hidden input to carry path if needed by form logic, though we use signal
-                                                // <input type="hidden" name="file_path" value={file_info.path.clone()} />
                                                 <button
                                                     type="submit"
                                                     class="btn btn-primary px-3 py-1 text-sm"
@@ -227,8 +211,6 @@ pub fn FileContentView(
                                                     <p>
                                                         "This might be a binary file, too large, or not valid text."
                                                     </p>
-                                                    // Add a Download button here if desired
-                                                    // Example:
                                                     <button
                                                         class="btn btn-primary mt-4"
                                                         on:click=move |_| handle_download_file(
@@ -241,19 +223,14 @@ pub fn FileContentView(
                                             }
                                         }
                                     >
-                                        // Container for textarea
                                         <div class="flex-grow min-h-0">
                                             <textarea
                                                 wrap="off"
-                                                // Initial hint, but flex styling should control height
                                                 rows="40"
-                                                // Still useful if form submission relies on it directly elsewhere
                                                 name="file_content"
                                                 class="w-full h-full resize-none bg-gray-800 text-gray-200 border border-gray-700 rounded-md p-3 font-mono text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                                                 node_ref=node_ref
-                                                // on:input=move |ev|{ set_is_dirty(true)}
                                                 readonly=!can_edit
-                                                // `disabled` also makes it read-only visually
                                                 disabled=!can_edit
                                             >
                                                 {content.get_untracked()}

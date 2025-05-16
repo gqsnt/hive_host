@@ -10,7 +10,7 @@ pub async fn run_external_command(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output() // Use output() to get status and stdio
+        .output()
         .await?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();

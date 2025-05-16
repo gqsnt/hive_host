@@ -156,7 +156,6 @@ impl FromStr for Slug {
                 if name.is_empty() {
                     return Err(ParseSlugError::InvalidFormat);
                 }
-                // check regex for name
 
                 match id.parse::<i64>() {
                     Ok(id) => {

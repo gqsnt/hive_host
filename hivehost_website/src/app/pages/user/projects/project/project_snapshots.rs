@@ -33,15 +33,13 @@ pub fn ProjectSnapshots() -> impl IntoView {
             .read()
             .active_snapshot_id
     });
-
-    // --- Actions ---
+    
     let create_snapshot_action = ServerAction::<CreateProjectSnapshot>::new();
     let delete_snapshot_action = ServerAction::<DeleteProjectSnapshot>::new();
     let set_active_snapshot_action = ServerAction::<SetActiveProjectSnapshot>::new();
     let unset_active_snapshot_action = ServerAction::<UnsetActiveProjectSnapshot>::new();
     let restore_snapshot_action = ServerAction::<RestoreProjectSnapshot>::new();
     
-    // --- Resource for Snapshots List ---
     let snapshots_resource = Resource::new_bincode(
         move || {
             (
@@ -55,24 +53,22 @@ pub fn ProjectSnapshots() -> impl IntoView {
         move |(slug, _, _, _, _)| async move { server_fns::get_project_snapshots(slug).await },
     );
 
-    // --- Form State ---
+
     let snapshot_name_ref = NodeRef::<Input>::new();
     let snapshot_description_ref = NodeRef::<Textarea>::new();
 
-    // --- Feedback Signals ---
+
     let (create_feedback, set_create_feedback) = signal(String::new());
     let (delete_feedback, set_delete_feedback) = signal(String::new());
     let (restore_feedback, set_restore_feedback) = signal(String::new());
     let (set_active_feedback, set_set_active_feedback) = signal(String::new());
     let (unset_active_feedback, set_unset_active_feedback) = signal(String::new());
-
-    // --- Effects for Feedback ---
+    
     Effect::new(move |_| {
         if let Some(result) = create_snapshot_action.value().get() {
             match result {
                 Ok(_) => {
                     set_create_feedback.set("Snapshot created successfully.".to_string());
-                    // Clear form fields after successful creation
                     if let Some(input) = snapshot_name_ref.get() {
                         input.set_value("");
                     }
@@ -92,7 +88,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 Err(e) => set_delete_feedback.set(format!("Error deleting snapshot: {e}")),
             }
         } else {
-            set_delete_feedback.set("".to_string()); // Clear on potential refetch
+            set_delete_feedback.set("".to_string()); 
         }
     });
 
@@ -105,7 +101,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 }
             }
         } else {
-            set_set_active_feedback.set("".to_string()); // Clear on potential refetch
+            set_set_active_feedback.set("".to_string()); 
         }
     });
 
@@ -118,7 +114,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 }
             }
         } else {
-            set_unset_active_feedback.set("".to_string()); // Clear on potential refetch
+            set_unset_active_feedback.set("".to_string()); 
         }
     });
     
@@ -129,7 +125,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 Err(e) => set_restore_feedback.set(format!("Error restoring snapshot: {e}")),
             }
         } else {
-            set_restore_feedback.set("".to_string()); // Clear on potential refetch
+            set_restore_feedback.set("".to_string());
         }
     });
     
@@ -190,8 +186,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
         });
     };
     
-
-    // --- Event Handlers ---
+    
     let on_create_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         let name = snapshot_name_ref.get().expect("name input exists").value();
@@ -201,7 +196,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
             set_create_feedback.set("Snapshot name cannot be empty.".to_string());
             return;
         }
-        set_create_feedback.set("Creating...".to_string()); // Indicate processing
+        set_create_feedback.set("Creating...".to_string()); 
         create_snapshot_action.dispatch(CreateProjectSnapshot {
             server_id:server_id(),
             csrf:csrf_signal().unwrap_or_default(),
@@ -234,7 +229,6 @@ pub fn ProjectSnapshots() -> impl IntoView {
 
     view! {
         <div class="space-y-10">
-            // --- Create Snapshot Section ---
             <div class="section-border" class=("hidden", move || !permission_signal().is_owner())>
                 <h2 class="section-title">"Create New Snapshot"</h2>
                 <p class="section-desc">"Create a snapshot of the current project state."</p>
@@ -282,9 +276,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                     </div>
                 </form>
             </div>
-
-            // --- List Snapshots Section ---
-            // No border-b here, it's the last section
+        
             <div>
                 <h2 class="section-title">"Existing Snapshots"</h2>
                 <p class="section-desc">
@@ -395,7 +387,6 @@ pub fn ProjectSnapshots() -> impl IntoView {
                                                                                             class="flex justify-end items-center space-x-2"
                                                                                             class=("hidden", move || !permission_signal().is_owner())
                                                                                         >
-                                                                                            // Set Active Button
                                                                                             {move || match is_active_signal() {
                                                                                                 true => {
                                                                                                     Either::Left(
@@ -444,7 +435,6 @@ pub fn ProjectSnapshots() -> impl IntoView {
                                                                                                     "Restore"
                                                                                                 </button>
                                                                                             </form>
-                                                                                            // Delete Button (using form for potential future hidden fields)
                                                                                             <form on:submit=move |ev| on_delete_submit(
                                                                                                 ev,
                                                                                                 name_signal(),
@@ -486,7 +476,6 @@ pub fn ProjectSnapshots() -> impl IntoView {
     }
 }
 
-// --- Server Functions ---
 pub mod server_fns {
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
@@ -512,14 +501,14 @@ pub mod server_fns {
     ) -> AppResult<Vec<ProjectSnapshot>> {
         handle_project_permission_request(
             project_slug,
-            Permission::Read, // Reading snapshots requires read permission
-            None,             // No CSRF needed for read
+            Permission::Read,
+            None,
             |_, pool, project_slug_obj| async move {
                 let snapshots=  sqlx::query!(
                     "SELECT id, project_id, name,snapshot_name,version, description, git_commit, git_branch, created_at
                      FROM projects_snapshots
                      WHERE project_id = $1
-                     ORDER BY created_at DESC", // Enforce limit
+                     ORDER BY created_at DESC",
                     project_slug_obj.id
                 )
                     .fetch_all(&pool)
@@ -549,7 +538,6 @@ pub mod server_fns {
         name: String,
         description: Option<String>,
     ) -> AppResult<()> {
-        // Basic validation (more could be added)
         if name.trim().is_empty() || name.len() > 100 {
             return Err(AppError::Custom("Invalid snapshot name.".to_string()));
         }
@@ -561,7 +549,7 @@ pub mod server_fns {
 
         handle_project_permission_request(
             project_slug,
-            Permission::Write, // Creating requires write permission
+            Permission::Write,
             Some(csrf),
             |_, pool, project_slug| async move {
                 let project_github = sqlx::query!(
@@ -605,7 +593,7 @@ pub mod server_fns {
     ) -> AppResult<()> {
         handle_project_permission_request(
             project_slug,
-            Permission::Owner, // Unsetting requires owner permission
+            Permission::Owner,
             Some(csrf),
             |_, pool, project_slug| async move {
                 let active_snapshot = sqlx::query!(

@@ -95,7 +95,6 @@ pub fn UserPage() -> impl IntoView {
     };
 
     view! {
-        // Add h-full if body/html are h-full
         <div class="dark h-full">
             <Transition>
                 {move || Suspend::new(async move {
@@ -129,7 +128,6 @@ pub fn UserPage() -> impl IntoView {
                 aria-modal="true"
                 class:hidden=move || !mobile_sidebar_open.get()
             >
-                // Backdrop
                 <div
                     class="fixed inset-0 bg-gray-950/80 transition-opacity ease-linear duration-300"
                     class:opacity-100=move || mobile_sidebar_open.get()
@@ -165,14 +163,14 @@ pub fn UserPage() -> impl IntoView {
                         <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-950 px-6 pb-4 ring-1 ring-white/10">
                             <div class="flex h-16 shrink-0 items-center">
                                  <A href="/">
-                         <img class="h-8 w-auto" src="/favicon.ico" alt="Your Company"/> // Update logo path
+                         <img class="h-8 w-auto" src="/favicon.ico" alt="Your Company"/>
                             </A>
                             </div>
                             <nav class="flex flex-1 flex-col">
                                 <ul role="list" class="flex flex-1 flex-col gap-y-7">
                                     <li>
                                         <ul role="list" class="-mx-2 space-y-1">
-                                            <NavItem page=UserPageType::Dashboard current_page=current_page/> // Pass ReadSignal
+                                            <NavItem page=UserPageType::Dashboard current_page=current_page/> 
                                             <NavItem page=UserPageType::Projects current_page=current_page/>
                                         </ul>
                                     </li>
@@ -226,7 +224,7 @@ pub fn UserPage() -> impl IntoView {
                 <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-950 px-6 pb-4">
                     <div class="flex h-16 shrink-0 items-center">
                         <A href="/">
-                         <img class="h-8 w-auto" src="/favicon.ico" alt="Your Company"/> // Update logo path
+                         <img class="h-8 w-auto" src="/favicon.ico" alt="Your Company"/> 
                             </A>
                     </div>
                     <nav class="flex flex-1 flex-col">
@@ -266,7 +264,7 @@ pub fn UserPage() -> impl IntoView {
                                         {UserPageType::Settings.label()}
                                     </A>
                                 </li>
-                                <li> // Logout Item
+                                <li>
                                      <button
                                             on:click=on_logout_click
                                             class="group cursor-pointer flex w-full gap-x-3 rounded-md p-2 text-sm/6 font-semibold text-gray-400 hover:bg-gray-800 hover:text-white"

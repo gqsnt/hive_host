@@ -34,7 +34,6 @@ pub async fn execute_command(
             user_path,
             user_projects_path,
         } => {
-            // 1. Create user
             run_external_command(
                 "useradd",
                 &[
@@ -69,10 +68,9 @@ pub async fn execute_command(
             let dev_path = get_project_dev_path(&project_slug_str);
             let prod_path = get_project_prod_path(&project_slug_str);
 
-            // 1. Create the main project Btrfs subvolume
             run_external_command("btrfs", &["subvolume", "create", &dev_path]).await?;
             run_external_command("chown", &["root:root", &dev_path]).await?;
-            run_external_command("chmod", &["700", &dev_path]).await?; // Start restrictive
+            run_external_command("chmod", &["700", &dev_path]).await?;
 
             let user_acl_rwx_entry = format!("u:{service_user}:rwX");
             let service_acl_rwx_entry = format!("u:{SERVICE_USER}:rwX");
@@ -129,15 +127,20 @@ pub async fn execute_command(
             target_path,
         } => {
             run_external_command("mkdir", &["-p", &target_path]).await?;
-            // run_external_command("chown", &["root:root", &target_path]).await?;
-            // run_external_command("chmod", &["755", &target_path]).await?;
             run_external_command("mount", &["--bind", &source_path, &target_path]).await?;
         }
         HelperCommand::UnmountUserProject { target_path } => {
-            // Check if it's actually mounted before trying to unmount?
-            // `findmnt -n -o TARGET --target "$target_path"`
-            run_external_command("umount", &[&target_path]).await?;
-            // Attempt to remove the empty mount point directory after unmounting
+            let r = run_external_command("findmnt", &[
+                "-n",
+                "-o",
+                "TARGET",
+                "--target",
+                &target_path,
+            ]).await?;
+            if !r.is_empty() {
+                run_external_command("umount", &[&target_path]).await?;
+            }
+            
             tokio::fs::remove_dir(&target_path).await?;
         }
         HelperCommand::CreateSnapshot {
@@ -149,7 +152,7 @@ pub async fn execute_command(
                 &[
                     "subvolume",
                     "snapshot",
-                    "-r", // Read-only flag
+                    "-r",
                     &path,
                     &snapshot_path,
                 ],

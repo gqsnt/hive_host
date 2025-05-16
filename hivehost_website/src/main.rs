@@ -53,7 +53,6 @@ async fn main() -> hivehost_website::AppResult<()> {
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 3000);
     conf.leptos_options.site_addr = addr;
     let leptos_options = conf.leptos_options;
-    // Generate the list of routes in your Leptos App
     let github_client_id= dotenvy::var("GITHUB_CLIENT_ID")?;
     let routes = generate_route_list(App);
     let server_vars = ServerVars::new(github_client_id);

@@ -42,7 +42,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
 
     let handle_select_project = move |new_slug_option: Option<String>| {
         let navigate = use_navigate();
-        let current_path = location_pathname.get(); // Get current path before navigation
+        let current_path = location_pathname.get();
         
         let current_section_enum = {
             let segments: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
