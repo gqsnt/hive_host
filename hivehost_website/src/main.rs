@@ -1,6 +1,5 @@
 
 
-
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> hivehost_website::AppResult<()> {
@@ -34,7 +33,12 @@ async fn main() -> hivehost_website::AppResult<()> {
     use dashmap::DashMap;
     use common::server_action::tarpc::WebsiteToServerClient;
     use common::SERVER_PORT;
-    
+
+
+    use memory_serve::{load_assets, CacheControl, MemoryServe};
+    use tower_http::compression::{CompressionLayer, Predicate};
+    use tower_http::compression::predicate::{NotForContentType, SizeAbove};
+    use tower_http::CompressionLevel;
     
     dotenvy::dotenv().ok();
 
@@ -102,20 +106,20 @@ async fn main() -> hivehost_website::AppResult<()> {
     });
 
     let app = Router::<AppState>::new()
-        // .nest(
-        //     "/assets",
-        //     MemoryServe::new(load_assets!("../target/site/assets"))
-        //         .enable_brotli(!cfg!(debug_assertions))
-        //         .cache_control(CacheControl::Custom("public, max-age=31536000"))
-        //         .into_router::<AppState>()
-        // )
-        // .nest(
-        //     "/pkg",
-        //     MemoryServe::new(load_assets!("../target/site/pkg"))
-        //         .enable_brotli(!cfg!(debug_assertions))
-        //         .cache_control(CacheControl::Custom("public, max-age=31536000"))
-        //         .into_router::<AppState>()
-        // )
+        .nest(
+            "/assets",
+            MemoryServe::new(load_assets!("../target/site/assets"))
+                .enable_brotli(!cfg!(debug_assertions))
+                .cache_control(CacheControl::Custom("public, max-age=31536000"))
+                .into_router::<AppState>()
+        )
+        .nest(
+            "/pkg",
+            MemoryServe::new(load_assets!("../target/site/pkg"))
+                .enable_brotli(!cfg!(debug_assertions))
+                .cache_control(CacheControl::Custom("public, max-age=31536000"))
+                .into_router::<AppState>()
+        )
         .route(
             "/api/{*wildcard}",
             get(server_fn_handler).post(server_fn_handler),
@@ -124,21 +128,21 @@ async fn main() -> hivehost_website::AppResult<()> {
         .route("/api/github_post_install_callback", get(github_post_install_callback))
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
-        // .layer(
-        //     CompressionLayer::new()
-        //         .br(true)
-        //         .zstd(true)
-        //         .quality(CompressionLevel::Default)
-        //         .compress_when(
-        //             SizeAbove::new(256)
-        //                 .and(NotForContentType::GRPC)
-        //                 .and(NotForContentType::IMAGES)
-        //                 .and(NotForContentType::SSE)
-        //                 .and(NotForContentType::const_new("text/javascript"))
-        //                 .and(NotForContentType::const_new("application/wasm"))
-        //                 .and(NotForContentType::const_new("text/css")),
-        //         ),
-        // )
+        .layer(
+            CompressionLayer::new()
+                .br(true)
+                .zstd(true)
+                .quality(CompressionLevel::Default)
+                .compress_when(
+                    SizeAbove::new(256)
+                        .and(NotForContentType::GRPC)
+                        .and(NotForContentType::IMAGES)
+                        .and(NotForContentType::SSE)
+                        .and(NotForContentType::const_new("text/javascript"))
+                        .and(NotForContentType::const_new("application/wasm"))
+                        .and(NotForContentType::const_new("text/css")),
+                ),
+        )
        
         .layer(
             AuthSessionLayer::<User, UserId, SessionPgPool, PgPool>::new(Some(pool.clone()))

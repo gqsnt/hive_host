@@ -32,6 +32,20 @@ pub fn ProjectSettings() -> impl IntoView {
     let refresh_preview = move || {
         set_preview_version(preview_version() + 1);
     };
+    let is_active = Signal::derive(move ||
+        global_state.project_state().unwrap().project()
+            .active_snapshot_id().read().is_some()
+    );
+    let permission_signal = Signal::derive(move ||
+        global_state
+            .project_state().unwrap()
+            .read().permission
+    );
+    let hosting_url = Signal::derive(move ||
+        global_state.project_state().unwrap().project()
+            .hosting_address().get()
+    );
+
 
     let delete_project_action = Action::new(|intput: &(ServerId, ProjectSlugStr, String)| {
         let (server_id, project_slug, csrf) = intput.clone();
@@ -76,72 +90,6 @@ pub fn ProjectSettings() -> impl IntoView {
             .read()
             .is_some()
     );
-    let is_active = Signal::derive(move ||
-        global_state.project_state().unwrap().project()
-            .active_snapshot_id().read().is_some()
-    );
-    let permission_signal = Signal::derive(move ||
-        global_state
-            .project_state().unwrap()
-            .read().permission
-    );
-    let hosting_url = Signal::derive(move ||
-        global_state.project_state().unwrap().project()
-            .hosting_address().get()
-    );
-    
-
-    let current_prod_commit = Signal::derive(move ||
-        git_project()
-            .unwrap()
-            .prod_branch_commit()
-            .get()
-            .map(|(_, prod_commit)| prod_commit)
-    );
-    let current_prod_branch = Signal::derive(move ||
-        git_project()
-            .unwrap()
-            .prod_branch_commit()
-            .get()
-            .map(|(branch_name, _)| branch_name)
-    );
-    let current_dev_commit = Signal::derive(move ||
-         git_project()
-                                                    .unwrap()
-                                                    .dev_commit()
-                                                    .get()
-    );
-    let last_commit = Signal::derive(move ||
-        git_project()
-            .unwrap()
-            .last_commit()
-            .get()
-    );
-    let repo_full_name = Signal::derive(move ||
-        git_project()
-            .unwrap()
-            .repo_full_name()
-            .get()
-    );
-    let branch_name = move ||
-        git_project()
-            .unwrap()
-            .branch_name()
-            .get();
-    
-    let is_auto_deploy = Signal::derive(move ||
-        git_project()
-            .unwrap()
-            .auto_deploy()
-            .get()
-    );
-
-    let user_githubs_id = Signal::derive(move ||
-        git_project()
-            .unwrap()
-            .user_githubs_id()
-            .get()
-    );
     let on_delete_project = move |_| {
         let project_slug = slug();
         let confirmed = web_sys::window()
@@ -161,304 +109,348 @@ pub fn ProjectSettings() -> impl IntoView {
         delete_project_action.dispatch((server_id(), project_slug, csrf()));
     };
     
-    let branches_resource = LocalResource::new(
-        move || get_github_repo_branches(csrf(), Some(user_githubs_id()), repo_full_name())
-    );
-    let prod_is_behind = Signal::derive(move || {
-        let prod_commit = current_prod_commit();
-        prod_commit.is_none()
-            || !prod_commit.unwrap().eq(&last_commit())
-    });
-    let dev_is_behind = Signal::derive(move || {
-        !current_dev_commit().eq(&last_commit())
-    });
-    
-    let git_view = move || view! {
-        <Show
-            when=move || has_git_project()
-            fallback=move || {
-                view! { <div class="text-gray-400">"Project is not linked to GitHub."</div> }
-            }
-        >
-            <div class="section-border">
-                <h2 class="section-title">"Project GitHub Repository"</h2>
-                <p class="section-desc">
-                    {move || format!("Linked to: {} (Branch: {})", repo_full_name(), branch_name())}
-                </p>
-                <div class="mt-6 space-y-4">
-                    <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
-                        <div>
-                            <p class="font-medium text-white">
-                                {format!(
-                                    "Production Status{}",
-                                    current_prod_branch()
-                                        .map(|b| format!(" (Branch: {b})"))
-                                        .unwrap_or_default(),
-                                )}
-                            </p>
-                            {move || match (prod_is_behind(), current_prod_commit().is_some()) {
-                                (_, false) => {
-                                    EitherOf3::B(
-                                        view! {
-                                            <p class="text-sm text-gray-400">
-                                                "Not yet deployed from Git."
-                                            </p>
-                                        },
-                                    )
-                                }
-                                (false, true) => {
-                                    EitherOf3::A(
-                                        view! {
-                                            <p class="text-sm text-green-400">
-                                                {format!(
-                                                    "Up-to-date (Commit: {})",
-                                                    commit_display(&current_prod_commit().unwrap_or_default()),
-                                                )}
-                                            </p>
-                                        },
-                                    )
-                                }
-                                (true, true) => {
-                                    EitherOf3::C(
-                                        view! {
-                                            <p class="text-sm text-yellow-400">
-                                                {format!(
-                                                    "Behind. Current: {}, Latest: {}",
-                                                    commit_display(&current_prod_commit().unwrap_or_default()),
-                                                    commit_display(&last_commit()),
-                                                )}
-                                            </p>
-                                        },
-                                    )
-                                }
-                            }}
-                        </div>
-                        <button
-                            class="btn btn-success"
-                            on:click=move |_| {
-                                deploy_prod_action
-                                    .dispatch((csrf(), server_id(), slug(), !is_auto_deploy()));
-                                let snapshot_id = deploy_prod_action
-                                    .value()
-                                    .get()
-                                    .and_then(|r| r.ok())
-                                    .flatten();
-                                git_project()
-                                    .unwrap()
-                                    .update(|git_project| {
-                                        git_project.auto_deploy = !git_project.auto_deploy;
-                                        if git_project.auto_deploy {
-                                            git_project.prod_branch_commit = Some((
-                                                git_project.branch_name.clone(),
-                                                git_project.last_commit.clone(),
-                                            ));
-                                        }
-                                    });
-                                global_state
-                                    .project_state()
-                                    .unwrap()
-                                    .project()
-                                    .update(|project| {
-                                        project.active_snapshot_id = snapshot_id;
-                                    });
-                            }
-                            disabled=deploy_prod_action.pending().get()
-                        >
-                            {move || {
-                                if deploy_prod_action.pending().get() {
-                                    if is_auto_deploy() {
-                                        "Disabling Auto Deploy..."
-                                    } else {
-                                        "Enabling Auto Deploy..."
-                                    }
-                                } else if is_auto_deploy() {
-                                    "Disable Auto Deploy"
-                                } else {
-                                    "Enable Auto Deploy"
-                                }
-                            }}
-                        </button>
-                    </div>
-
-                    <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
-                        <div>
-                            <p class="font-medium text-white">Development Status</p>
-                            <Show
-                                when=move || dev_is_behind()
-                                fallback=move || {
-                                    view! {
-                                        <p class="text-sm text-green-400">
-                                            {format!(
-                                                "Up-to-date (Commit: {})",
-                                                commit_display(&current_dev_commit()),
-                                            )}
-                                        </p>
-                                    }
-                                }
-                            >
-                                <p class="text-sm text-yellow-400">
-                                    {format!(
-                                        "Behind. Synced: {}, Latest: {}",
-                                        commit_display(&current_dev_commit()),
-                                        commit_display(&last_commit()),
-                                    )}
-                                </p>
-                            </Show>
-                        </div>
-                        <Show when=move || dev_is_behind()>
-                            <div class="flex space-x-2">
-                                <button
-                                    class="btn btn-secondary"
-                                    on:click=move |_| {
-                                        sync_dev_action.dispatch((csrf(), server_id(), slug()));
-                                        git_project()
-                                            .unwrap()
-                                            .update(|git_project| {
-                                                git_project.dev_commit = git_project.last_commit.clone();
-                                            });
-                                    }
-                                    disabled=sync_dev_action.pending().get()
-                                >
-                                    {if sync_dev_action.pending().get() {
-                                        "Syncing..."
-                                    } else {
-                                        "Sync Development"
-                                    }}
-                                </button>
-                            </div>
-                        </Show>
-                    </div>
-
-                    <div class="p-3 bg-gray-800 rounded-md">
-                        <p class="form-label">"Change Default Branch"</p>
-                        <Transition fallback=move || {
-                            view! { <p class="text-sm text-gray-400">"Loading branches..."</p> }
-                        }>
-                            {move || Suspend::new(async move {
-                                let branches = branches_resource.try_get().flatten();
-                                match branches {
-                                    Some(Ok(branches)) => {
-                                        if branches.is_empty() {
-                                            EitherOf4::A(
-                                                view! {
-                                                    <p class="text-sm text-yellow-400">
-                                                        "No other branches found."
-                                                    </p>
-                                                },
-                                            )
-                                        } else {
-                                            let branch_select_ref = NodeRef::<Select>::new();
-                                            EitherOf4::B(
-                                                view! {
-                                                    <div class="flex items-end space-x-2 mt-2">
-                                                        <select
-                                                            class="form-select flex-grow"
-                                                            node_ref=branch_select_ref
-                                                        >
-                                                            <option value="">"-- Select new branch --"</option>
-                                                            {branches
-                                                                .into_iter()
-                                                                .filter(|b| b.name != branch_name())
-                                                                .map(|branch| {
-                                                                    view! {
-                                                                        <option value=format!(
-                                                                            "{}={}",
-                                                                            branch.name.clone(),
-                                                                            branch.commit,
-                                                                        )>{branch.name.clone()}</option>
-                                                                    }
-                                                                })
-                                                                .collect::<Vec<_>>()}
-                                                        </select>
-                                                        <button
-                                                            class="btn btn-warning min-w-[8rem]"
-                                                            on:click=move |_| {
-                                                                if let Some(select_el) = branch_select_ref.get() {
-                                                                    let val = select_el.value();
-                                                                    if !val.is_empty() {
-                                                                        let parts: Vec<&str> = val.split('=').collect();
-                                                                        if parts.len() == 2 {
-                                                                            let branch_name = parts[0].to_string();
-                                                                            let branch_commit = parts[1].to_string();
-                                                                            update_branch_action
-                                                                                .dispatch((
-                                                                                    csrf(),
-                                                                                    server_id(),
-                                                                                    slug(),
-                                                                                    branch_name.clone(),
-                                                                                    branch_commit.clone(),
-                                                                                ));
-                                                                            let snapshot_id = update_branch_action
-                                                                                .value()
-                                                                                .get()
-                                                                                .and_then(|r| r.ok())
-                                                                                .flatten();
-                                                                            git_project()
-                                                                                .unwrap()
-                                                                                .update(|git_project| {
-                                                                                    git_project.branch_name = branch_name.clone();
-                                                                                    git_project.last_commit = branch_commit.clone();
-                                                                                    git_project.dev_commit = branch_commit.clone();
-                                                                                    if git_project.auto_deploy {
-                                                                                        git_project.prod_branch_commit = Some((
-                                                                                            branch_name.clone(),
-                                                                                            branch_commit.clone(),
-                                                                                        ));
-                                                                                    }
-                                                                                });
-                                                                            global_state
-                                                                                .project_state()
-                                                                                .unwrap()
-                                                                                .project()
-                                                                                .update(|project| {
-                                                                                    project.active_snapshot_id = snapshot_id;
-                                                                                });
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                            disabled=update_branch_action.pending().get()
-                                                        >
-                                                            {if update_branch_action.pending().get() {
-                                                                "Updating..."
-                                                            } else {
-                                                                "Update Branch"
-                                                            }}
-                                                        </button>
-                                                    </div>
-                                                },
-                                            )
-                                        }
-                                    }
-                                    Some(Err(e)) => {
-                                        EitherOf4::C(
-                                            view! {
-                                                <p class="text-sm text-red-400">
-                                                    {format!("Error loading branches: {e}")}
-                                                </p>
-                                            },
-                                        )
-                                    }
-                                    None => {
-                                        EitherOf4::D(
-                                            view! {
-                                                <p class="text-sm text-gray-400">"Loading branches..."</p>
-                                            },
-                                        )
-                                    }
-                                }
-                            })}
-                        </Transition>
-                    </div>
-                </div>
-            </div>
-        </Show>
-    };
     
 
     view! {
         <div class="space-y-10">
-            {git_view()} <div class="section-border">
+            <div class="section-border mt-4">
+                <h2 class="section-title">"Project GitHub Repository"</h2>
+                <Show
+                    when=move || has_git_project()
+                    fallback=move || {
+                        view! { <p class="section-desc">Project is not linked to Github</p> }
+                    }
+                >
+                    {
+                        let current_prod_commit = Signal::derive(move || {
+                            git_project()
+                                .unwrap()
+                                .prod_branch_commit()
+                                .get()
+                                .map(|(_, prod_commit)| prod_commit)
+                        });
+                        let current_prod_branch = Signal::derive(move || {
+                            git_project()
+                                .unwrap()
+                                .prod_branch_commit()
+                                .get()
+                                .map(|(branch_name, _)| branch_name)
+                        });
+                        let current_dev_commit = Signal::derive(move || {
+                            git_project().unwrap().dev_commit().get()
+                        });
+                        let last_commit = Signal::derive(move || {
+                            git_project().unwrap().last_commit().get()
+                        });
+                        let repo_full_name = Signal::derive(move || {
+                            git_project().unwrap().repo_full_name().get()
+                        });
+                        let branch_name = move || git_project().unwrap().branch_name().get();
+                        let is_auto_deploy = Signal::derive(move || {
+                            git_project().unwrap().auto_deploy().get()
+                        });
+                        let user_githubs_id = Signal::derive(move || {
+                            git_project().unwrap().user_githubs_id().get()
+                        });
+                        let branches_resource = LocalResource::new(move || get_github_repo_branches(
+                            csrf(),
+                            Some(user_githubs_id()),
+                            repo_full_name(),
+                        ));
+                        let prod_is_behind = Signal::derive(move || {
+                            let prod_commit = current_prod_commit();
+                            prod_commit.is_none() || !prod_commit.unwrap().eq(&last_commit())
+                        });
+                        let dev_is_behind = Signal::derive(move || {
+                            !current_dev_commit().eq(&last_commit())
+                        });
+
+                        view! {
+                            <p class="section-desc">
+                                {move || {
+                                    format!(
+                                        "Linked to: {} (Branch: {})",
+                                        repo_full_name(),
+                                        branch_name(),
+                                    )
+                                }}
+                            </p>
+                            <div class="mt-6 space-y-4">
+                                <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
+                                    <div>
+                                        <p class="font-medium text-white">
+                                            {format!(
+                                                "Production Status{}",
+                                                current_prod_branch()
+                                                    .map(|b| format!(" (Branch: {b})"))
+                                                    .unwrap_or_default(),
+                                            )}
+                                        </p>
+                                        {move || match (
+                                            prod_is_behind(),
+                                            current_prod_commit().is_some(),
+                                        ) {
+                                            (_, false) => {
+                                                EitherOf3::B(
+                                                    view! {
+                                                        <p class="text-sm text-gray-400">
+                                                            "Not yet deployed from Git."
+                                                        </p>
+                                                    },
+                                                )
+                                            }
+                                            (false, true) => {
+                                                EitherOf3::A(
+                                                    view! {
+                                                        <p class="text-sm text-green-400">
+                                                            {format!(
+                                                                "Up-to-date (Commit: {})",
+                                                                commit_display(&current_prod_commit().unwrap_or_default()),
+                                                            )}
+                                                        </p>
+                                                    },
+                                                )
+                                            }
+                                            (true, true) => {
+                                                EitherOf3::C(
+                                                    view! {
+                                                        <p class="text-sm text-yellow-400">
+                                                            {format!(
+                                                                "Behind. Current: {}, Latest: {}",
+                                                                commit_display(&current_prod_commit().unwrap_or_default()),
+                                                                commit_display(&last_commit()),
+                                                            )}
+                                                        </p>
+                                                    },
+                                                )
+                                            }
+                                        }}
+                                    </div>
+                                    <button
+                                        class="btn btn-success"
+                                        on:click=move |_| {
+                                            deploy_prod_action
+                                                .dispatch((csrf(), server_id(), slug(), !is_auto_deploy()));
+                                            let snapshot_id = deploy_prod_action
+                                                .value()
+                                                .get()
+                                                .and_then(|r| r.ok())
+                                                .flatten();
+                                            git_project()
+                                                .unwrap()
+                                                .update(|git_project| {
+                                                    git_project.auto_deploy = !git_project.auto_deploy;
+                                                    if git_project.auto_deploy {
+                                                        git_project.prod_branch_commit = Some((
+                                                            git_project.branch_name.clone(),
+                                                            git_project.last_commit.clone(),
+                                                        ));
+                                                    }
+                                                });
+                                            global_state
+                                                .project_state()
+                                                .unwrap()
+                                                .project()
+                                                .update(|project| {
+                                                    project.active_snapshot_id = snapshot_id;
+                                                });
+                                        }
+                                        disabled=deploy_prod_action.pending().get()
+                                    >
+                                        {move || {
+                                            if deploy_prod_action.pending().get() {
+                                                if is_auto_deploy() {
+                                                    "Disabling Auto Deploy..."
+                                                } else {
+                                                    "Enabling Auto Deploy..."
+                                                }
+                                            } else if is_auto_deploy() {
+                                                "Disable Auto Deploy"
+                                            } else {
+                                                "Enable Auto Deploy"
+                                            }
+                                        }}
+                                    </button>
+                                </div>
+
+                                <div class="flex items-center justify-between p-3 bg-gray-800 rounded-md">
+                                    <div>
+                                        <p class="font-medium text-white">Development Status</p>
+                                        <Show
+                                            when=move || dev_is_behind()
+                                            fallback=move || {
+                                                view! {
+                                                    <p class="text-sm text-green-400">
+                                                        {format!(
+                                                            "Up-to-date (Commit: {})",
+                                                            commit_display(&current_dev_commit()),
+                                                        )}
+                                                    </p>
+                                                }
+                                            }
+                                        >
+                                            <p class="text-sm text-yellow-400">
+                                                {format!(
+                                                    "Behind. Synced: {}, Latest: {}",
+                                                    commit_display(&current_dev_commit()),
+                                                    commit_display(&last_commit()),
+                                                )}
+                                            </p>
+                                        </Show>
+                                    </div>
+                                    <Show when=move || dev_is_behind()>
+                                        <div class="flex space-x-2">
+                                            <button
+                                                class="btn btn-secondary"
+                                                on:click=move |_| {
+                                                    sync_dev_action.dispatch((csrf(), server_id(), slug()));
+                                                    git_project()
+                                                        .unwrap()
+                                                        .update(|git_project| {
+                                                            git_project.dev_commit = git_project.last_commit.clone();
+                                                        });
+                                                }
+                                                disabled=sync_dev_action.pending().get()
+                                            >
+                                                {if sync_dev_action.pending().get() {
+                                                    "Syncing..."
+                                                } else {
+                                                    "Sync Development"
+                                                }}
+                                            </button>
+                                        </div>
+                                    </Show>
+                                </div>
+
+                                <div class="p-3 bg-gray-800 rounded-md">
+                                    <p class="form-label">"Change Default Branch"</p>
+                                    <Transition fallback=move || {
+                                        view! {
+                                            <p class="text-sm text-gray-400">"Loading branches..."</p>
+                                        }
+                                    }>
+                                        {move || Suspend::new(async move {
+                                            let branches = branches_resource.try_get().flatten();
+                                            match branches {
+                                                Some(Ok(branches)) => {
+                                                    if branches.is_empty() {
+                                                        EitherOf4::A(
+                                                            view! {
+                                                                <p class="text-sm text-yellow-400">
+                                                                    "No other branches found."
+                                                                </p>
+                                                            },
+                                                        )
+                                                    } else {
+                                                        let branch_select_ref = NodeRef::<Select>::new();
+                                                        EitherOf4::B(
+                                                            view! {
+                                                                <div class="flex items-end space-x-2 mt-2">
+                                                                    <select
+                                                                        class="form-select flex-grow"
+                                                                        node_ref=branch_select_ref
+                                                                    >
+                                                                        <option value="">"-- Select new branch --"</option>
+                                                                        {branches
+                                                                            .into_iter()
+                                                                            .filter(|b| b.name != branch_name())
+                                                                            .map(|branch| {
+                                                                                view! {
+                                                                                    <option value=format!(
+                                                                                        "{}={}",
+                                                                                        branch.name.clone(),
+                                                                                        branch.commit,
+                                                                                    )>{branch.name.clone()}</option>
+                                                                                }
+                                                                            })
+                                                                            .collect::<Vec<_>>()}
+                                                                    </select>
+                                                                    <button
+                                                                        class="btn btn-warning min-w-[8rem]"
+                                                                        on:click=move |_| {
+                                                                            if let Some(select_el) = branch_select_ref.get() {
+                                                                                let val = select_el.value();
+                                                                                if !val.is_empty() {
+                                                                                    let parts: Vec<&str> = val.split('=').collect();
+                                                                                    if parts.len() == 2 {
+                                                                                        let branch_name = parts[0].to_string();
+                                                                                        let branch_commit = parts[1].to_string();
+                                                                                        update_branch_action
+                                                                                            .dispatch((
+                                                                                                csrf(),
+                                                                                                server_id(),
+                                                                                                slug(),
+                                                                                                branch_name.clone(),
+                                                                                                branch_commit.clone(),
+                                                                                            ));
+                                                                                        let snapshot_id = update_branch_action
+                                                                                            .value()
+                                                                                            .get()
+                                                                                            .and_then(|r| r.ok())
+                                                                                            .flatten();
+                                                                                        git_project()
+                                                                                            .unwrap()
+                                                                                            .update(|git_project| {
+                                                                                                git_project.branch_name = branch_name.clone();
+                                                                                                git_project.last_commit = branch_commit.clone();
+                                                                                                git_project.dev_commit = branch_commit.clone();
+                                                                                                if git_project.auto_deploy {
+                                                                                                    git_project.prod_branch_commit = Some((
+                                                                                                        branch_name.clone(),
+                                                                                                        branch_commit.clone(),
+                                                                                                    ));
+                                                                                                }
+                                                                                            });
+                                                                                        global_state
+                                                                                            .project_state()
+                                                                                            .unwrap()
+                                                                                            .project()
+                                                                                            .update(|project| {
+                                                                                                project.active_snapshot_id = snapshot_id;
+                                                                                            });
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        disabled=update_branch_action.pending().get()
+                                                                    >
+                                                                        {if update_branch_action.pending().get() {
+                                                                            "Updating..."
+                                                                        } else {
+                                                                            "Update Branch"
+                                                                        }}
+                                                                    </button>
+                                                                </div>
+                                                            },
+                                                        )
+                                                    }
+                                                }
+                                                Some(Err(e)) => {
+                                                    EitherOf4::C(
+                                                        view! {
+                                                            <p class="text-sm text-red-400">
+                                                                {format!("Error loading branches: {e}")}
+                                                            </p>
+                                                        },
+                                                    )
+                                                }
+                                                None => {
+                                                    EitherOf4::D(
+                                                        view! {
+                                                            <p class="text-sm text-gray-400">"Loading branches..."</p>
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        })}
+                                    </Transition>
+                                </div>
+                            </div>
+                        }
+                    }
+                </Show>
+            </div>
+            <div class="section-border">
                 <h2 class="section-title">"Project Status & Activation"</h2>
                 <p class="section-desc">"Control whether your project is live and accessible."</p>
                 <Show
@@ -535,8 +527,7 @@ pub fn ProjectSettings() -> impl IntoView {
                         />
                     </div>
                 </Show>
-
-            </div>-
+            </div>
             <div class="pb-6" class=("hidden", move || !permission_signal().is_owner())>
                 <h2 class="section-title text-red-400">"Danger Zone"</h2>
                 <p class="section-desc">"These actions are permanent and cannot be undone."</p>

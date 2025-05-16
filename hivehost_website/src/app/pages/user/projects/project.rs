@@ -108,10 +108,10 @@ pub fn ProjectPage(
             .expect("Project slug not found")
     });
     provide_context(project_slug_signal);
-    
+
     #[allow(clippy::redundant_closure)]
     let project_resource = Resource::new_bincode(
-        
+
         move || project_slug_signal() ,
         move |s  | get_project(s.0),
     );
@@ -240,13 +240,13 @@ pub mod server_fns {
                             pr.server_id as server_id, 
                             s.hosting_address as hosting_address,
                             pr.project_github_id as project_github_id,
-                            pgi.repo_full_name as repo_full_name,
-                            pgi.branch_name as branch_name,
-                            pgi.dev_commit as dev_commit,
-                            pgi.last_commit as last_commit,
-                            pgi.auto_deploy as auto_deploy,
-                            ug.installation_id as installation_id,
-                            ug.id as user_githubs_id
+                            pgi.repo_full_name as "repo_full_name?: String",
+                            pgi.branch_name as "branch_name?: String",
+                            pgi.dev_commit as "dev_commit?: String",
+                            pgi.last_commit as "last_commit?: String",
+                            pgi.auto_deploy as "auto_deploy?: bool",
+                            ug.installation_id as "installation_id?: i64",
+                            ug.id as "user_githubs_id?: i64"
                         FROM projects pr 
                             inner join servers s on pr.server_id = s.id  
                             inner join permissions pe on pr.id = pe.project_id and pe.user_id = $1 
@@ -280,14 +280,14 @@ pub mod server_fns {
                 let git_project = if record.project_github_id.is_some(){
                     Some(GitProject{
                         id: record.project_github_id.unwrap(),
-                        repo_full_name: record.repo_full_name,
-                        branch_name: record.branch_name,
-                        dev_commit: record.dev_commit,
+                        repo_full_name: record.repo_full_name.unwrap(),
+                        branch_name: record.branch_name.unwrap(),
+                        dev_commit: record.dev_commit.unwrap(),
                         prod_branch_commit,
-                        last_commit: record.last_commit,
-                        auto_deploy:record.auto_deploy,
-                        installation_id: record.installation_id,
-                        user_githubs_id: record.user_githubs_id,
+                        last_commit: record.last_commit.unwrap(),
+                        auto_deploy:record.auto_deploy.unwrap(),
+                        installation_id: record.installation_id.unwrap(),
+                        user_githubs_id: record.user_githubs_id.unwrap(),
                     })
                 }else{
                     None

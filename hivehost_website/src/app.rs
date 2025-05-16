@@ -55,11 +55,10 @@ pub fn App() -> impl IntoView {
 
 
     view! {
-        
         <Stylesheet id="leptos" href="/pkg/website.css" />
-        
+
         <Title text="Welcome to Leptos" />
-        
+
         <Router>
             <div class="h-full">
                 <main class="h-full">

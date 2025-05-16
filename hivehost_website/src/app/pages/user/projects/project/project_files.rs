@@ -295,7 +295,7 @@ pub fn ProjectFiles() -> impl IntoView {
                             </button>
                         </div>
                     </form>
-        
+
                     <FileUploadArea slug current_path csrf_signal refresh_signal server_id />
                 </div>
             </div>
