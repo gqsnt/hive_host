@@ -216,7 +216,7 @@ pub async fn connect_server_hosting_client(
     addr: String,
     token: String,
 ) -> Result<ServerHostingClient, TarpcClientError> {
-    let mut transport = tarpc::serde_transport::tcp::connect(addr, Bincode::default);
+    let mut transport = tarpc::serde_transport::unix::connect(addr, Bincode::default);
     transport.config_mut().max_frame_length(10 * 10 * 1024);
     let client = ServerHostingClient::new(client::Config::default(), transport.await?).spawn();
     match client
@@ -232,7 +232,7 @@ pub async fn connect_server_helper_client(
     addr: String,
     token: String,
 ) -> Result<ServerHelperClient, TarpcClientError> {
-    let mut transport = tarpc::serde_transport::tcp::connect(addr, Bincode::default);
+    let mut transport = tarpc::serde_transport::unix::connect(addr, Bincode::default);
     transport.config_mut().max_frame_length(10 * 10 * 1024);
     let client = ServerHelperClient::new(client::Config::default(), transport.await?).spawn();
     match client

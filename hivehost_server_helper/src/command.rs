@@ -160,7 +160,7 @@ pub async fn execute_command(action: HelperCommand) -> ServerHelperResult<()> {
                 &["-n", "-o", "TARGET", "--target", &user_project_path],
             )
             .await?;
-            if !r.is_empty() {
+            if !r.is_empty() && !r.eq("/")  {
                 run_external_command("umount", &[&user_project_path]).await?;
             }
 
@@ -200,7 +200,13 @@ pub async fn execute_command(action: HelperCommand) -> ServerHelperResult<()> {
         }
         HelperCommand::UnmountProd { project_slug } => {
             let path = get_project_prod_path(&project_slug);
-            run_external_command("umount", &[&path]).await?;
+            let r = run_external_command(
+                "findmnt",
+                &["-n", "-o", "TARGET", "--target", &path],
+            ).await?;
+            if !r.is_empty() && !r.eq("/") {
+                run_external_command("umount", &[&path]).await?;
+            }
         }
         HelperCommand::RestoreSnapshot {
             project_slug,

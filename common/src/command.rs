@@ -24,5 +24,5 @@ pub async fn run_external_command(
         )));
     }
 
-    Ok(stdout)
+    Ok(stdout.trim().to_string())
 }
