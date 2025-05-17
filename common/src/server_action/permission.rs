@@ -1,8 +1,8 @@
-use std::fmt::Display;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use strum_macros::EnumIter;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumIter,Deserialize,Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumIter, Deserialize, Serialize)]
 #[cfg_attr(feature = "website-ssr", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "website-ssr",

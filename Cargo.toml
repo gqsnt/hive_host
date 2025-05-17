@@ -31,7 +31,7 @@ sqlx="0.8.5"
 futures = "0.3.31"
 reqwest = "0.12.15"
 tarpc = {version = "0.36.0", features = ["tokio1", "serde-transport-bincode", "unix", "tcp"]}
-
+sanitize-filename = "0.6.0"
 
 
 [profile.wasm-release]

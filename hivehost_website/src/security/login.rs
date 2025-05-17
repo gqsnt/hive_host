@@ -1,14 +1,9 @@
-use crate::{AppResult};
+use crate::AppResult;
 use leptos::server;
 use leptos::server_fn::codec::Bincode;
 
 #[server(Login, "/api",input=Bincode, output=Bincode)]
-pub async fn login(
-    csrf: String,
-    email: String,
-    password: String,
-    remember: bool,
-) -> AppResult<()> {
+pub async fn login(csrf: String, email: String, password: String, remember: bool) -> AppResult<()> {
     use crate::models::User;
     use crate::security::utils::ssr::verify_easy_hash;
     use crate::AppError;

@@ -13,6 +13,7 @@ futures = { workspace = true }
 reqwest = { workspace = true, features = ["rustls-tls", "json"]}
 dashmap = { workspace = true }
 async-compression={version = "0.4.23", features = ["tokio", "gzip"]}
+sanitize-filename = {workspace = true}
 
 async-broadcast = "0.7.1"
 common = { path = "../common", features = [
@@ -23,7 +24,8 @@ common = { path = "../common", features = [
     "hosting",
     "tarpc-server-to-hosting",
     "server-command",
-    "tarpc-client"
+    "tarpc-client",
+    "validate-path",
 ] }
 dotenvy = { workspace = true }
 secrecy = { workspace = true }

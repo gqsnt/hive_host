@@ -2,8 +2,8 @@ use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::AppResult;
 use leptos::prelude::Get;
 use leptos::prelude::{expect_context, Signal};
-use leptos::{component, server, view, IntoView};
 use leptos::server_fn::codec::Bincode;
+use leptos::{component, server, view, IntoView};
 use reactive_stores::Store;
 use serde::{Deserialize, Serialize};
 

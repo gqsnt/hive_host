@@ -15,11 +15,7 @@ use common::server_action::project_action::io_action::ProjectIoAction;
 use common::server_action::project_action::permission::ProjectPermissionAction;
 use common::server_action::project_action::snapshot::ProjectSnapshotAction;
 use common::server_action::project_action::{ProjectAction, ProjectResponse};
-use common::{
-    get_project_dev_path, get_project_prod_path, get_project_snapshot_path, get_user_project_path,
-    ProjectSlugStr,
-};
-use std::path::PathBuf;
+use common::{ensure_path_in_project_path, get_project_dev_path, ProjectSlugStr};
 use tracing::info;
 
 pub async fn handle_server_project_action(
@@ -43,25 +39,26 @@ pub async fn handle_server_project_action(
             )
             .await
         }
-        ProjectAction::Git(git) => {
-            handle_server_project_action_git(project_slug, git).await
-        }
+        ProjectAction::Git(git) => handle_server_project_action_git(project_slug, git).await,
     }
 }
-
-
 
 pub async fn handle_server_project_action_git(
     project_slug: ProjectSlugStr,
     action: ProjectGitAction,
 ) -> ServerResult<ProjectResponse> {
     Ok(match action {
-        ProjectGitAction::Pull { branch, commit,repo_full_name, token } => {
+        ProjectGitAction::Pull {
+            branch,
+            commit,
+            repo_full_name,
+            token,
+        } => {
             let dev_path = get_project_dev_path(&project_slug);
-            let token = format!("oauth2:{token}@");
-            let url = format!("https://{token}github.com/{repo_full_name}.git");
-            run_external_command("git",  &["-C", &dev_path,"fetch", &url, &branch]).await?;
-            run_external_command("git", &["-C", &dev_path,"reset", "--hard", &commit]).await?;
+            let token = format!("oauth2:{}@", token.0);
+            let url = format!("https://{token}github.com/{}.git", repo_full_name.0);
+            run_external_command("git", &["-C", &dev_path, "fetch", &url, &branch.0]).await?;
+            run_external_command("git", &["-C", &dev_path, "reset", "--hard", &commit.0]).await?;
             ProjectResponse::Ok
         }
     })
@@ -77,16 +74,14 @@ pub async fn handle_server_project_action_snapshot(
         ProjectSnapshotAction::Create { snapshot_name } => ProjectResponse::HelperResponses(
             helper_client
                 .execute(vec![HelperCommand::CreateSnapshot {
-                    snapshot_path: get_project_snapshot_path(&snapshot_name),
-                    path: get_project_dev_path(&project_slug),
+                    project_slug,
+                    snapshot_name,
                 }])
                 .await?,
         ),
         ProjectSnapshotAction::Delete { snapshot_name } => ProjectResponse::HelperResponses(
             helper_client
-                .execute(vec![HelperCommand::DeleteSnapshot {
-                    snapshot_path: get_project_snapshot_path(&snapshot_name),
-                }])
+                .execute(vec![HelperCommand::DeleteSnapshot { snapshot_name }])
                 .await?,
         ),
 
@@ -94,16 +89,15 @@ pub async fn handle_server_project_action_snapshot(
             snapshot_name,
             should_umount_first,
         } => {
-            let project_prod_path = get_project_prod_path(&project_slug);
             let mut helper_commands = if should_umount_first {
                 vec![HelperCommand::UnmountProd {
-                    path: project_prod_path.clone(),
+                    project_slug: project_slug.clone(),
                 }]
             } else {
                 vec![]
             };
             helper_commands.push(HelperCommand::MountSnapshot {
-                path: project_prod_path,
+                project_slug: project_slug.clone(),
                 snapshot_name,
             });
 
@@ -118,10 +112,9 @@ pub async fn handle_server_project_action_snapshot(
             }
         }
         ProjectSnapshotAction::UnmountProd => {
-            let project_prod_path = get_project_prod_path(&project_slug);
             let helper_response = helper_client
                 .execute(vec![HelperCommand::UnmountProd {
-                    path: project_prod_path,
+                    project_slug: project_slug.clone(),
                 }])
                 .await?;
             if helper_response == HelperResponse::Ok {
@@ -133,19 +126,11 @@ pub async fn handle_server_project_action_snapshot(
                 ProjectResponse::HelperResponses(helper_response)
             }
         }
-        ProjectSnapshotAction::Restore {
-            snapshot_name,
-            users_slug,
-        } => {
-            let users_project_path = users_slug
-                .into_iter()
-                .map(|s| get_user_project_path(&s, &project_slug))
-                .collect::<Vec<String>>();
+        ProjectSnapshotAction::Restore { snapshot_name } => {
             let helper_response = helper_client
                 .execute(vec![HelperCommand::RestoreSnapshot {
-                    snapshot_path: get_project_snapshot_path(&snapshot_name),
-                    path: get_project_dev_path(&project_slug),
-                    users_project_path,
+                    project_slug,
+                    snapshot_name,
                 }])
                 .await?;
             ProjectResponse::HelperResponses(helper_response)
@@ -162,35 +147,16 @@ pub async fn handle_server_project_action_permission(
         ProjectPermissionAction::Grant {
             user_slug,
             permission,
-        } => {
-            add_user_to_project(
-                helper_client,
-                user_slug.to_string(),
-                project_slug,
-                permission,
-            )
-            .await?
-        }
+        } => add_user_to_project(helper_client, user_slug, project_slug, permission).await?,
         ProjectPermissionAction::Revoke { user_slug } => {
             helper_client
-                .execute(remove_user_from_project_commands(
-                    user_slug.to_string(),
-                    project_slug,
-                ))
+                .execute(remove_user_from_project_commands(user_slug, project_slug))
                 .await?
         }
         ProjectPermissionAction::Update {
             user_slug,
             permission,
-        } => {
-            update_user_in_project(
-                helper_client,
-                user_slug.to_string(),
-                project_slug,
-                permission,
-            )
-            .await?
-        }
+        } => update_user_in_project(helper_client, user_slug, project_slug, permission).await?,
     };
     Ok(ProjectResponse::HelperResponses(r))
 }
@@ -210,28 +176,27 @@ pub async fn handle_server_project_action_dir(
 ) -> ServerResult<ProjectResponse> {
     match action {
         ProjectIoDirAction::Create { path } => {
-            let path = ensure_path_in_project_path(project_slug, &path, false, false).await?;
+            let path = ensure_path_in_project_path(&project_slug, &path, false, false).await?;
             tokio::fs::create_dir_all(path)
                 .await
                 .map_err(ServerError::from)?;
         }
         ProjectIoDirAction::Rename { path, new_name } => {
-            let path =
-                ensure_path_in_project_path(project_slug.clone(), &path, false, true).await?;
+            let path = ensure_path_in_project_path(&project_slug, &path, false, true).await?;
             let new_name =
-                ensure_path_in_project_path(project_slug.clone(), &new_name, false, false).await?;
+                ensure_path_in_project_path(&project_slug, &new_name, false, false).await?;
             tokio::fs::rename(path, new_name)
                 .await
                 .map_err(ServerError::from)?;
         }
         ProjectIoDirAction::Delete { path } => {
-            let path = ensure_path_in_project_path(project_slug, &path, false, true).await?;
+            let path = ensure_path_in_project_path(&project_slug, &path, false, true).await?;
             tokio::fs::remove_dir_all(path)
                 .await
                 .map_err(ServerError::from)?;
         }
         ProjectIoDirAction::Ls { path } => {
-            let path = ensure_path_in_project_path(project_slug, &path, false, true).await?;
+            let path = ensure_path_in_project_path(&project_slug, &path, false, true).await?;
             let mut entries = tokio::fs::read_dir(path).await.map_err(ServerError::from)?;
             let mut result = Vec::new();
             while let Ok(Some(entry)) = entries.next_entry().await {
@@ -254,104 +219,52 @@ pub async fn handle_server_project_action_file(
 ) -> ServerResult<ProjectResponse> {
     match action {
         ProjectIoFileAction::Create { path } => {
-            let path =
-                ensure_path_in_project_path(project_slug.clone(), &path, true, false).await?;
+            ensure_path_in_project_path(&project_slug, &path, true, false).await?;
             let _writer = tokio::fs::File::create(&path)
                 .await
                 .map_err(ServerError::from)?;
         }
         ProjectIoFileAction::Rename { path, new_name } => {
-            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
-            let new_path = path.parent().unwrap().join(new_name);
+            let path = ensure_path_in_project_path(&project_slug, &path, true, true).await?;
+            let sanitized = sanitize_filename::sanitize(&new_name);
+            if sanitized.is_empty() {
+                return Err(ServerError::SanityCheckFailed);
+            }
+            let new_path = path.parent().unwrap().join(&sanitized);
+            let new_path = ensure_path_in_project_path(
+                &project_slug,
+                &new_path.to_string_lossy(),
+                true,
+                false,
+            )
+            .await?;
             tokio::fs::rename(path, new_path)
                 .await
                 .map_err(ServerError::from)?;
         }
         ProjectIoFileAction::Delete { path } => {
-            let path = ensure_path_in_project_path(project_slug, &path, true, true).await?;
+            let path = ensure_path_in_project_path(&project_slug, &path, true, true).await?;
+
             tokio::fs::remove_file(path)
                 .await
                 .map_err(ServerError::from)?;
         }
         ProjectIoFileAction::Move { path, new_path } => {
-            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
+            let path = ensure_path_in_project_path(&project_slug, &path, true, true).await?;
             let new_path =
-                ensure_path_in_project_path(project_slug.clone(), &new_path, true, false).await?;
+                ensure_path_in_project_path(&project_slug, &new_path, true, false).await?;
             tokio::fs::rename(path, new_path)
                 .await
                 .map_err(ServerError::from)?;
         }
         ProjectIoFileAction::Copy { path, new_path } => {
-            let path = ensure_path_in_project_path(project_slug.clone(), &path, true, true).await?;
+            let path = ensure_path_in_project_path(&project_slug, &path, true, true).await?;
             let new_path =
-                ensure_path_in_project_path(project_slug.clone(), &new_path, true, false).await?;
+                ensure_path_in_project_path(&project_slug, &new_path, true, false).await?;
             tokio::fs::copy(path, new_path)
                 .await
                 .map_err(ServerError::from)?;
         }
     }
     Ok(ProjectResponse::Ok)
-}
-
-pub async fn ensure_path_in_project_path(
-    project_slug: ProjectSlugStr,
-    project_path_: &str,
-    is_file: bool,
-    should_exist: bool,
-) -> ServerResult<PathBuf> {
-    // 1) Canonicaliser la racine projet
-    let mut project_path_ = project_path_.to_string();
-    if !project_path_.starts_with("root/") {
-        return Err(ServerError::InvalidPath);
-    }
-    project_path_ = project_path_.replacen("root/", "./", 1);
-
-    let project_root = PathBuf::from(get_project_dev_path(&project_slug.to_string()));
-    let project_root = tokio::fs::canonicalize(&project_root).await?;
-
-    // 2) Rejeter tout chemin absolu ou contenant `..`
-    let rel = PathBuf::from(project_path_);
-    if rel.is_absolute()
-        || rel
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
-        return Err(ServerError::InvalidPath);
-    }
-
-    // Chemin final (peut ne pas exister)
-    let full_path = project_root.join(rel);
-
-    if should_exist {
-        // 3A) On attend que la cible existe → canonicaliser puis métadonnées
-        let canon = tokio::fs::canonicalize(&full_path).await?;
-
-        // 4A) Vérifier qu’elle reste sous project_root
-        if !canon.starts_with(&project_root) {
-            return Err(ServerError::OutOfProjectsScope);
-        }
-
-        // 5A) Vérifier fichier vs dossier
-        let meta = tokio::fs::metadata(&canon).await?;
-        if is_file && !meta.is_file() {
-            return Err(ServerError::PathIsNotFile);
-        }
-        if !is_file && !meta.is_dir() {
-            return Err(ServerError::PathIsNotDir);
-        }
-
-        Ok(canon)
-    } else {
-        // 3B) Création de la cible → vérifier uniquement le parent
-        let parent = full_path.parent().ok_or(ServerError::PathHasNoParent)?;
-        let parent_canon = tokio::fs::canonicalize(parent).await?;
-
-        // 4B) S’assurer que le parent est dans le projet
-        if !parent_canon.starts_with(&project_root) {
-            return Err(ServerError::OutOfProjectsScope);
-        }
-
-        // 5B) OK pour créer : retourner le chemin (non-canon) où l’on créera.
-        Ok(full_path)
-    }
 }

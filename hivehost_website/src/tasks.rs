@@ -25,7 +25,7 @@ pub mod ssr {
         fn clone_box(&self) -> Box<dyn Task>;
 
         fn name(&self) -> &'static str;
-        
+
         fn allow_concurrent(&self) -> bool;
     }
 
@@ -74,7 +74,7 @@ pub mod ssr {
                 task: Box::new(task),
             }));
         }
-        
+
         pub async fn run(mut self) {
             loop {
                 if let Some(Reverse(mut scheduled_task)) = self.tasks.pop() {
@@ -84,14 +84,14 @@ pub mod ssr {
                             || scheduled_task.task.allow_concurrent()
                         {
                             scheduled_task.task.set_running(true);
-                            
+
                             let task_clone = scheduled_task.task.clone();
                             tokio::spawn(async move {
                                 let _guard = RunningGuard::new(task_clone.clone());
                                 task_clone.execute().await;
                             });
                         }
-                        
+
                         scheduled_task.task.update_schedule();
                         scheduled_task.next_run = scheduled_task.task.next_execution();
                         self.tasks.push(Reverse(scheduled_task));
@@ -106,7 +106,7 @@ pub mod ssr {
             }
         }
     }
-    
+
     struct RunningGuard {
         task: Box<dyn Task>,
     }

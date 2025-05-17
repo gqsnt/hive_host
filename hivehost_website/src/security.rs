@@ -30,13 +30,13 @@ pub async fn get_user() -> AppResult<User> {
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use crate::models::{RoleType, User};
+    use crate::models::{RoleType, User, UserSlugStrFront};
     use crate::AppResult;
     use anyhow::Error;
     use async_trait::async_trait;
     use axum_session_auth::Authentication;
     use axum_session_sqlx::SessionPgPool;
-    use common::{UserId, UserSlugStr};
+    use common::UserId;
     use secrecy::SecretString;
     use sqlx::PgPool;
 
@@ -108,6 +108,6 @@ pub mod ssr {
         pub id: UserId,
         pub role: RoleType,
         pub username: String,
-        slug: UserSlugStr,
+        slug: UserSlugStrFront,
     }
 }

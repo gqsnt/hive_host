@@ -1,45 +1,46 @@
-
-
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> hivehost_website::AppResult<()> {
-    use leptos::logging::error;
-    use common::tarpc_client::TarpcClient;
-    use hivehost_website::ssr::{connect_website_client};
-    use hivehost_website::github::ssr::github_post_install_callback;
+    use axum::routing::post;
     use axum::{routing::get, Router};
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthConfig, AuthSessionLayer};
     use axum_session_sqlx::SessionPgPool;
+    use common::server_action::tarpc::WebsiteToServerClient;
+    use common::tarpc_client::TarpcClient;
     use common::UserId;
+    use common::SERVER_PORT;
+    use dashmap::DashMap;
     use hivehost_website::app::*;
+    use hivehost_website::github::ssr::github_post_install_callback;
+    use hivehost_website::github::ssr::github_webhook;
     use hivehost_website::models::User;
     use hivehost_website::rate_limiter::ssr::RateLimiter;
+    use hivehost_website::ssr::connect_website_client;
     use hivehost_website::ssr::ServerVars;
     use hivehost_website::ssr::{leptos_routes_handler, server_fn_handler, AppState};
     use hivehost_website::tasks::refresh_server_csrf::RefreshServerCsrf;
     use hivehost_website::tasks::ssr::TaskDirector;
+    use leptos::logging::error;
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{generate_route_list, LeptosRoutes};
     use moka::future::Cache;
     use sqlx::PgPool;
     use std::net::SocketAddr;
+    use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;
     use std::time::Duration;
-    use hivehost_website::github::ssr::github_webhook;
-    use std::net::{IpAddr, Ipv4Addr};
-    use axum::routing::post;
-    use dashmap::DashMap;
-    use common::server_action::tarpc::WebsiteToServerClient;
-    use common::SERVER_PORT;
 
-
+    #[allow(unused_imports)]
     use memory_serve::{load_assets, CacheControl, MemoryServe};
-    use tower_http::compression::{CompressionLayer, Predicate};
+    #[allow(unused_imports)]
     use tower_http::compression::predicate::{NotForContentType, SizeAbove};
+    #[allow(unused_imports)]
+    use tower_http::compression::{CompressionLayer, Predicate};
+    #[allow(unused_imports)]
     use tower_http::CompressionLevel;
-    
+
     dotenvy::dotenv().ok();
 
     let database_url = dotenvy::var("DATABASE_URL")?;
@@ -54,23 +55,26 @@ async fn main() -> hivehost_website::AppResult<()> {
     let auth_config = AuthConfig::<UserId>::default().with_anonymous_user_id(Some(-1));
 
     let mut conf = get_configuration(None).unwrap();
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 3000);
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3000);
     conf.leptos_options.site_addr = addr;
     let leptos_options = conf.leptos_options;
-    let github_client_id= dotenvy::var("GITHUB_CLIENT_ID")?;
+    let github_client_id = dotenvy::var("GITHUB_CLIENT_ID")?;
+    let github_webhook_secret = dotenvy::var("GITHUB_WEBHOOK_SECRET")?;
     let routes = generate_route_list(App);
-    let server_vars = ServerVars::new(github_client_id);
+    let server_vars = ServerVars::new(github_client_id, github_webhook_secret);
     let csrf_server = server_vars.csrf_server.clone();
 
     let rate_limiter = Arc::new(RateLimiter::default());
     let ws_clients = DashMap::new();
-    let servers = sqlx::query!(
-        r#"SELECT id,ip,hosting_address , token FROM servers"#,
-    )
+    let servers = sqlx::query!(r#"SELECT id,ip,hosting_address , token FROM servers"#,)
         .fetch_all(&pool)
         .await?;
     for server in servers {
-        let client = TarpcClient::<WebsiteToServerClient>::new(format!("{}:{SERVER_PORT}", server.ip), Some(server.token), connect_website_client);
+        let client = TarpcClient::<WebsiteToServerClient>::new(
+            format!("{}:{SERVER_PORT}", server.ip),
+            server.token,
+            connect_website_client,
+        );
         let connect_website_client = client.clone();
         tokio::spawn(async move {
             if let Err(e) = connect_website_client.connect().await {
@@ -106,44 +110,46 @@ async fn main() -> hivehost_website::AppResult<()> {
     });
 
     let app = Router::<AppState>::new()
-        .nest(
-            "/assets",
-            MemoryServe::new(load_assets!("../target/site/assets"))
-                .enable_brotli(!cfg!(debug_assertions))
-                .cache_control(CacheControl::Custom("public, max-age=31536000"))
-                .into_router::<AppState>()
-        )
-        .nest(
-            "/pkg",
-            MemoryServe::new(load_assets!("../target/site/pkg"))
-                .enable_brotli(!cfg!(debug_assertions))
-                .cache_control(CacheControl::Custom("public, max-age=31536000"))
-                .into_router::<AppState>()
-        )
+        // .nest(
+        //     "/assets",
+        //     MemoryServe::new(load_assets!("../target/site/assets"))
+        //         .enable_brotli(!cfg!(debug_assertions))
+        //         .cache_control(CacheControl::Custom("public, max-age=31536000"))
+        //         .into_router::<AppState>()
+        // )
+        // .nest(
+        //     "/pkg",
+        //     MemoryServe::new(load_assets!("../target/site/pkg"))
+        //         .enable_brotli(!cfg!(debug_assertions))
+        //         .cache_control(CacheControl::Custom("public, max-age=31536000"))
+        //         .into_router::<AppState>()
+        // )
         .route(
             "/api/{*wildcard}",
             get(server_fn_handler).post(server_fn_handler),
         )
         .route("/api/github_webhook", post(github_webhook))
-        .route("/api/github_post_install_callback", get(github_post_install_callback))
+        .route(
+            "/api/github_post_install_callback",
+            get(github_post_install_callback),
+        )
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<AppState, _>(shell))
-        .layer(
-            CompressionLayer::new()
-                .br(true)
-                .zstd(true)
-                .quality(CompressionLevel::Default)
-                .compress_when(
-                    SizeAbove::new(256)
-                        .and(NotForContentType::GRPC)
-                        .and(NotForContentType::IMAGES)
-                        .and(NotForContentType::SSE)
-                        .and(NotForContentType::const_new("text/javascript"))
-                        .and(NotForContentType::const_new("application/wasm"))
-                        .and(NotForContentType::const_new("text/css")),
-                ),
-        )
-       
+        // .layer(
+        //     CompressionLayer::new()
+        //         .br(true)
+        //         .zstd(true)
+        //         .quality(CompressionLevel::Default)
+        //         .compress_when(
+        //             SizeAbove::new(256)
+        //                 .and(NotForContentType::GRPC)
+        //                 .and(NotForContentType::IMAGES)
+        //                 .and(NotForContentType::SSE)
+        //                 .and(NotForContentType::const_new("text/javascript"))
+        //                 .and(NotForContentType::const_new("application/wasm"))
+        //                 .and(NotForContentType::const_new("text/css")),
+        //         ),
+        // )
         .layer(
             AuthSessionLayer::<User, UserId, SessionPgPool, PgPool>::new(Some(pool.clone()))
                 .with_config(auth_config),

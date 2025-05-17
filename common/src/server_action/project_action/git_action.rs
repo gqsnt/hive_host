@@ -1,16 +1,36 @@
 use crate::server_action::permission::Permission;
 use crate::server_action::project_action::{IsProjectServerAction, ProjectAction};
-use crate::{impl_chain_from};
+use crate::{
+    GitBranchNameStr, GitCommitStr, GitRepoFullNameStr, GitTokenStr, Validate, impl_chain_from,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ProjectGitAction {
     Pull {
-        branch: String,
-        commit: String,
-        repo_full_name:String,
-        token:String,
-        
+        branch: GitBranchNameStr,
+        commit: GitCommitStr,
+        repo_full_name: GitRepoFullNameStr,
+        token: GitTokenStr,
+    },
+}
+
+impl Validate for ProjectGitAction {
+    fn validate(&self) -> Result<(), crate::SanitizeError> {
+        match self {
+            ProjectGitAction::Pull {
+                branch,
+                commit,
+                repo_full_name,
+                token,
+            } => {
+                branch.validate()?;
+                commit.validate()?;
+                repo_full_name.validate()?;
+                token.validate()?;
+            }
+        }
+        Ok(())
     }
 }
 

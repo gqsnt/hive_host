@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use crate::api::{get_action_server_project_action, get_action_token_action};
+use crate::models::ProjectSlugStrFront;
 use common::server_action::permission::Permission;
 use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
-use common::{ProjectSlugStr, ServerId};
+use common::ServerId;
 use leptos::either::EitherOf4;
 use leptos::html::Textarea;
 use leptos::leptos_dom::log;
@@ -13,70 +13,75 @@ use leptos::prelude::{IntoMaybeErased, ServerFnError, Suspend};
 use leptos::reactive::spawn_local;
 use leptos::server::LocalResource;
 use leptos::{component, view, IntoView};
+use std::sync::Arc;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{js_sys, Blob, FormData, SubmitEvent};
-
 
 #[component]
 pub fn FileContentView(
     selected_file: Signal<Option<String>>,
-    slug: Signal<ProjectSlugStr>,
-    server_id:Signal<ServerId>,
+    slug: Signal<ProjectSlugStrFront>,
+    server_id: Signal<ServerId>,
     csrf_signal: Signal<Option<String>>,
     permission_signal: Signal<Permission>,
 ) -> impl IntoView {
-    let file_content_resource = LocalResource::new(
-        move || async move {
-            match selected_file.get() {
-                Some(file_path) => {
-                    match get_action_token_action(
-                        server_id(),
-                        slug.get(),
-                        TokenAction::ViewFile { path: file_path },
-                        None,
-                        None,
-                    )
-                        .await
-                    {
-                        Ok(UsedTokenActionResponse::File(file_info)) => Ok(file_info),
-                        Err(e) => {
-                            leptos::logging::error!("Error fetching file: {:?}", e);
-                            Err(ServerFnError::new("Failed to fetch file"))
-                        }
-                        _ => Err(ServerFnError::new("Invalid response type")),
+    let file_content_resource = LocalResource::new(move || async move {
+        match selected_file.get() {
+            Some(file_path) => {
+                match get_action_token_action(
+                    server_id(),
+                    slug.get(),
+                    TokenAction::ViewFile { path: file_path },
+                    None,
+                    None,
+                )
+                .await
+                {
+                    Ok(UsedTokenActionResponse::File(file_info)) => Ok(file_info),
+                    Err(e) => {
+                        leptos::logging::error!("Error fetching file: {:?}", e);
+                        Err(ServerFnError::new("Failed to fetch file"))
                     }
+                    _ => Err(ServerFnError::new("Invalid response type")),
                 }
-                _ => Err(ServerFnError::new("FileContentView: No file selected")),
             }
-        },
-    );
+            _ => Err(ServerFnError::new("FileContentView: No file selected")),
+        }
+    });
 
     let (current_file_path_for_form, set_current_file_path_for_form) = signal(String::new());
 
-    
     let server_save_action = get_action_server_project_action();
     let node_ref: NodeRef<Textarea> = NodeRef::new();
-    
-    let handle_download_file= move |file_path:Arc<String>|{
+
+    let handle_download_file = move |file_path: Arc<String>| {
         spawn_local(async move {
             match get_action_token_action(
                 server_id(),
                 slug(),
-                TokenAction::DownloadFile { path: file_path.to_string() },
+                TokenAction::DownloadFile {
+                    path: file_path.to_string(),
+                },
                 None,
                 None,
             )
-                .await
+            .await
             {
                 Ok(UsedTokenActionResponse::Content(buff)) => {
-                    let file_name = file_path.split('/').next_back().unwrap_or("downloaded_file");
+                    let file_name = file_path
+                        .split('/')
+                        .next_back()
+                        .unwrap_or("downloaded_file");
                     let buff_value = JsValue::from(buff);
                     let array = js_sys::Array::from_iter(std::iter::once(&buff_value));
-                    let blob = Blob::new_with_str_sequence(
-                        &array,
-                    ).unwrap();
+                    let blob = Blob::new_with_str_sequence(&array).unwrap();
                     let url = web_sys::Url::create_object_url_with_blob(&blob).unwrap();
-                    let a = web_sys::window().unwrap().document().unwrap().create_element("a").unwrap();
+                    let a = web_sys::window()
+                        .unwrap()
+                        .document()
+                        .unwrap()
+                        .create_element("a")
+                        .unwrap();
                     a.set_attribute("href", &url).unwrap();
                     a.set_attribute("download", file_name).unwrap();
                     a.dyn_ref::<web_sys::HtmlAnchorElement>().unwrap().click();
@@ -94,9 +99,11 @@ pub fn FileContentView(
 
     let handle_on_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
-        
+
         let form_data = FormData::new().unwrap();
-        form_data.append_with_str("file_content", &node_ref.get().unwrap().value()).unwrap();
+        form_data
+            .append_with_str("file_content", &node_ref.get().unwrap().value())
+            .unwrap();
 
         let path_to_save = current_file_path_for_form.get_untracked();
         let csrf_token_val = csrf_signal.get_untracked();
@@ -104,12 +111,12 @@ pub fn FileContentView(
         spawn_local(async move {
             match get_action_token_action(
                 server_id(),
-                slug(), 
+                slug(),
                 TokenAction::UpdateFile { path: path_to_save },
                 csrf_token_val,
                 Some(form_data),
             )
-                .await
+            .await
             {
                 Ok(UsedTokenActionResponse::Ok) => {
                     log!("File saved successfully.");
@@ -126,7 +133,6 @@ pub fn FileContentView(
             }
         });
     };
-
 
     view! {
         <Transition fallback=move || {
@@ -246,9 +252,6 @@ pub fn FileContentView(
         </Transition>
     }
 }
-
-
-
 
 pub mod server_fns {
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {

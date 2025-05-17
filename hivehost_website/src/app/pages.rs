@@ -1,8 +1,7 @@
 use crate::models::{Project, User};
 use common::server_action::permission::Permission;
 use common::Slug;
-use reactive_stores::{ Store};
-
+use reactive_stores::Store;
 
 pub mod home;
 pub mod login;
@@ -16,10 +15,8 @@ pub struct GlobalState {
     pub project_state: Option<ProjectState>,
 }
 
-
-
 #[derive(Clone, Debug, Store)]
-pub struct ProjectState{
+pub struct ProjectState {
     pub slug: Slug,
     pub permission: Permission,
     pub project: Project,
@@ -33,5 +30,4 @@ impl ProjectState {
             project,
         }
     }
-    
 }

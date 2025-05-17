@@ -2,20 +2,20 @@ use crate::api::ServerProjectActionFront;
 use common::server_action::permission::Permission;
 use common::server_action::project_action::io_action::dir_action::{LsElement, ProjectIoDirAction};
 use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
+use common::ServerId;
 use leptos::callback::Callback;
 use leptos::either::Either;
 use leptos::html::Input;
+use leptos::prelude::AddAnyAttr;
 use leptos::prelude::CustomAttribute;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::{signal, NodeRef, NodeRefAttribute, ReadSignal};
-use leptos::prelude::{AddAnyAttr};
 use leptos::prelude::{Callable, Get, IntoMaybeErased};
 use leptos::prelude::{ClassAttribute, CollectView, GlobalAttributes, OnAttribute, Signal};
 use leptos::prelude::{ElementChild, Read, Show};
 use leptos::{component, view, IntoView};
 use leptos_router::components::A;
 use web_sys::SubmitEvent;
-use common::ServerId;
 
 pub type FileListSignal = ReadSignal<Option<Vec<LsElement>>>;
 
@@ -23,15 +23,13 @@ pub type FileListSignal = ReadSignal<Option<Vec<LsElement>>>;
 pub fn ProjectFilesSidebar(
     file_list: FileListSignal,
     current_path: Signal<String>,
-    server_id:Signal<ServerId>,
+    server_id: Signal<ServerId>,
     slug: Signal<String>,
     on_select_file: Callback<String>,
     server_project_action: ServerProjectActionFront,
     csrf_signal: Signal<Option<String>>,
     permission_signal: Signal<Permission>,
 ) -> impl IntoView {
-    
-
     view! {
         <div class="p-4 h-full flex flex-col">
 
@@ -117,7 +115,6 @@ pub fn ProjectFilesSidebar(
         </div>
     }
 }
-
 
 #[component]
 pub fn ProjectFilesSidebarItem(
@@ -370,12 +367,6 @@ pub fn ProjectFilesSidebarItem(
         </li>
     }
 }
-
-
-
-
-
-
 
 pub mod server_fns {
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {

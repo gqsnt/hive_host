@@ -1,4 +1,6 @@
-use std::sync::LazyLock;
+use secrecy::SecretString;
+use std::sync::{Arc, LazyLock};
+use tokio::sync::RwLock;
 
 pub mod command;
 
@@ -13,7 +15,12 @@ pub enum ServerHelperError {
     IoError(#[from] tokio::io::Error),
     #[error("Failed to execute command: {0}")]
     Other(String),
+    #[error("Sanitize Error {0}")]
+    SanitizeError(#[from] common::SanitizeError),
 }
 
-
-
+#[derive(Clone)]
+pub struct AppState {
+    pub server_auth: Arc<SecretString>,
+    pub connected: Arc<RwLock<bool>>,
+}

@@ -1,23 +1,23 @@
 use crate::app::components::csrf_field::{generate_csrf, CSRFField};
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::security::signup::Signup;
-use leptos::prelude::{IntoAnyAttribute, NodeRef, NodeRefAttribute, OnAttribute};
+use leptos::html::Input;
+use leptos::prelude::CustomAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, AddAnyAttr, OnceResource, Suspend, Transition, Update};
 use leptos::prelude::{signal, Effect, ElementChild, Get, Set};
 use leptos::prelude::{ClassAttribute, ServerAction};
+use leptos::prelude::{IntoAnyAttribute, NodeRef, NodeRefAttribute, OnAttribute};
 use leptos::{component, view, IntoView};
-use leptos::html::Input;
 use leptos_router::components::A;
 use reactive_stores::Store;
 use web_sys::SubmitEvent;
-use leptos::prelude::CustomAttribute;
 
 #[component]
 pub fn SignupPage() -> impl IntoView {
     let global_store: Store<GlobalState> = expect_context();
     let csrf_resource = OnceResource::new_bincode(generate_csrf());
-    
+
     let email_ref = NodeRef::<Input>::default();
     let password_ref = NodeRef::<Input>::default();
     let username_ref = NodeRef::<Input>::default();
@@ -39,10 +39,7 @@ pub fn SignupPage() -> impl IntoView {
         event.prevent_default();
         action.dispatch(Signup {
             csrf: global_store.csrf().get().unwrap_or_default(),
-            email: email_ref
-                .get()
-                .expect("<input> should be mounted")
-                .value(),
+            email: email_ref.get().expect("<input> should be mounted").value(),
             username: username_ref
                 .get()
                 .expect("<input> should be mounted")

@@ -53,7 +53,6 @@ pub fn App() -> impl IntoView {
 
     provide_context(Store::new(GlobalState::default()));
 
-
     view! {
         <Stylesheet id="leptos" href="/pkg/website.css" />
 
@@ -118,7 +117,6 @@ fn ProjectRoutes() -> impl MatchNestedRoutes + Clone {
     }
     .into_inner()
 }
-
 
 fn commit_display(commit: &str) -> String {
     if commit.is_empty() {

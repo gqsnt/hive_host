@@ -1,7 +1,10 @@
 use common::server_action::permission::Permission;
-use common::{ProjectId, ProjectSlugStr, ServerId, Slug, UserId, UserSlugStr};
+use common::{ProjectId, ServerId, Slug, UserId};
 use reactive_stores::{Patch, Store};
 use serde::{Deserialize, Serialize};
+
+pub type UserSlugStrFront = String;
+pub type ProjectSlugStrFront = String;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::Type))]
@@ -20,7 +23,7 @@ pub struct User {
     pub id: UserId,
     pub role_type: RoleType,
     pub username: String,
-    pub slug: UserSlugStr,
+    pub slug: UserSlugStrFront,
 }
 
 impl User {
@@ -48,44 +51,37 @@ impl Default for User {
     }
 }
 
-#[derive(Store, Patch,Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Store, Patch, Debug, Clone, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Project {
     pub id: ProjectId,
-    pub server_id:ServerId,
+    pub server_id: ServerId,
     pub hosting_address: String,
     pub name: String,
-    pub slug: ProjectSlugStr,
+    pub slug: ProjectSlugStrFront,
     pub active_snapshot_id: Option<i64>,
     pub git_project: Option<GitProject>,
 }
 
-#[derive(Store, Patch,Debug, Clone,  Serialize, Deserialize)]
-pub struct GitProject{
-    pub id:i64,
+#[derive(Store, Patch, Debug, Clone, Serialize, Deserialize)]
+pub struct GitProject {
+    pub id: i64,
     pub repo_full_name: String,
-    pub branch_name:String,
-    pub dev_commit:String,
-    pub prod_branch_commit:Option<(String, String)>, // (branch, commit)
-    pub last_commit:String,
-    pub auto_deploy:bool,
-    pub installation_id:i64,
-    pub user_githubs_id:i64,
+    pub branch_name: String,
+    pub dev_commit: String,
+    pub prod_branch_commit: Option<(String, String)>, // (branch, commit)
+    pub last_commit: String,
+    pub auto_deploy: bool,
+    pub installation_id: i64,
+    pub user_githubs_id: i64,
 }
 
-
-
-
-
-#[derive(Debug, Clone,Default, PartialEq, Eq, Store, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Store, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct Server {
     pub id: ServerId,
     pub name: String,
 }
-
-
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectSnapshot {
@@ -106,10 +102,9 @@ impl Project {
     }
 }
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
-pub struct UserGithub{
+pub struct UserGithub {
     pub id: i64,
     pub login: String,
     pub installation_id: i64,
@@ -126,7 +121,7 @@ pub struct SshKeyInfo {
     pub user_id: UserId,
 }
 
-#[derive(Debug, Clone,Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "ssr", derive(sqlx::FromRow))]
 pub struct UserPermission {
     pub user_id: UserId,

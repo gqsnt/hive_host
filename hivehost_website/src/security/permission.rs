@@ -1,12 +1,10 @@
-
-use crate::{AppResult};
+use crate::models::ProjectSlugStrFront;
+use crate::AppResult;
 use common::server_action::project_action::{ProjectAction, ProjectResponse};
-use common::{ProjectSlugStr, ServerId};
+use common::server_action::token_action::TokenAction;
+use common::ServerId;
 use leptos::server;
 use leptos::server_fn::codec::Bincode;
-use common::server_action::token_action::{TokenAction};
-
-
 
 pub fn token_url(server_url: &str, token: &str) -> String {
     format!("http://{server_url}/token/{token}")
@@ -15,30 +13,33 @@ pub fn token_url(server_url: &str, token: &str) -> String {
 #[server(input=Bincode,output=Bincode)]
 pub async fn request_token_action_front(
     server_id: ServerId,
-    project_slug: ProjectSlugStr,
+    project_slug: ProjectSlugStrFront,
     action: TokenAction,
     csrf: Option<String>,
 ) -> AppResult<String> {
-    use crate::ssr::{pool};
-    use common::tarpc_client::TarpcClientError;
+    use crate::ssr::pool;
     use common::server_action::project_action::IsProjectServerAction;
     use common::server_action::token_action::TokenActionResponse;
-    
+    use common::tarpc_client::TarpcClientError;
+
     let token = ssr::handle_project_permission_request(
         project_slug,
         action.permission(),
         action.require_csrf().then_some(csrf.unwrap_or_default()),
         |_, _, project_slug| async move {
-            match crate::ssr::ws_clients()?.get(&server_id){
-                None => Err(crate::AppError::TrpcClientError(TarpcClientError::NotConnected)),
-                Some(client) => {
-                    client.token_action(project_slug.to_string(), action).await.map_err(Into::into)
-                }
+            match crate::ssr::ws_clients()?.get(&server_id) {
+                None => Err(crate::AppError::TrpcClientError(
+                    TarpcClientError::NotConnected,
+                )),
+                Some(client) => client
+                    .token_action(project_slug.to_project_slug_str(), action)
+                    .await
+                    .map_err(Into::into),
             }
         },
     )
-        .await?;
-    match token{
+    .await?;
+    match token {
         TokenActionResponse::Ok(token) => {
             let pool = pool()?;
             let server = sqlx::query!(r#"SELECT id, ip FROM servers WHERE id = $1"#, server_id)
@@ -48,35 +49,36 @@ pub async fn request_token_action_front(
             let server_url = format!("{}:{}", server.ip, common::SERVER_TOKEN_PORT);
             Ok(token_url(&server_url, &token))
         }
-        TokenActionResponse::Error(e) => {
-            Err(crate::AppError::TrpcClientError(TarpcClientError::RpcError(e)))
-        }
+        TokenActionResponse::Error(e) => Err(crate::AppError::TrpcClientError(
+            TarpcClientError::RpcError(e),
+        )),
     }
 }
-
 
 #[server(input=Bincode,output=Bincode)]
 pub async fn request_server_project_action_front(
     server_id: ServerId,
-    project_slug: ProjectSlugStr,
+    project_slug: ProjectSlugStrFront,
     action: ProjectAction,
     csrf: Option<String>,
 ) -> AppResult<ProjectResponse> {
     use common::server_action::project_action::IsProjectServerAction;
     use common::tarpc_client::TarpcClientError;
-    
+
     ssr::handle_project_permission_request(
         project_slug,
         action.permission(),
         action.require_csrf().then_some(csrf.unwrap_or_default()),
         |_, _, project_slug| async move {
-            match crate::ssr::ws_clients()?.get(&server_id){
-                None => Err(crate::AppError::TrpcClientError(TarpcClientError::NotConnected)),
-                Some(client) => {
-                    client.project_action(project_slug.to_string(), action).await.map_err(Into::into)
-                }
+            match crate::ssr::ws_clients()?.get(&server_id) {
+                None => Err(crate::AppError::TrpcClientError(
+                    TarpcClientError::NotConnected,
+                )),
+                Some(client) => client
+                    .project_action(project_slug.to_project_slug_str(), action)
+                    .await
+                    .map_err(Into::into),
             }
-
         },
     )
     .await
@@ -84,12 +86,13 @@ pub async fn request_server_project_action_front(
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
+    use crate::models::ProjectSlugStrFront;
     use crate::security::ssr::AppAuthSession;
     use crate::security::utils::ssr::{get_auth_session_user_id, verify_easy_hash};
     use crate::ssr::{permissions, pool, Permissions};
     use crate::{AppError, AppResult};
     use common::server_action::permission::Permission;
-    use common::{ProjectId, ProjectSlugStr, Slug, UserId};
+    use common::{ProjectId, Slug, UserId};
     use leptos::logging::log;
     use sqlx::PgPool;
     use std::future::Future;
@@ -125,7 +128,7 @@ pub mod ssr {
     }
 
     pub async fn handle_project_permission_request<F, Fut, T>(
-        project_slug_str: ProjectSlugStr,
+        project_slug_str: ProjectSlugStrFront,
         required_permission: Permission,
         csrf: Option<String>,
         handler: F,

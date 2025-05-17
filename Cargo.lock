@@ -769,6 +769,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "reactive_stores",
+ "sanitize-filename",
  "serde",
  "sqlx",
  "strum",
@@ -1694,6 +1695,7 @@ dependencies = [
  "futures",
  "moka",
  "reqwest",
+ "sanitize-filename",
  "secrecy",
  "tarpc",
  "thiserror 2.0.12",
@@ -1711,6 +1713,7 @@ dependencies = [
  "common",
  "dotenvy",
  "futures",
+ "secrecy",
  "tarpc",
  "thiserror 2.0.12",
  "tokio",
@@ -1734,6 +1737,7 @@ dependencies = [
  "hyper-util",
  "mime_guess",
  "quick_cache",
+ "secrecy",
  "socket2 0.5.9",
  "tarpc",
  "thiserror 2.0.12",
@@ -1764,6 +1768,8 @@ dependencies = [
  "deadpool",
  "dotenvy",
  "gloo-net",
+ "hex",
+ "hmac",
  "http",
  "jsonwebtoken",
  "leptos",
@@ -1783,6 +1789,7 @@ dependencies = [
  "send_wrapper",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "strum",
  "strum_macros",
@@ -3910,6 +3917,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "sanitize-filename"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc984f4f9ceb736a7bb755c3e3bd17dc56370af2600c9780dcc48c66453da34d"
+dependencies = [
+ "regex",
 ]
 
 [[package]]

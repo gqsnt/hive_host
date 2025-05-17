@@ -1,19 +1,18 @@
 use crate::app::components::csrf_field::{generate_csrf, CSRFField};
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::security::login::Login;
-use leptos::prelude::{ElementChild, NodeRef, NodeRefAttribute, OnAttribute};
+use leptos::html::Input;
+use leptos::prelude::CustomAttribute;
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::ServerAction;
 use leptos::prelude::{expect_context, ClassAttribute, OnceResource, Suspend, Transition, Update};
 use leptos::prelude::{signal, AddAnyAttr, Effect, Get, Set};
-use leptos::prelude::{ServerAction};
+use leptos::prelude::{ElementChild, NodeRef, NodeRefAttribute, OnAttribute};
 use leptos::{component, view, IntoView};
-use leptos::html::Input;
-use leptos_router::components::{A};
+use leptos_router::components::A;
 use reactive_stores::Store;
 use web_sys::SubmitEvent;
-use leptos::prelude::CustomAttribute;
-
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
@@ -23,8 +22,6 @@ pub fn LoginPage() -> impl IntoView {
     let email_ref = NodeRef::<Input>::default();
     let password_ref = NodeRef::<Input>::default();
     let remember_ref = NodeRef::<Input>::default();
-    
-    
 
     let (login_result, set_login_result) = signal(" ".to_string());
     Effect::new(move |_| {
@@ -35,16 +32,16 @@ pub fn LoginPage() -> impl IntoView {
             _ => (),
         };
     });
-    
+
     let on_submit = move |event: SubmitEvent| {
         event.prevent_default();
-        action.dispatch(Login{
+        action.dispatch(Login {
             csrf: global_store.csrf().get().unwrap_or_default(),
-            email: email_ref
+            email: email_ref.get().expect("<input> should be mounted").value(),
+            password: password_ref
                 .get()
                 .expect("<input> should be mounted")
                 .value(),
-            password: password_ref.get().expect("<input> should be mounted").value(),
             remember: remember_ref
                 .get()
                 .expect("<input> should be mounted")

@@ -2,13 +2,13 @@ use crate::app::components::csrf_field::generate_csrf;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 use crate::models::User;
 use crate::security::{get_user, Logout};
-use leptos::prelude::{ElementChild, Read};
 use leptos::prelude::IntoAnyAttribute;
 use leptos::prelude::IntoMaybeErased;
 use leptos::prelude::{expect_context, CustomAttribute, Signal, Suspend, Transition, Update};
 use leptos::prelude::{signal, ClassAttribute, Get, GlobalAttributes};
 use leptos::prelude::{AddAnyAttr, Effect, ReadSignal, ServerAction};
 use leptos::prelude::{AriaAttributes, OnAttribute};
+use leptos::prelude::{ElementChild, Read};
 use leptos::server::OnceResource;
 use leptos::{component, view, IntoView};
 use leptos_router::components::{Outlet, A};
@@ -87,11 +87,10 @@ pub fn UserPage() -> impl IntoView {
         let path = location.pathname.get();
         set_current_page(UserPageType::from(path.as_str()));
     });
-    
-    
-    let on_logout_click= move |event:MouseEvent| {
+
+    let on_logout_click = move |event: MouseEvent| {
         event.prevent_default();
-        logout.dispatch(Logout{});
+        logout.dispatch(Logout {});
     };
 
     view! {
@@ -170,7 +169,7 @@ pub fn UserPage() -> impl IntoView {
                                 <ul role="list" class="flex flex-1 flex-col gap-y-7">
                                     <li>
                                         <ul role="list" class="-mx-2 space-y-1">
-                                            <NavItem page=UserPageType::Dashboard current_page=current_page/> 
+                                            <NavItem page=UserPageType::Dashboard current_page=current_page/>
                                             <NavItem page=UserPageType::Projects current_page=current_page/>
                                         </ul>
                                     </li>
@@ -224,7 +223,7 @@ pub fn UserPage() -> impl IntoView {
                 <div class="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-950 px-6 pb-4">
                     <div class="flex h-16 shrink-0 items-center">
                         <A href="/">
-                         <img class="h-8 w-auto" src="/favicon.ico" alt="Your Company"/> 
+                         <img class="h-8 w-auto" src="/favicon.ico" alt="Your Company"/>
                             </A>
                     </div>
                     <nav class="flex flex-1 flex-col">
@@ -237,7 +236,7 @@ pub fn UserPage() -> impl IntoView {
                             </li>
                             <div class="mt-auto -mx-2 space-y-1">
                                 <li class="text-sm/6 font-semibold text-gray-400">
-                                    Connected as 
+                                    Connected as
                                         <span class="text-white">
                                             {global_store.user().read().as_ref().map(|u|u.0.to_string())}
                                         </span>

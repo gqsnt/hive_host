@@ -4,10 +4,11 @@ use common::helper_command::{HelperCommand, HelperResponse};
 use common::server_action::permission::Permission;
 use common::server_action::user_action::{ServerUserAction, ServerUserResponse};
 use common::{
-    get_project_dev_path, get_user_path, get_user_project_path, get_user_projects_path,
-    ProjectSlugStr, UserSlugStr,
+    get_project_dev_path, get_user_projects_path, GitBranchNameStr, GitRepoFullNameStr,
+    GitTokenStr, ProjectSlugStr, Slug, UserSlugStr,
 };
 use std::path::Path;
+use std::str::FromStr;
 use tracing::info;
 
 pub async fn handle_user_action(
@@ -16,25 +17,13 @@ pub async fn handle_user_action(
 ) -> ServerResult<ServerUserResponse> {
     info!("Server action: {:?}", action);
     let r = match action {
-        ServerUserAction::Create { user_slug } => {
-            create_user(server_helper, user_slug.to_string()).await?
-        }
-        ServerUserAction::Delete { user_slug } => {
-            remove_user(server_helper, user_slug.to_string()).await?
-        }
+        ServerUserAction::Create { user_slug } => create_user(server_helper, user_slug).await?,
+        ServerUserAction::Delete { user_slug } => remove_user(server_helper, user_slug).await?,
         ServerUserAction::AddProject {
             user_slug,
             project_slug,
             github_info,
-        } => {
-            create_project(
-                server_helper,
-                user_slug.to_string(),
-                project_slug.to_string(),
-                github_info,
-            )
-            .await?
-        }
+        } => create_project(server_helper, user_slug, project_slug, github_info).await?,
         ServerUserAction::RemoveProject {
             user_slugs,
             project_slug,
@@ -42,15 +31,10 @@ pub async fn handle_user_action(
             let mut helper_commands = user_slugs
                 .iter()
                 .flat_map(|user_slug| {
-                    remove_user_from_project_commands(
-                        user_slug.to_string(),
-                        project_slug.to_string(),
-                    )
+                    remove_user_from_project_commands(user_slug.clone(), project_slug.clone())
                 })
                 .collect::<Vec<HelperCommand>>();
-            helper_commands.push(HelperCommand::DeleteProject {
-                project_slug: project_slug.to_string(),
-            });
+            helper_commands.push(HelperCommand::DeleteProject { project_slug });
             server_helper.execute(helper_commands).await?
         }
     };
@@ -61,14 +45,8 @@ pub async fn create_user(
     server_helper: TarpcHelperClient,
     user_slug: UserSlugStr,
 ) -> ServerResult<HelperResponse> {
-    let user_path = get_user_path(&user_slug);
-    let user_projects_path = get_user_projects_path(&user_slug);
     Ok(server_helper
-        .execute(vec![HelperCommand::CreateUser {
-            user_slug,
-            user_path: user_path.clone(),
-            user_projects_path: user_projects_path.clone(),
-        }])
+        .execute(vec![HelperCommand::CreateUser { user_slug }])
         .await?)
 }
 
@@ -76,38 +54,31 @@ pub async fn create_project(
     server_helper: TarpcHelperClient,
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
-    github_info: Option<(Option<String>, String, String)>,
+    github_info: Option<(Option<GitTokenStr>, GitRepoFullNameStr, GitBranchNameStr)>,
 ) -> ServerResult<HelperResponse> {
     let dev_path = get_project_dev_path(&project_slug);
-    let user_project_path = get_user_project_path(&user_slug, &project_slug);
     server_helper
         .execute(vec![
             HelperCommand::CreateProject {
                 project_slug: project_slug.clone(),
-                service_user: user_slug.clone(),
+                user_slug: user_slug.clone(),
                 with_index_html: github_info.is_none(),
             },
             HelperCommand::BindMountUserProject {
-                source_path: dev_path.clone(),
-                target_path: user_project_path.clone(),
+                project_slug,
+                user_slug,
             },
         ])
         .await?;
     if let Some((token, full_name, branch)) = github_info {
         let token = token
-            .map(|token| format!("oauth2:{token}@"))
+            .map(|token| format!("oauth2:{}@", token.0))
             .unwrap_or_default();
-        let url = format!("https://{token}github.com/{full_name}.git");
+        let url = format!("https://{token}github.com/{}.git", full_name.0);
         let r1 = run_external_command(
             "git",
             &[
-                "clone",
-                &url,
-                "--branch",
-                &branch,
-                "--depth",
-                "1",
-                &dev_path,
+                "clone", &url, "--branch", &branch.0, "--depth", "1", &dev_path,
             ],
         )
         .await?;
@@ -122,19 +93,16 @@ pub async fn add_user_to_project(
     project_slug: ProjectSlugStr,
     permission: Permission,
 ) -> ServerResult<HelperResponse> {
-    let project_path = get_project_dev_path(&project_slug);
-    let project_path_clone = project_path.clone();
-    let user_project_path = get_user_project_path(&user_slug, &project_slug);
     Ok(server_helper
         .execute(vec![
             HelperCommand::SetAcl {
-                path: project_path_clone,
-                user_slug,
+                project_slug: project_slug.clone(),
+                user_slug: user_slug.clone(),
                 is_read_only: permission.is_read_only(),
             },
             HelperCommand::BindMountUserProject {
-                source_path: project_path,
-                target_path: user_project_path,
+                project_slug,
+                user_slug,
             },
         ])
         .await?)
@@ -148,7 +116,7 @@ pub async fn update_user_in_project(
 ) -> ServerResult<HelperResponse> {
     Ok(server_helper
         .execute(vec![HelperCommand::SetAcl {
-            path: get_project_dev_path(&project_slug),
+            project_slug,
             user_slug,
             is_read_only: permission.is_read_only(),
         }])
@@ -159,15 +127,14 @@ pub fn remove_user_from_project_commands(
     user_slug: UserSlugStr,
     project_slug: ProjectSlugStr,
 ) -> Vec<HelperCommand> {
-    let proj_path = get_project_dev_path(&project_slug);
-    let user_project_path = get_user_project_path(&user_slug, &project_slug);
     vec![
         HelperCommand::RemoveAcl {
-            path: proj_path.clone(),
+            project_slug: project_slug.clone(),
             user_slug: user_slug.clone(),
         },
         HelperCommand::UnmountUserProject {
-            target_path: user_project_path.clone(),
+            project_slug,
+            user_slug,
         },
     ]
 }
@@ -184,16 +151,16 @@ pub async fn remove_user(
         while let Some(entry) = read_dir.next_entry().await? {
             let submount = entry.path();
             if submount.is_dir() {
+                let project_slug =
+                    Slug::from_str(submount.file_name().unwrap().to_string_lossy().as_ref())?
+                        .to_project_slug_str();
                 commands.push(HelperCommand::UnmountUserProject {
-                    target_path: submount.to_string_lossy().to_string(),
+                    project_slug,
+                    user_slug: user_slug.clone(),
                 });
             }
         }
     }
-    let user_slug_clone = user_slug.clone();
-    commands.push(HelperCommand::DeleteUser {
-        user_slug: user_slug_clone,
-        user_path: get_user_path(&user_slug),
-    });
+    commands.push(HelperCommand::DeleteUser { user_slug });
     Ok(server_helper.execute(commands).await?)
 }

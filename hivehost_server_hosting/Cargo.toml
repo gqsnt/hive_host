@@ -30,3 +30,4 @@ async-compression = { version = "0.4.22", features = ["all"] }
 common = { path = "../common", features = ["hosting", "tarpc-server-to-hosting"] }
 tarpc = {workspace = true}
 futures = {workspace = true}
+secrecy = {workspace = true}

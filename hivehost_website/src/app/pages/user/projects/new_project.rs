@@ -2,20 +2,79 @@ use crate::app::pages::user::projects::new_project::server_fns::{
     get_github_accounts, get_servers,
 };
 use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use crate::github::{GithubBranch, GithubBranchFront};
+use common::{GitBranchNameStr, GitCommitStr, GitRepoFullNameStr, SanitizeError};
 use leptos::either::{Either, EitherOf3};
 use leptos::ev::Targeted;
 use leptos::html::{Input, Select};
-use leptos::prelude::{event_target_value, expect_context, signal, Effect, ElementChild, Get, NodeRef, NodeRefAttribute, OnAttribute, OnceResource, ReadSignal, Set, Show, Suspend, Transition, WriteSignal};
+use leptos::prelude::{
+    event_target_value, expect_context, signal, Effect, ElementChild, Get, NodeRef,
+    NodeRefAttribute, OnAttribute, OnceResource, ReadSignal, Set, Show, Suspend, Transition,
+    WriteSignal,
+};
 use leptos::prelude::{ClassAttribute, IntoMaybeErased};
 use leptos::prelude::{OnTargetAttribute, Resource};
 use leptos::server::ServerAction;
 use leptos::{component, view, IntoView};
 use reactive_stores::Store;
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use std::sync::Arc;
 use web_sys::{Event, HtmlSelectElement, MouseEvent};
-use crate::github::GithubBranch;
 
-pub type GithubInfo = (Option<i64>, String, GithubBranch);
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GithubInfo {
+    pub installation_id: Option<i64>,
+    pub repo_full_name: GitRepoFullNameStr,
+    pub branch: GithubBranch,
+}
+
+impl TryFrom<GithubInfoFront> for GithubInfo {
+    type Error = SanitizeError;
+
+    fn try_from(value: GithubInfoFront) -> Result<Self, Self::Error> {
+        let branch = GithubBranch {
+            name: GitBranchNameStr::from_str(&value.branch.name)?,
+            commit: GitCommitStr::from_str(&value.branch.commit)?,
+        };
+        let repo_full_name = GitRepoFullNameStr::from_str(&value.repo_full_name)?;
+
+        Ok(Self {
+            installation_id: value.installation_id,
+            repo_full_name,
+            branch,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GithubInfoFront {
+    pub installation_id: Option<i64>,
+    pub repo_full_name: String,
+    pub branch: GithubBranchFront,
+}
+
+impl GithubInfoFront {
+    pub fn public(repo_full_name: String, branch: GithubBranchFront) -> Self {
+        Self {
+            installation_id: None,
+            repo_full_name,
+            branch,
+        }
+    }
+
+    pub fn private(
+        installation_id: Option<i64>,
+        repo_full_name: String,
+        branch: GithubBranchFront,
+    ) -> Self {
+        Self {
+            installation_id,
+            repo_full_name,
+            branch,
+        }
+    }
+}
 
 #[component]
 pub fn NewProjectPage(
@@ -23,7 +82,7 @@ pub fn NewProjectPage(
 ) -> impl IntoView {
     let global_store: Store<GlobalState> = expect_context();
 
-    let (github_info, set_github_info) = signal(None::<GithubInfo>);
+    let (github_info, set_github_info) = signal(None::<GithubInfoFront>);
     let (github_info_is_public, set_github_info_is_public) = signal(None::<bool>);
     let servers_resource = OnceResource::new_bincode(get_servers());
 
@@ -220,8 +279,8 @@ pub fn NewProjectPage(
 #[component]
 pub fn NewProjectPublicGithub(
     global_store: Store<GlobalState>,
-    github_info: ReadSignal<Option<GithubInfo>>,
-    set_github_info: WriteSignal<Option<GithubInfo>>,
+    github_info: ReadSignal<Option<GithubInfoFront>>,
+    set_github_info: WriteSignal<Option<GithubInfoFront>>,
 ) -> impl IntoView {
     let (repo_full_name, set_repo_full_name) = signal(String::new());
 
@@ -232,9 +291,7 @@ pub fn NewProjectPublicGithub(
                 repo_full_name(),
             )
         },
-        |(csrf, repo_full_name)| {
-            server_fns::get_github_repo_branches(csrf, None, repo_full_name)
-        },
+        |(csrf, repo_full_name)| server_fns::get_github_repo_branches(csrf, None, repo_full_name),
     );
 
     view! {
@@ -276,7 +333,7 @@ pub fn NewProjectPublicGithub(
                                 let branches = public_branches_resource.await;
                                 let handle_branch_change = move |
                                     ev: Targeted<Event, HtmlSelectElement>,
-                                    branches: Arc<Vec<GithubBranch>>|
+                                    branches: Arc<Vec<GithubBranchFront>>|
                                 {
                                     let value = ev.target().value();
                                     if value.is_empty() {
@@ -287,7 +344,9 @@ pub fn NewProjectPublicGithub(
                                             .find(|branch| branch.commit == value)
                                             .cloned()
                                             .unwrap();
-                                        set_github_info(Some((None, repo_full_name(), branch)));
+                                        set_github_info(
+                                            Some(GithubInfoFront::public(repo_full_name(), branch)),
+                                        );
                                     }
                                 };
                                 match branches {
@@ -352,11 +411,11 @@ pub fn NewProjectPublicGithub(
 #[component]
 pub fn NewProjectPrivateGithub(
     global_store: Store<GlobalState>,
-    set_github_info: WriteSignal<Option<GithubInfo>>,
+    set_github_info: WriteSignal<Option<GithubInfoFront>>,
 ) -> impl IntoView {
     let accounts_resource = OnceResource::new_bincode(get_github_accounts());
     let (github_account_id_signal, set_github_account_id_signal) = signal(None::<i64>);
-    let (github_full_name_signal, set_github_repo_id_signal) = signal(None::<String>);
+    let (github_full_name_signal, set_github_full_name_signal) = signal(None::<String>);
     let repositories_resource = Resource::new_bincode(
         move || {
             (
@@ -384,13 +443,12 @@ pub fn NewProjectPrivateGithub(
         if value.is_empty() {
             set_github_account_id_signal(None);
             set_github_info(None);
-            set_github_repo_id_signal(None);
-
+            set_github_full_name_signal(None);
         } else {
             let git_account_id = value.parse::<i64>().unwrap();
             if github_account_id_signal() != Some(git_account_id) {
                 set_github_info(None);
-                set_github_repo_id_signal(None);
+                set_github_full_name_signal(None);
             }
             set_github_account_id_signal(Some(git_account_id));
         }
@@ -399,31 +457,34 @@ pub fn NewProjectPrivateGithub(
     let handle_repo_change = move |ev: Targeted<Event, HtmlSelectElement>| {
         let value = ev.target().value();
         if value.is_empty() {
-            set_github_repo_id_signal(None);
+            set_github_full_name_signal(None);
             set_github_info(None);
         } else {
             if github_full_name_signal() != Some(value.clone()) {
                 set_github_info(None);
             }
-            set_github_repo_id_signal(Some(value));
+            set_github_full_name_signal(Some(value));
         }
     };
 
-    let handle_branch_change = move |ev: Targeted<Event, HtmlSelectElement>, branches:Arc<Vec<GithubBranch>>| {
-        let value = ev.target().value();
-        if value.is_empty() {
-            set_github_info(None);
-        } else {
-            let branch = branches
-                .iter()
-                .find(|branch| branch.commit == value).cloned().unwrap();
-            set_github_info(Some((
-                github_account_id_signal(),
-                github_full_name_signal().unwrap_or_default(),
-                branch,
-            )));
-        }
-    };
+    let handle_branch_change =
+        move |ev: Targeted<Event, HtmlSelectElement>, branches: Arc<Vec<GithubBranchFront>>| {
+            let value = ev.target().value();
+            if value.is_empty() {
+                set_github_info(None);
+            } else {
+                let branch = branches
+                    .iter()
+                    .find(|branch| branch.commit == value)
+                    .cloned()
+                    .unwrap();
+                set_github_info(Some(GithubInfoFront::private(
+                    github_account_id_signal(),
+                    github_full_name_signal().unwrap_or_default(),
+                    branch,
+                )));
+            }
+        };
 
     view! {
         <Transition fallback=|| {
@@ -638,9 +699,8 @@ pub fn NewProjectPrivateGithub(
 }
 
 pub mod server_fns {
-
-    use crate::app::pages::user::projects::new_project::GithubInfo;
-    use crate::github::{GithubBranch, GithubRepo};
+    use crate::app::pages::user::projects::new_project::GithubInfoFront;
+    use crate::github::{GithubBranchFront, GithubRepo};
     use crate::models::{Server, UserGithub};
     use crate::AppResult;
     use common::ServerId;
@@ -649,6 +709,8 @@ pub mod server_fns {
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::github::GithubBranchApi;
+        use common::GitRepoFullNameStr;
+        use std::str::FromStr;
         use crate::github::ssr::get_all_repos;
         use crate::security::utils::ssr::verify_easy_hash;
         use leptos::leptos_dom::log;
@@ -664,7 +726,7 @@ pub mod server_fns {
         csrf: String,
         server_id: ServerId,
         name: String,
-        github_info: Option<GithubInfo>,
+        github_info: Option<GithubInfoFront>,
     ) -> AppResult<()> {
         let auth = crate::ssr::auth(false)?;
         let server_vars = crate::ssr::server_vars()?;
@@ -673,6 +735,7 @@ pub mod server_fns {
             server_vars.csrf_server.to_secret(),
             csrf,
         )?;
+
         let user_slug = crate::security::utils::ssr::get_auth_session_user_slug(&auth).unwrap();
         match ssr::create_project(server_id, user_slug, name, github_info).await {
             Ok(project) => {
@@ -707,14 +770,13 @@ pub mod server_fns {
             user_id
         ).fetch_all(&pool).await?)
     }
-    
 
     #[server(input=Bincode, output=Bincode)]
     pub async fn get_github_repo_branches(
         csrf: String,
         user_githubs_id: Option<i64>,
         full_name: String,
-    ) -> AppResult<Vec<GithubBranch>> {
+    ) -> AppResult<Vec<GithubBranchFront>> {
         let auth = crate::ssr::auth(false)?;
         let server_vars = crate::ssr::server_vars()?;
         verify_easy_hash(
@@ -722,12 +784,11 @@ pub mod server_fns {
             server_vars.csrf_server.to_secret(),
             csrf,
         )?;
+        let full_name = GitRepoFullNameStr::from_str(&full_name)?;
 
         let pool = crate::ssr::pool()?;
-        let (token , client) = match user_githubs_id {
-            None => {
-                (None, get_git_client())
-            }
+        let (token, client) = match user_githubs_id {
+            None => (None, get_git_client()),
             Some(user_github_id) => {
                 let user_id = get_auth_session_user_id(&auth).unwrap();
                 let github_account = sqlx::query_as!(
@@ -737,24 +798,21 @@ pub mod server_fns {
                     user_id,
                 ).fetch_one(&pool).await?;
                 let (token, client) =
-                    get_authenticated_git_client(&server_vars, github_account.installation_id).await?;
+                    get_authenticated_git_client(&server_vars, github_account.installation_id)
+                        .await?;
                 (Some(token), client)
             }
         };
         let builder = client.get(format!(
-            "https://api.github.com/repos/{full_name}/branches"
+            "https://api.github.com/repos/{}/branches",
+            full_name.0
         ));
-        let builder = if let Some(token)= token{
-            builder
-                .header(reqwest::header::AUTHORIZATION, format!("token {token}"))
+        let builder = if let Some(token) = token {
+            builder.header(reqwest::header::AUTHORIZATION, format!("token {token}"))
         } else {
             builder
         };
-        let branches:Vec<GithubBranchApi> = builder
-            .send()
-            .await?
-            .json()
-            .await?;
+        let branches: Vec<GithubBranchApi> = builder.send().await?.json().await?;
 
         Ok(branches.into_iter().map(|b| b.into()).collect())
     }
@@ -792,42 +850,17 @@ pub mod server_fns {
 
     #[cfg(feature = "ssr")]
     pub mod ssr {
-        use crate::app::pages::user::projects::new_project::GithubInfo;
+        use crate::app::pages::user::projects::new_project::{GithubInfo, GithubInfoFront};
+        use crate::github::ssr::get_authenticated_git_client;
         use crate::models::Project;
         use crate::security::utils::ssr::SANITIZED_REGEX;
-        use crate::AppResult;
+        use crate::ssr::server_vars;
+        use crate::{AppError, AppResult};
         use common::server_action::permission::Permission;
         use common::server_action::user_action::ServerUserAction;
-        use common::{ServerId, Slug};
-        use validator::{Validate, ValidationError};
-        use crate::github::ssr::get_authenticated_git_client;
-        use crate::ssr::server_vars;
-
-        pub fn parse_repo(repo_url: &str) -> Result<(String, String, String), ValidationError> {
-            if repo_url.is_empty() {
-                return Err(ValidationError::new("invalid_git_repo"));
-            };
-            let https_git = "https://github.com/";
-            let ssh_git = "git@github.com:";
-
-            let (before, after) = if repo_url.starts_with(https_git) {
-                (https_git.to_string(), repo_url.replace(https_git, ""))
-            } else if repo_url.starts_with(ssh_git) {
-                (ssh_git.to_string(), repo_url.replace(ssh_git, ""))
-            } else {
-                return Err(ValidationError::new("invalid_git_repo"));
-            };
-            let (user_name, repo_name) = after
-                .split_once("/")
-                .ok_or_else(|| ValidationError::new("invalid_git_repo"))?;
-
-            Ok((before, user_name.to_string(), repo_name.to_string()))
-        }
-
-        pub fn validate_git_repo(repo_url: &str) -> Result<(), ValidationError> {
-            parse_repo(repo_url)?;
-            Ok(())
-        }
+        use common::{GitTokenStr, ServerId, Slug};
+        use std::str::FromStr;
+        use validator::Validate;
 
         #[derive(Debug, Clone, Validate)]
         pub struct CreateProjectForm {
@@ -839,21 +872,28 @@ pub mod server_fns {
             server_id: ServerId,
             user_slug: Slug,
             name: String,
-            github_info: Option<GithubInfo>,
+            github_info: Option<GithubInfoFront>,
         ) -> AppResult<Project> {
             use crate::api::ssr::request_user_action;
             let pool = crate::ssr::pool()?;
             let project_form = CreateProjectForm { name: name.clone() };
             project_form.validate()?;
-
+            let github_info = if let Some(github_info) = github_info {
+                Some(
+                    GithubInfo::try_from(github_info)
+                        .map_err(|e| AppError::Custom(e.to_string()))?,
+                )
+            } else {
+                None
+            };
             let (project_github_id, installation_id) = match github_info.clone() {
-                Some((account_id, full_name, branch)) => {
-                    let (account_id, installation_id) = match account_id {
+                Some(inner_info) => {
+                    let (account_id, installation_id) = match inner_info.installation_id {
                         None => (None, None),
-                        Some(account_id) => {
+                        Some(installation_id) => {
                             let github_account= sqlx::query!(
                                 "SELECT id,user_id,installation_id, suspended FROM user_githubs WHERE id = $1 and user_id = $2 and suspended = false",
-                                account_id,
+                                installation_id,
                                 user_slug.id,
                             )
                                 .fetch_one(&pool)
@@ -867,10 +907,10 @@ pub mod server_fns {
                     let project_github =sqlx::query!(
                         "INSERT INTO projects_github (user_githubs_id, repo_full_name, branch_name, dev_commit,last_commit) VALUES ($1, $2, $3,$4,$5) returning id",
                         account_id,
-                        full_name,
-                        branch.name,
-                        branch.commit.clone(),
-                        branch.commit
+                        inner_info.repo_full_name.0,
+                        inner_info.branch.name.0,
+                        inner_info.branch.commit.0.clone(),
+                        inner_info.branch.commit.0
                     )
                         .fetch_one(&pool)
                         .await?;
@@ -895,24 +935,30 @@ pub mod server_fns {
             )
             .execute(&pool)
             .await?;
-            let github_info_server=match (github_info, installation_id){
-                (Some((_, full_name, branch)), Some(installation_id)) => {
+            let github_info_server = match (github_info, installation_id) {
+                (Some(inner_info), Some(installation_id)) => {
                     let server_vars = server_vars()?;
-                    let (token, _) = get_authenticated_git_client(&server_vars, installation_id).await?;
-                    Some((Some(token),full_name, branch.name))
+                    let (token, _) =
+                        get_authenticated_git_client(&server_vars, installation_id).await?;
+
+                    Some((
+                        Some(GitTokenStr::from_str(&token)?),
+                        inner_info.repo_full_name,
+                        inner_info.branch.name,
+                    ))
                 }
-                (Some((_, full_name, branch)), None) => {
-                    Some((None, full_name, branch.name))
+                (Some(inner_info), None) => {
+                    Some((None, inner_info.repo_full_name, inner_info.branch.name))
                 }
-                _ => None
+                _ => None,
             };
 
             request_user_action(
                 server_id,
                 ServerUserAction::AddProject {
-                    user_slug,
-                    project_slug: Slug::new(project_id, project_form.name),
-                    github_info:github_info_server
+                    user_slug: user_slug.to_user_slug_str(),
+                    project_slug: Slug::new(project_id, project_form.name).to_project_slug_str(),
+                    github_info: github_info_server,
                 },
             )
             .await?;

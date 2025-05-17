@@ -1,23 +1,23 @@
-use crate::security::permission::{request_server_project_action_front, request_token_action_front};
+use crate::security::permission::{
+    request_server_project_action_front, request_token_action_front,
+};
 use crate::{AppError, AppResult};
 use common::server_action::project_action::{ProjectAction, ProjectResponse};
-use common::ProjectSlugStr;
 use leptos::logging::log;
 use leptos::prelude::Action;
 
+use crate::models::ProjectSlugStrFront;
 use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
 use web_sys::FormData;
 
 #[cfg(feature = "hydrate")]
 pub fn fetch_api(
-    path:String,
+    path: String,
     body: Option<FormData>,
 ) -> impl std::future::Future<Output = Option<UsedTokenActionResponse>> + Send + 'static {
     use leptos::logging::log;
     use leptos::prelude::on_cleanup;
     use send_wrapper::SendWrapper;
-
-
 
     SendWrapper::new(async move {
         let abort_controller = SendWrapper::new(web_sys::AbortController::new().ok());
@@ -30,7 +30,6 @@ pub fn fetch_api(
             }
         });
 
-
         let path_split = path.split("://").collect::<Vec<_>>();
         let dns_path = if path_split.len() > 1 {
             let path_resplit = path_split[1].split('/').collect::<Vec<_>>();
@@ -38,10 +37,8 @@ pub fn fetch_api(
         } else {
             path.clone()
         };
-        let body = body.unwrap_or({
-            FormData::new().unwrap()
-        });
-        
+        let body = body.unwrap_or({ FormData::new().unwrap() });
+
         gloo_net::http::Request::post(&path)
             .header("Access-Control-Allow-Origin", &dns_path)
             .abort_signal(abort_signal.as_ref())
@@ -62,102 +59,80 @@ pub fn fetch_api(
 pub fn fetch_api(
     path: String,
     _content: Option<FormData>,
-) -> impl std::future::Future<Output = Option<UsedTokenActionResponse>> + Send + 'static{
+) -> impl std::future::Future<Output = Option<UsedTokenActionResponse>> + Send + 'static {
     log!("api front request error: {path}");
-    async {
-        None
-    }
+    async { None }
 }
-
-
-
 
 #[cfg(feature = "ssr")]
 pub mod ssr {
-    use crate::{AppError, AppResult};
-    use common::server_action::project_action::{
-        ProjectAction, ProjectResponse,
-    };
-    use common::server_action::user_action::{ServerUserAction, ServerUserResponse};
-    use common::{ServerId, Slug};
-    use common::tarpc_client::TarpcClientError;
     use crate::ssr::WsClients;
+    use crate::{AppError, AppResult};
+    use common::server_action::project_action::{ProjectAction, ProjectResponse};
+    use common::server_action::user_action::{ServerUserAction, ServerUserResponse};
+    use common::tarpc_client::TarpcClientError;
+    use common::{ProjectSlugStr, ServerId};
 
     pub async fn request_server_project_action(
         server_id: i64,
-        project_slug: Slug,
+        project_slug: ProjectSlugStr,
         action: ProjectAction,
-        client:Option<WsClients>,
+        client: Option<WsClients>,
     ) -> AppResult<ProjectResponse> {
-        let handle_client = |client:WsClients|async move {
-            match client.get(&server_id){
+        let handle_client = |client: WsClients| async move {
+            match client.get(&server_id) {
                 None => Err(AppError::TrpcClientError(TarpcClientError::NotConnected)),
-                Some(client) => {
-                    client.project_action( project_slug.to_string(), action).await.map_err(Into::into)
-                }
+                Some(client) => client
+                    .project_action(project_slug, action)
+                    .await
+                    .map_err(Into::into),
             }
         };
-        
-        match client{
-            Some(client) => {
-                handle_client(client).await
-            },
-            None =>{
+
+        match client {
+            Some(client) => handle_client(client).await,
+            None => {
                 let client = crate::ssr::ws_clients()?;
                 handle_client(client).await
-            } 
+            }
         }
-        
     }
 
-    pub async fn request_user_action(server_id: ServerId,action: ServerUserAction) -> AppResult<ServerUserResponse> {
-        match crate::ssr::ws_clients()?.get(&server_id){
+    pub async fn request_user_action(
+        server_id: ServerId,
+        action: ServerUserAction,
+    ) -> AppResult<ServerUserResponse> {
+        match crate::ssr::ws_clients()?.get(&server_id) {
             None => Err(AppError::TrpcClientError(TarpcClientError::NotConnected)),
-            Some(client) => {
-                client.user_action(action).await.map_err(Into::into)
-            }
+            Some(client) => client.user_action(action).await.map_err(Into::into),
         }
     }
 }
 
-pub type ServerProjectActionFront = Action<
-    (
-        i64,
-        ProjectSlugStr,
-        ProjectAction,
-        Option<String>,
-    ),
-    AppResult<ProjectResponse>,
->;
+pub type ServerProjectActionFront =
+    Action<(i64, ProjectSlugStrFront, ProjectAction, Option<String>), AppResult<ProjectResponse>>;
 
 pub fn get_action_server_project_action() -> ServerProjectActionFront {
     Action::new(
-        |input: &(
-            i64,
-            ProjectSlugStr,
-            ProjectAction,
-            Option<String>,
-        )| {
-            let (server_id,project_slug, action, csrf) = input.clone();
+        |input: &(i64, ProjectSlugStrFront, ProjectAction, Option<String>)| {
+            let (server_id, project_slug, action, csrf) = input.clone();
             async move {
-                request_server_project_action_front(server_id,project_slug, action, csrf)
-                    .await
+                request_server_project_action_front(server_id, project_slug, action, csrf).await
             }
         },
     )
 }
 
-
 pub async fn get_action_token_action(
     server_id: i64,
-    project_slug: ProjectSlugStr,
+    project_slug: ProjectSlugStrFront,
     action: TokenAction,
     csrf: Option<String>,
-    form:Option<FormData>,
+    form: Option<FormData>,
 ) -> AppResult<UsedTokenActionResponse> {
     log!("get_action_token_action: {project_slug} {action:?} {csrf:?}");
     let token_url = request_token_action_front(server_id, project_slug, action, csrf).await?;
-    fetch_api(token_url, form).await.ok_or(AppError::Custom("Error fetching token action".to_string()))
+    fetch_api(token_url, form)
+        .await
+        .ok_or(AppError::Custom("Error fetching token action".to_string()))
 }
-
-

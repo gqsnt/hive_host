@@ -1,24 +1,20 @@
 use std::fmt;
 use std::future::Future;
 
+use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
-
-
-
-
-
-
 #[derive(Debug, thiserror::Error, Clone, Serialize, Deserialize)]
 pub enum TarpcClientError {
-    #[error("Client not connected. Reconnection attempt might be in progress or will be triggered if not.")]
+    #[error(
+        "Client not connected. Reconnection attempt might be in progress or will be triggered if not."
+    )]
     NotConnected,
     #[error("Inner client application error: {0}")]
-    ClientError(String), 
+    ClientError(String),
     #[error("Connection establishment error: {0}")]
     ConnectionError(String),
     #[error("RPC error: {0}")]
@@ -31,28 +27,24 @@ impl From<tarpc::client::RpcError> for TarpcClientError {
     }
 }
 
-
 impl From<std::io::Error> for TarpcClientError {
     fn from(err: std::io::Error) -> Self {
         TarpcClientError::ConnectionError(err.to_string())
     }
 }
 
-
 pub type TarpcClientResult<T> = Result<T, TarpcClientError>;
 
-
 type Connector<T> = Box<
-    dyn Fn(String, Option<String>) -> Pin<Box<dyn Future<Output = Result<T, TarpcClientError>> + Send>>
-    + Send
-    + Sync,
+    dyn Fn(String, String) -> Pin<Box<dyn Future<Output = Result<T, TarpcClientError>> + Send>>
+        + Send
+        + Sync,
 >;
-
 
 pub struct TarpcClient<T: Clone + Send + Sync + 'static> {
     inner: Arc<Mutex<Option<T>>>,
     server_addr: String,
-    token: Option<String>,
+    token: String,
     connector: Arc<Connector<T>>,
 }
 
@@ -77,14 +69,14 @@ impl<T: Clone + Send + Sync + 'static> fmt::Debug for TarpcClient<T> {
     }
 }
 
-
 impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
-    pub fn new<F, Fut>(server_addr: String, token:Option<String>,connect_fn: F) -> Self
+    pub fn new<F, Fut>(server_addr: String, token: String, connect_fn: F) -> Self
     where
-        F: Fn(String, Option<String>) -> Fut + Send + Sync + 'static,
+        F: Fn(String, String) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<T, TarpcClientError>> + Send + 'static,
     {
-        let connector: Connector<T> = Box::new(move |addr, token| Box::pin(connect_fn(addr, token)));
+        let connector: Connector<T> =
+            Box::new(move |addr, token| Box::pin(connect_fn(addr, token)));
         TarpcClient {
             inner: Arc::new(Mutex::new(None)),
             server_addr,
@@ -96,12 +88,11 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
     async fn establish_connection(
         connector: Arc<Connector<T>>,
         server_addr: String,
-        token: Option<String>,
+        token: String,
     ) -> Result<T, TarpcClientError> {
-        println!("Establishing connection to server at {server_addr}...", );
+        println!("Establishing connection to server at {server_addr}...",);
         connector(server_addr, token).await
     }
-
 
     pub(crate) async fn get_or_connect_client(&self) -> Result<T, TarpcClientError> {
         let mut inner_guard = self.inner.lock().await;
@@ -109,28 +100,42 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         if let Some(client) = inner_guard.as_ref() {
             return Ok(client.clone());
         }
-        
-        info!("Client not connected, attempting synchronous connection to {}...", self.server_addr);
-        match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone(), self.token.clone()).await {
+
+        info!(
+            "Client not connected, attempting synchronous connection to {}...",
+            self.server_addr
+        );
+        match Self::establish_connection(
+            Arc::clone(&self.connector),
+            self.server_addr.clone(),
+            self.token.clone(),
+        )
+        .await
+        {
             Ok(new_client) => {
                 println!("Successfully connected to {}.", self.server_addr);
                 *inner_guard = Some(new_client.clone());
                 Ok(new_client)
             }
             Err(e) => {
-                println!("Failed to connect synchronously to {}: {:?}", self.server_addr, e);
-              
-                Err(e) 
+                println!(
+                    "Failed to connect synchronously to {}: {:?}",
+                    self.server_addr, e
+                );
+
+                Err(e)
             }
         }
     }
-    
-    
+
     pub async fn connect(&self) -> Result<(), TarpcClientError> {
-        let mut inner_guard = self.inner.lock().await; 
+        let mut inner_guard = self.inner.lock().await;
 
         if inner_guard.is_some() {
-            println!("Explicit connect: Client is already connected to {}.", self.server_addr);
+            println!(
+                "Explicit connect: Client is already connected to {}.",
+                self.server_addr
+            );
             return Ok(());
         }
 
@@ -139,10 +144,19 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
             self.server_addr
         );
 
-        match Self::establish_connection(Arc::clone(&self.connector), self.server_addr.clone(), self.token.clone()).await {
+        match Self::establish_connection(
+            Arc::clone(&self.connector),
+            self.server_addr.clone(),
+            self.token.clone(),
+        )
+        .await
+        {
             Ok(client_instance) => {
                 *inner_guard = Some(client_instance);
-                println!("Explicit connect: Successfully connected to {}.", self.server_addr);
+                println!(
+                    "Explicit connect: Successfully connected to {}.",
+                    self.server_addr
+                );
                 Ok(())
             }
             Err(e) => {
@@ -155,9 +169,6 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         }
     }
 
-
-    
-    
     pub async fn is_connected(&self) -> bool {
         self.inner.lock().await.is_some()
     }
@@ -172,6 +183,3 @@ impl<T: Clone + Send + Sync + 'static> TarpcClient<T> {
         }
     }
 }
-
-
-

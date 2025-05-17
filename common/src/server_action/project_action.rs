@@ -1,21 +1,33 @@
+pub mod git_action;
 pub mod io_action;
 pub mod permission;
 pub mod snapshot;
-pub mod git_action;
 
 use crate::server_action::permission::Permission;
 use crate::server_action::project_action::io_action::dir_action::ServerProjectIoDirActionLsResponse;
 
-use serde::{Deserialize, Serialize};
+use crate::Validate;
 use crate::helper_command::HelperResponse;
 use crate::hosting_command::HostingResponse;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ProjectAction {
     Io(io_action::ProjectIoAction),
     Permission(permission::ProjectPermissionAction),
     Snapshot(snapshot::ProjectSnapshotAction),
     Git(git_action::ProjectGitAction),
+}
+
+impl Validate for ProjectAction {
+    fn validate(&self) -> Result<(), crate::SanitizeError> {
+        match self {
+            ProjectAction::Io(action) => action.validate(),
+            ProjectAction::Permission(action) => action.validate(),
+            ProjectAction::Snapshot(action) => action.validate(),
+            ProjectAction::Git(action) => action.validate(),
+        }
+    }
 }
 
 impl IsProjectServerAction for ProjectAction {
@@ -24,7 +36,7 @@ impl IsProjectServerAction for ProjectAction {
             ProjectAction::Io(action) => action.permission(),
             ProjectAction::Permission(action) => action.permission(),
             ProjectAction::Snapshot(action) => action.permission(),
-            ProjectAction::Git(action) => action.permission()
+            ProjectAction::Git(action) => action.permission(),
         }
     }
 
@@ -38,7 +50,7 @@ impl IsProjectServerAction for ProjectAction {
     }
 }
 
-#[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ProjectResponse {
     Ok,
     Error(String),

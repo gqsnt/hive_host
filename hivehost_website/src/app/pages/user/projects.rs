@@ -6,6 +6,7 @@ use leptos::prelude::Get;
 use leptos::prelude::{Effect, For};
 
 use crate::app::pages::user::projects::new_project::server_fns::CreateProject;
+use crate::app::pages::user::projects::project::ProjectSection;
 use leptos::either::Either;
 use leptos::prelude::ElementChild;
 use leptos::prelude::IntoMaybeErased;
@@ -14,7 +15,6 @@ use leptos::server::ServerAction;
 use leptos::{component, view, IntoView};
 use leptos_router::components::Outlet;
 use leptos_router::hooks::{use_location, use_navigate};
-use crate::app::pages::user::projects::project::ProjectSection;
 
 pub mod new_project;
 pub mod project;
@@ -38,12 +38,14 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
     };
 
     let location_pathname = use_location().pathname;
-    let (current_project_slug, set_current_project_slug) = signal(get_current_project_slug_from_path(&location_pathname.get_untracked()));
+    let (current_project_slug, set_current_project_slug) = signal(
+        get_current_project_slug_from_path(&location_pathname.get_untracked()),
+    );
 
     let handle_select_project = move |new_slug_option: Option<String>| {
         let navigate = use_navigate();
         let current_path = location_pathname.get();
-        
+
         let current_section_enum = {
             let segments: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
             if let Some(projects_idx) = segments.iter().position(|&seg| seg == "projects") {
@@ -56,7 +58,7 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
                 ProjectSection::default()
             }
         };
-        
+
         set_current_project_slug(new_slug_option.clone());
 
         match new_slug_option {
@@ -150,10 +152,11 @@ pub fn ProjectsPage(create_project_action: ServerAction<CreateProject>) -> impl 
 }
 
 pub mod server_fns {
+    use crate::models::ProjectSlugStrFront;
     use crate::AppResult;
+    use common::ProjectId;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
-    use common::{ProjectId, ProjectSlugStr};
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
             use crate::security::utils::ssr::get_auth_session_user_id;
@@ -161,7 +164,7 @@ pub mod server_fns {
     }}
 
     #[server(input=Bincode, output=Bincode)]
-    pub async fn get_projects() -> AppResult<Vec<(ProjectId, ProjectSlugStr)>> {
+    pub async fn get_projects() -> AppResult<Vec<(ProjectId, ProjectSlugStrFront)>> {
         let pool = crate::ssr::pool()?;
         let auth = crate::ssr::auth(false)?;
         let projects = sqlx::query!(

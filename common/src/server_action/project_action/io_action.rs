@@ -1,3 +1,4 @@
+use crate::Validate;
 use crate::server_action::permission::Permission;
 use crate::server_action::project_action::IsProjectServerAction;
 use serde::{Deserialize, Serialize};
@@ -5,10 +6,19 @@ use serde::{Deserialize, Serialize};
 pub mod dir_action;
 pub mod file_action;
 
-#[derive(Debug,Clone, PartialEq, Eq,Deserialize,Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ProjectIoAction {
     Dir(dir_action::ProjectIoDirAction),
     File(file_action::ProjectIoFileAction),
+}
+
+impl Validate for ProjectIoAction {
+    fn validate(&self) -> Result<(), crate::SanitizeError> {
+        match self {
+            ProjectIoAction::Dir(action) => action.validate(),
+            ProjectIoAction::File(action) => action.validate(),
+        }
+    }
 }
 
 impl IsProjectServerAction for ProjectIoAction {

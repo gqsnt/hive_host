@@ -1,7 +1,7 @@
 use crate::app::pages::user::projects::project::{ProjectSlugSignal};
 use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectStateStoreFields};
 use crate::app::{commit_display, IntoView};
-use common::{ProjectSlugStr, ServerId};
+use common::{ServerId};
 use leptos::prelude::{IntoMaybeErased, LocalResource, NodeRef, NodeRefAttribute, Read, Suspend, Transition, Update};
 use leptos::prelude::{expect_context, Action, ElementChild, Signal};
 use leptos::prelude::{signal, ClassAttribute, OnAttribute};
@@ -12,7 +12,7 @@ use leptos::either::{EitherOf3, EitherOf4};
 use leptos::html::{Select};
 use reactive_stores::{OptionStoreExt, Store};
 use crate::app::pages::user::projects::new_project::server_fns::get_github_repo_branches;
-use crate::models::{GitProjectStoreFields, ProjectStoreFields};
+use crate::models::{GitProjectStoreFields, ProjectSlugStrFront, ProjectStoreFields};
 
 #[component]
 pub fn ProjectSettings() -> impl IntoView {
@@ -47,22 +47,22 @@ pub fn ProjectSettings() -> impl IntoView {
     );
 
 
-    let delete_project_action = Action::new(|intput: &(ServerId, ProjectSlugStr, String)| {
+    let delete_project_action = Action::new(|intput: &(ServerId, ProjectSlugStrFront, String)| {
         let (server_id, project_slug, csrf) = intput.clone();
         async move { server_fns::delete_project(csrf, server_id, project_slug).await }
     });
 
-    let sync_dev_action = Action::new(|input: &(String, ServerId, ProjectSlugStr)| {
+    let sync_dev_action = Action::new(|input: &(String, ServerId, ProjectSlugStrFront)| {
         let (csrf, sid, slug) = input.clone();
         async move { server_fns::sync_development_action(csrf, sid, slug).await }
     });
 
-    let deploy_prod_action = Action::new(|input: &(String, ServerId, ProjectSlugStr, bool)| {
+    let deploy_prod_action = Action::new(|input: &(String, ServerId, ProjectSlugStrFront, bool)| {
         let (csrf, sid, slug, auto_deploy) = input.clone();
         async move { server_fns::deploy_auto_git_to_production(csrf, sid, slug, auto_deploy).await }
     });
 
-    let update_branch_action = Action::new(|input: &(String, ServerId, ProjectSlugStr, String, String)| {
+    let update_branch_action = Action::new(|input: &(String, ServerId, ProjectSlugStrFront, String, String)| {
         let (csrf, sid, slug, branch_name, branch_commit) = input.clone();
         async move { server_fns::update_default_branch_action(csrf, sid, slug, branch_name, branch_commit).await }
     });
@@ -108,8 +108,7 @@ pub fn ProjectSettings() -> impl IntoView {
         }
         delete_project_action.dispatch((server_id(), project_slug, csrf()));
     };
-    
-    
+
 
     view! {
         <div class="space-y-10">
@@ -555,18 +554,21 @@ pub fn ProjectSettings() -> impl IntoView {
 }
 
 pub mod server_fns {
-    use crate::AppResult;
-    use common::{ProjectSlugStr, ServerId};
+    use crate::{AppResult};
+
+    use common::ServerId;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
-
+    use crate::models::ProjectSlugStrFront;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
+        use common::{GitBranchNameStr, GitCommitStr, GitRepoFullNameStr, SnapShotNameStr};
         use crate::api::ssr::request_server_project_action;
         use crate::security::permission::ssr::handle_project_permission_request;
         use crate::api::ssr::{request_user_action};
         use common::server_action::permission::Permission;
         use common::Slug;
+        use std::str::FromStr;
         use common::server_action::project_action::snapshot::ProjectSnapshotAction;
         use common::server_action::user_action::ServerUserAction;
             use crate::ssr::ws_clients;
@@ -577,7 +579,7 @@ pub mod server_fns {
     pub async fn sync_development_action(
         csrf: String,
         server_id: ServerId,
-        project_slug: ProjectSlugStr,
+        project_slug: ProjectSlugStrFront,
     ) -> AppResult<()> {
         handle_project_permission_request(
             project_slug,
@@ -605,12 +607,12 @@ pub mod server_fns {
                     ws_clients()?,
                     &server_vars()?,
                     project_git.installation_id,
-                    project_git.repo_full_name,
+                    GitRepoFullNameStr(project_git.repo_full_name),
                     server_id,
                     proj_slug,
                     project_git.project_github_id,
-                    project_git.branch_name,
-                    project_git.last_commit,
+                    GitBranchNameStr(project_git.branch_name),
+                    GitCommitStr(project_git.last_commit),
                 ).await?;
 
 
@@ -624,7 +626,7 @@ pub mod server_fns {
     pub async fn deploy_auto_git_to_production(
         csrf: String,
         server_id: ServerId,
-        project_slug: ProjectSlugStr,
+        project_slug: ProjectSlugStrFront,
         auto_deploy: bool,
     ) -> AppResult<Option<i64>> {
         handle_project_permission_request(
@@ -665,16 +667,16 @@ pub mod server_fns {
                         ws_clients()?,
                         &server_vars()?,
                         project_git.installation_id,
-                        project_git.repo_full_name,
+                        GitRepoFullNameStr(project_git.repo_full_name),
                         server_id,
                         proj_slug,
                         project_git.project_github_id,
-                        project_git.branch_name,
-                        project_git.dev_commit,
-                        project_git.prod_commit,
-                        project_git.last_commit,
+                        GitBranchNameStr(project_git.branch_name),
+                        GitCommitStr(project_git.dev_commit),
+                        project_git.prod_commit.map(GitCommitStr),
+                        GitCommitStr(project_git.last_commit),
                     ).await?
-                }else{
+                } else {
                     None
                 };
                 Ok(new_snapshot_id)
@@ -687,10 +689,12 @@ pub mod server_fns {
     pub async fn update_default_branch_action(
         csrf: String,
         server_id: ServerId,
-        project_slug: ProjectSlugStr,
+        project_slug: ProjectSlugStrFront,
         new_branch_name: String,
         new_branch_commit: String,
     ) -> AppResult<Option<i64>> {
+        let new_branch_name = GitBranchNameStr::from_str(&new_branch_name)?;
+        let new_branch_commit = GitCommitStr::from_str(&new_branch_commit)?;
         handle_project_permission_request(
             project_slug,
             Permission::Write,
@@ -713,10 +717,12 @@ pub mod server_fns {
                 )
                     .fetch_one(&db)
                     .await?;
-                 sqlx::query!(
+
+
+                sqlx::query!(
                     "UPDATE projects_github SET branch_name = $1, last_commit = $2 WHERE id = $3",
-                    new_branch_name,
-                    new_branch_commit,
+                    new_branch_name.0,
+                    new_branch_commit.0,
                     project_git.project_github_id,
                 )
                     .execute(&db)
@@ -728,13 +734,13 @@ pub mod server_fns {
                         ws_clients()?,
                         &server_vars()?,
                         project_git.installation_id,
-                        project_git.repo_full_name,
+                        GitRepoFullNameStr(project_git.repo_full_name),
                         server_id,
                         proj_slug,
                         project_git.project_github_id,
                         new_branch_name.clone(),
-                        project_git.dev_commit,
-                        project_git.prod_commit,
+                        GitCommitStr(project_git.dev_commit),
+                        project_git.prod_commit.map(GitCommitStr),
                         new_branch_commit,
                     ).await?)
                 } else {
@@ -743,7 +749,7 @@ pub mod server_fns {
                         ws_clients()?,
                         &server_vars()?,
                         project_git.installation_id,
-                        project_git.repo_full_name,
+                        GitRepoFullNameStr(project_git.repo_full_name),
                         server_id,
                         proj_slug,
                         project_git.project_github_id,
@@ -761,7 +767,7 @@ pub mod server_fns {
     pub async fn delete_project(
         csrf: String,
         server_id: ServerId,
-        project_slug: ProjectSlugStr,
+        project_slug: ProjectSlugStrFront,
     ) -> AppResult<()> {
         handle_project_permission_request(
             project_slug,
@@ -782,7 +788,7 @@ pub mod server_fns {
                     .await?;
                 let user_slugs = users
                     .into_iter()
-                    .map(|u| Slug::new(u.id, u.username))
+                    .map(|u| Slug::new(u.id, u.username).to_user_slug_str())
                     .collect::<Vec<_>>();
                 let snapshot_names = sqlx::query!( 
                     "DELETE FROM projects_snapshots WHERE project_id = $1 RETURNING snapshot_name",
@@ -795,11 +801,12 @@ pub mod server_fns {
                     .fetch_one(&db)
                     .await?
                     .active_snapshot_id;
+                let project_slug_str = project_slug.to_project_slug_str();
                 if active_id.is_some() {
-                    request_server_project_action(server_id, project_slug.clone(), ProjectSnapshotAction::UnmountProd.into(), None).await?;
+                    request_server_project_action(server_id, project_slug_str.clone(), ProjectSnapshotAction::UnmountProd.into(), None).await?;
                 }
                 for snapshot in snapshot_names {
-                    request_server_project_action(server_id, project_slug.clone(), ProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into(), None).await?;
+                    request_server_project_action(server_id, project_slug_str.clone(), ProjectSnapshotAction::Delete { snapshot_name: SnapShotNameStr::from_str(&snapshot.snapshot_name)? }.into(), None).await?;
                 }
 
 
@@ -807,7 +814,7 @@ pub mod server_fns {
                     server_id,
                     ServerUserAction::RemoveProject {
                         user_slugs,
-                        project_slug,
+                        project_slug: project_slug_str,
                     },
                 )
                     .await?;
@@ -822,7 +829,8 @@ pub mod server_fns {
 
     #[cfg(feature = "ssr")]
     pub mod ssr {
-        use common::{ServerId, Slug};
+        use std::str::FromStr;
+        use common::{GitBranchNameStr, GitCommitStr, GitRepoFullNameStr, GitTokenStr, ServerId, Slug};
         use common::server_action::project_action::git_action::ProjectGitAction;
         use crate::api::ssr::request_server_project_action;
         use crate::app::pages::user::projects::project::project_snapshots::server_fns::ssr::inner_set_snapshot_prod;
@@ -835,26 +843,27 @@ pub mod server_fns {
         pub async fn inner_update_dev_with_git(
             pool: &sqlx::PgPool,
             ws_clients: WsClients,
-            server_vars:&ServerVars,
-            installation_id:i64,
-            repo_full_name:String,
+            server_vars: &ServerVars,
+            installation_id: i64,
+            repo_full_name: GitRepoFullNameStr,
             server_id: ServerId,
             project_slug: Slug,
             project_github_id: i64,
-            branch_name: String,
-            last_commit: String,
+            branch_name: GitBranchNameStr,
+            last_commit: GitCommitStr,
         ) -> AppResult<()> {
             sqlx::query!(
                 "UPDATE projects_github SET dev_commit = $1 WHERE id = $2",
-                last_commit,
+                last_commit.0,
                 project_github_id,
             )
                 .execute(pool)
                 .await?;
-            let (token , _ ) = get_authenticated_git_client(server_vars, installation_id).await?;
+            let (token, _) = get_authenticated_git_client(server_vars, installation_id).await?;
+            let token = GitTokenStr::from_str(&token)?;
             request_server_project_action(
                 server_id,
-                project_slug,
+                project_slug.to_project_slug_str(),
                 ProjectGitAction::Pull {
                     branch: branch_name,
                     commit: last_commit,
@@ -870,16 +879,16 @@ pub mod server_fns {
         pub async fn handle_auto_deploy_git(
             pool: &sqlx::PgPool,
             ws_clients: WsClients,
-            server_vars:&ServerVars,
-            installation_id:i64,
-            repo_full_name:String,
+            server_vars: &ServerVars,
+            installation_id: i64,
+            repo_full_name: GitRepoFullNameStr,
             server_id: ServerId,
             project_slug: Slug,
             project_github_id: i64,
-            branch_name: String,
-            dev_commit: String,
-            prod_commit: Option<String>,
-            last_commit: String,
+            branch_name: GitBranchNameStr,
+            dev_commit: GitCommitStr,
+            prod_commit: Option<GitCommitStr>,
+            last_commit: GitCommitStr,
         ) -> AppResult<Option<i64>> {
             let mut dev_commit = dev_commit;
             if !dev_commit.eq(&last_commit) {
@@ -901,7 +910,7 @@ pub mod server_fns {
                 let project_snapshot_id = inner_create_snapshot(pool, ws_clients.clone(), server_id, project_slug.clone(), None, None, Some(branch_name.clone()), Some(dev_commit.clone())).await?;
                 inner_set_snapshot_prod(pool, ws_clients.clone(), server_id, project_slug.clone(), project_snapshot_id).await?;
                 Ok(Some(project_snapshot_id))
-            }else{
+            } else {
                 Ok(None)
             }
         }

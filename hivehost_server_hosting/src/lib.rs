@@ -1,5 +1,5 @@
 use async_compression::tokio::bufread::BrotliEncoder;
-use common::PROD_ROOT_PATH_PREFIX;
+use common::{Slug};
 use common::{get_project_prod_path, ProjectSlugStr};
 use dashmap::DashMap;
 use deadpool_postgres::tokio_postgres::NoTls;
@@ -18,12 +18,15 @@ use socket2::{Domain, SockAddr, Socket};
 use std::convert::Infallible;
 use std::io;
 use std::net::{AddrParseError, SocketAddr};
+use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
+use secrecy::SecretString;
 use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::{runtime, task};
+use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use walkdir::WalkDir;
 
@@ -50,6 +53,8 @@ pub enum HostingError {
     DotEnv(#[from] dotenvy::Error),
     #[error("Tokio postgres error: {0}")]
     TokioPostgres(#[from] tokio_postgres::Error),
+    #[error("Custom {0}")]
+    Custom(String),
 }
 
 pub static CACHE: LazyLock<DashMap<ProjectSlugStr, ProjectCache>> = LazyLock::new(DashMap::new);
@@ -98,6 +103,15 @@ pub struct ProjectCache {
     pub file_cache: Arc<FileCacheType>,
 }
 
+
+#[derive(Clone)]
+pub struct AppState{
+    pub server_auth: Arc<SecretString>,
+    pub connected:Arc<RwLock<bool>>,
+}
+
+
+
 impl Default for ProjectCache {
     fn default() -> Self {
         Self {
@@ -114,52 +128,120 @@ pub struct FileInfo {
 }
 
 pub async fn cache_project_path(project_slug: ProjectSlugStr) {
-    info!("Serving/Caching Project: {}", project_slug);
-    let path = get_project_prod_path(&project_slug);
+    info!("Serving/Caching Project: {:?}", project_slug);
+    let project_prod_root_str = get_project_prod_path(&project_slug);
 
     CACHE.remove(&project_slug);
-    let full_root_path = format!("{PROD_ROOT_PATH_PREFIX}/");
+    let canonical_project_root = match tokio::fs::canonicalize(&project_prod_root_str).await {
+        Ok(path) => path,
+        Err(e) => {
+            error!(
+                "Failed to canonicalize project production root {:?}: {}",
+                project_prod_root_str, e
+            );
+            // Cannot cache project if root is inaccessible or invalid
+            return;
+        }
+    };
+    
     let entry = CACHE.entry(project_slug).or_default();
-    WalkDir::new(path)
-        .into_iter()
-        .filter_map(|dir_entry| dir_entry.ok())
-        .filter(|dir_entry| dir_entry.metadata().unwrap().is_file())
-        .for_each(|dir_entry| {
-            let mime_type = mime_guess::from_path(dir_entry.path())
-                .first_or_text_plain()
-                .to_string();
-            let full_path = dir_entry.path().to_string_lossy().to_string();
-            let path = full_path.strip_prefix(&full_root_path).unwrap();
+    let paths = entry.paths.clone();
+    
+    
+    let walker = WalkDir::new(&project_prod_root_str)
+        .follow_links(false)
+        .into_iter();
+    for dir_entry_result in walker.filter_map(|r| r.ok()) {
+        let entry_path = dir_entry_result.path();
+        
+        // Filter out dot files/directories early
+        if entry_path
+            .file_name()
+            .map(|name| name.to_string_lossy().starts_with('.'))
+            .unwrap_or(false)
+        {
+            continue;
+        }
 
-            let path_split = path.split('/').collect::<Vec<_>>();
-            let path = format!("/{}", path_split[1..].join("/"));
-            debug!("Caching file: {} -> {}", path, full_path);
-            entry.paths.entry(path).or_insert(FileInfo {
-                mime_type,
-                full_path,
-            });
+        // 3. Canonicalize the path of the entry
+        let canonical_entry_path = match tokio::fs::canonicalize(entry_path).await {
+            Ok(path) => path,
+            Err(e) => {
+                debug!("Failed to canonicalize path {:?}: {}", entry_path, e);
+                continue; 
+            }
+        };
+
+        // Check if it's a file *after* canonicalization
+        let metadata = match tokio::fs::metadata(&canonical_entry_path).await {
+            Ok(meta) => meta,
+            Err(e) => {
+                debug!("Failed to get metadata for canonical path {:?}: {}", canonical_entry_path, e);
+                continue; // Skip this entry
+            }
+        };
+
+        if !metadata.is_file() {
+            continue;
+        }
+        
+        if !canonical_entry_path.starts_with(&canonical_project_root) {
+            error!(
+                "Potential path traversal attempt detected: Canonical path {:?} is outside of canonical root {:?}",
+                canonical_entry_path, canonical_project_root
+            );
+            continue;
+        }
+
+
+        let path_key = match canonical_entry_path.strip_prefix(&canonical_project_root) {
+            Ok(relative_path) => {
+                // Ensure it starts with a slash and use forward slashes for URL paths
+                format!("/{}", relative_path.to_string_lossy().replace("\\", "/"))
+            }
+            Err(_) => {
+                // This should ideally not happen if starts_with passed, but as a fallback
+                error!(
+                    "Failed to strip canonical root prefix from canonical path {:?} despite starts_with check",
+                    canonical_entry_path
+                );
+                continue; // Skip this entry
+            }
+        };
+
+        let full_path_for_cache = canonical_entry_path.to_string_lossy().into_owned();
+
+        debug!("Caching file: {} -> {}", path_key, full_path_for_cache);
+
+        // Insert into the paths map
+        let mime_type = mime_guess::from_path(&canonical_entry_path)
+            .first_or_text_plain()
+            .to_string();
+
+        paths.entry(path_key).or_insert(FileInfo {
+            mime_type,
+            full_path: full_path_for_cache,
         });
+    }
 }
 
 pub async fn handle_request(
     request: Request<Incoming>,
 ) -> HostingResult<Response<BoxBody<Bytes, Infallible>>> {
-    let project_slug = request
+    let project_slug = Slug::from_str(request
         .headers()
         .get(header::HOST)
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.strip_suffix(HOSTING_PREFIX.as_str()))
-        .unwrap_or_default();
-    if project_slug.is_empty() {
-        return not_found_response();
-    }
+        .unwrap_or_default()).map_err(|e|HostingError::Custom(e.to_string()))?;
+
     let base_path = request.uri().path();
     let path = if base_path.is_empty() || base_path == "/" {
         "/index.html"
     } else {
         base_path
     };
-    let cache_entry = CACHE.get(project_slug).and_then(|project_cache| {
+    let cache_entry = CACHE.get(&project_slug.to_project_slug_str()).and_then(|project_cache| {
         project_cache
             .paths
             .get(path)

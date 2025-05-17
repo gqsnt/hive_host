@@ -1,5 +1,7 @@
 use leptos::prelude::CustomAttribute;
-use leptos::prelude::{AddAnyAttr, For, NodeRef, NodeRefAttribute, OnAttribute, RwSignal, Set, Show};
+use leptos::prelude::{
+    AddAnyAttr, For, NodeRef, NodeRefAttribute, OnAttribute, RwSignal, Set, Show,
+};
 use leptos::prelude::{Effect, IntoAnyAttribute};
 pub mod file_content_view;
 pub mod project_files_sidebar;
@@ -18,10 +20,11 @@ use leptos::either::Either;
 use leptos::prelude::{ElementChild, Memo, Read, Suspend, Transition};
 
 use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectStateStoreFields};
+use crate::models::ProjectSlugStrFront;
 use crate::security::permission::request_server_project_action_front;
 use common::server_action::project_action::io_action::file_action::ProjectIoFileAction;
 use common::server_action::token_action::{TokenAction, UsedTokenActionResponse};
-use common::{ProjectSlugStr, ServerId};
+use common::ServerId;
 use leptos::html::Input;
 use leptos::logging::log;
 use leptos::prelude::{expect_context, signal, ClassAttribute, CollectView, Get, IntoMaybeErased};
@@ -68,23 +71,23 @@ pub fn ProjectFiles() -> impl IntoView {
             .unwrap_or_else(|| "root/".to_string())
     });
 
-
     let global_state: Store<GlobalState> = expect_context();
 
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
-    let permission_signal = Signal::derive(move || {
-        global_state
-            .project_state()
-            .unwrap()
-            .read()
-            .permission
-    });
+    let permission_signal =
+        Signal::derive(move || global_state.project_state().unwrap().read().permission);
 
     log!("Perm slug signal: {:?}", permission_signal.get());
 
     let slug = Signal::derive(move || project_slug_signal.read().0.clone());
-    let server_id = Signal::derive(move || global_state.project_state().unwrap().project().read().server_id);
-
+    let server_id = Signal::derive(move || {
+        global_state
+            .project_state()
+            .unwrap()
+            .project()
+            .read()
+            .server_id
+    });
 
     let csrf_signal = Signal::derive(move || global_state.csrf().get());
 
@@ -102,7 +105,7 @@ pub fn ProjectFiles() -> impl IntoView {
                 server_project_action.version().get(),
             )
         },
-        |(_,path,server_id, slug, _)| {
+        |(_, path, server_id, slug, _)| {
             request_server_project_action_front(
                 server_id,
                 slug,
@@ -151,7 +154,7 @@ pub fn ProjectFiles() -> impl IntoView {
             ProjectIoDirAction::Create {
                 path: format!("{}{}", current_path.get(), folder_name),
             }
-                .into(),
+            .into(),
             Some(
                 csrf_signal
                     .read()
@@ -169,12 +172,12 @@ pub fn ProjectFiles() -> impl IntoView {
             return;
         }
         server_project_action.dispatch((
-                                           server_id(),
+            server_id(),
             slug(),
             ProjectIoFileAction::Create {
                 path: format!("{}{}", current_path.get(), file_name),
             }
-                .into(),
+            .into(),
             Some(
                 csrf_signal
                     .read()
@@ -360,15 +363,14 @@ pub fn ProjectFiles() -> impl IntoView {
     }
 }
 
-
 #[component]
 pub fn FileUploadArea(
     server_id: Signal<ServerId>,
-    slug: Signal<ProjectSlugStr>,
-    
+    slug: Signal<ProjectSlugStrFront>,
+
     current_path: Signal<String>,
     csrf_signal: Signal<Option<String>>,
-    refresh_signal:RwSignal<u32>
+    refresh_signal: RwSignal<u32>,
 ) -> impl IntoView {
     let file_input_ref: NodeRef<Input> = NodeRef::new();
     let (upload_messages, set_upload_messages) = signal(Vec::<String>::new());
@@ -389,27 +391,36 @@ pub fn FileUploadArea(
                 log!("File list length: {}", file_list.length());
                 for i in 0..file_list.length() {
                     if let Some(file) = file_list.item(i) {
-                        form_data.append_with_blob_and_filename("files[]", &file, &file.name()).unwrap();
+                        form_data
+                            .append_with_blob_and_filename("files[]", &file, &file.name())
+                            .unwrap();
                     }
                 }
                 form_element.reset();
-
 
                 spawn_local(async move {
                     match get_action_token_action(
                         server_id(),
                         slug(),
-                        TokenAction::UploadFiles { path: current_path() },
+                        TokenAction::UploadFiles {
+                            path: current_path(),
+                        },
                         csrf_signal(),
                         Some(form_data),
-                    ).await {
+                    )
+                    .await
+                    {
                         Ok(UsedTokenActionResponse::UploadReport(report)) => {
-                            let messages: Vec<String> = report.into_iter()
-                                .map(|status| format!("{}: {} ({})",
-                                                      if status.success { "SUCCESS" } else { "FAIL" },
-                                                      status.filename,
-                                                      status.message
-                                ))
+                            let messages: Vec<String> = report
+                                .into_iter()
+                                .map(|status| {
+                                    format!(
+                                        "{}: {} ({})",
+                                        if status.success { "SUCCESS" } else { "FAIL" },
+                                        status.filename,
+                                        status.message
+                                    )
+                                })
                                 .collect();
                             set_upload_messages(messages);
                         }
@@ -417,10 +428,15 @@ pub fn FileUploadArea(
                             set_upload_messages(vec![format!("Upload failed: {}", e)]);
                         }
                         Err(e) => {
-                            set_upload_messages(vec![format!("Server error during upload: {:?}", e)]);
+                            set_upload_messages(vec![format!(
+                                "Server error during upload: {:?}",
+                                e
+                            )]);
                         }
                         _ => {
-                            set_upload_messages(vec!["Upload finished with an unexpected response.".to_string()]);
+                            set_upload_messages(vec![
+                                "Upload finished with an unexpected response.".to_string(),
+                            ]);
                         }
                     }
                     set_is_uploading(false);

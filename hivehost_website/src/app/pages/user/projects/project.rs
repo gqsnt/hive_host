@@ -8,9 +8,7 @@ pub mod project_snapshots;
 pub mod project_team;
 
 use leptos::context::provide_context;
-use leptos::prelude::{
-     ClassAttribute, CollectView, Get, Memo,
-};
+use leptos::prelude::{ClassAttribute, CollectView, Get, Memo};
 use leptos::{component, view, IntoView, Params};
 use leptos_router::hooks::{use_location, use_params};
 
@@ -63,17 +61,15 @@ impl ProjectSection {
         }
     }
 
-    pub fn from_first_segment(segment:&str)->Self{
+    pub fn from_first_segment(segment: &str) -> Self {
         match segment {
             "team" => ProjectSection::Team,
             "files" => ProjectSection::Files,
             "settings" => ProjectSection::Settings,
-             _  => ProjectSection::Snapshots,
+            _ => ProjectSection::Snapshots,
         }
     }
-
 }
-
 
 impl Display for ProjectSection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -91,13 +87,8 @@ impl Display for ProjectSection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectSlugSignal(pub String);
 
-
-
-
-
 #[component]
-pub fn ProjectPage(
-) -> impl IntoView {
+pub fn ProjectPage() -> impl IntoView {
     let params: MemoProjectParams = use_params::<ProjectParams>();
     let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal = Signal::derive(move || {
@@ -110,12 +101,9 @@ pub fn ProjectPage(
     provide_context(project_slug_signal);
 
     #[allow(clippy::redundant_closure)]
-    let project_resource = Resource::new_bincode(
+    let project_resource =
+        Resource::new_bincode(move || project_slug_signal(), move |s| get_project(s.0));
 
-        move || project_slug_signal() ,
-        move |s  | get_project(s.0),
-    );
-    
     let active_project_section = Memo::new(move |_| {
         let current_path = use_location().pathname.get();
         let segments: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
@@ -134,8 +122,6 @@ pub fn ProjectPage(
             ProjectSection::default()
         }
     });
-
-    
 
     view! {
         <div>
@@ -210,10 +196,9 @@ fn SectionNav(
 }
 
 pub mod server_fns {
-    use crate::models::{Project};
+    use crate::models::{Project, ProjectSlugStrFront};
     use crate::AppResult;
     use common::server_action::permission::Permission;
-    use common::ProjectSlugStr;
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
 
@@ -223,7 +208,9 @@ pub mod server_fns {
     }}
 
     #[server(input=Bincode, output=Bincode)]
-    pub async fn get_project(project_slug: ProjectSlugStr) -> AppResult<(Permission, Project)> {
+    pub async fn get_project(
+        project_slug: ProjectSlugStrFront,
+    ) -> AppResult<(Permission, Project)> {
         crate::security::permission::ssr::handle_project_permission_request(
             project_slug,
             Permission::Read,
@@ -231,7 +218,7 @@ pub mod server_fns {
             |auth, pool, project_slug| async move {
                 let user_id = get_auth_session_user_id(&auth).unwrap();
                 let record = sqlx::query!(
-                        r#"SELECT 
+                    r#"SELECT 
                             pr.id,
                             pr.name,
                             pr.active_snapshot_id, 
@@ -253,11 +240,11 @@ pub mod server_fns {
                             left join projects_github  pgi on pr.project_github_id = pgi.id
                             left join user_githubs ug on ug.id = pgi.user_githubs_id
                         WHERE pr.id = $2"#,
-                        user_id,
-                        project_slug.id
-                    )
-                    .fetch_one(&pool)
-                    .await?;
+                    user_id,
+                    project_slug.id
+                )
+                .fetch_one(&pool)
+                .await?;
                 let prod_branch_commit = if let Some(snapshot_id) = record.active_snapshot_id {
                     let ps_record = sqlx::query!(
                         r#"SELECT git_commit, git_branch
@@ -267,7 +254,9 @@ pub mod server_fns {
                     )
                     .fetch_one(&pool)
                     .await?;
-                    if let (Some(git_commit), Some(git_branch)) = (ps_record.git_commit, ps_record.git_branch) {
+                    if let (Some(git_commit), Some(git_branch)) =
+                        (ps_record.git_commit, ps_record.git_branch)
+                    {
                         Some((git_branch, git_commit))
                     } else {
                         None
@@ -275,21 +264,20 @@ pub mod server_fns {
                 } else {
                     None
                 };
-                
-                    
-                let git_project = if record.project_github_id.is_some(){
-                    Some(GitProject{
+
+                let git_project = if record.project_github_id.is_some() {
+                    Some(GitProject {
                         id: record.project_github_id.unwrap(),
                         repo_full_name: record.repo_full_name.unwrap(),
                         branch_name: record.branch_name.unwrap(),
                         dev_commit: record.dev_commit.unwrap(),
                         prod_branch_commit,
                         last_commit: record.last_commit.unwrap(),
-                        auto_deploy:record.auto_deploy.unwrap(),
+                        auto_deploy: record.auto_deploy.unwrap(),
                         installation_id: record.installation_id.unwrap(),
                         user_githubs_id: record.user_githubs_id.unwrap(),
                     })
-                }else{
+                } else {
                     None
                 };
                 let project = Project {
@@ -299,12 +287,12 @@ pub mod server_fns {
                     active_snapshot_id: record.active_snapshot_id,
                     server_id: record.server_id,
                     hosting_address: record.hosting_address,
-                    git_project
+                    git_project,
                 };
 
-                Ok((record.permission,project))
+                Ok((record.permission, project))
             },
         )
-            .await
+        .await
     }
 }

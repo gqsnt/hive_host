@@ -1,29 +1,34 @@
-use crate::app::pages::user::projects::project::project_snapshots::server_fns::{set_active_project_snapshot, CreateProjectSnapshot, DeleteProjectSnapshot, RestoreProjectSnapshot, SetActiveProjectSnapshot, UnsetActiveProjectSnapshot};
+use crate::app::pages::user::projects::project::project_snapshots::server_fns::{
+    CreateProjectSnapshot, DeleteProjectSnapshot, RestoreProjectSnapshot, SetActiveProjectSnapshot,
+    UnsetActiveProjectSnapshot,
+};
 use crate::app::pages::user::projects::project::ProjectSlugSignal;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectStateStoreFields};
 use crate::app::{commit_display, IntoView};
+use crate::models::ProjectStoreFields;
 use leptos::either::{Either, EitherOf3};
 use leptos::html::{Input, Textarea};
 use leptos::prelude::*;
 use reactive_stores::{OptionStoreExt, Store};
 use web_sys::SubmitEvent;
-use crate::models::ProjectStoreFields;
 
 #[component]
 pub fn ProjectSnapshots() -> impl IntoView {
     let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
 
-    let permission_signal = Signal::derive(move || {
+    let permission_signal =
+        Signal::derive(move || global_state.project_state().unwrap().read().permission);
+
+    let slug_signal = Signal::derive(move || project_slug_signal.get().0);
+    let server_id = move || {
         global_state
             .project_state()
             .unwrap()
+            .project()
             .read()
-            .permission
-    });
-
-    let slug_signal = Signal::derive(move || project_slug_signal.get().0);
-    let server_id = move || global_state.project_state().unwrap().project().read().server_id;
+            .server_id
+    };
 
     let csrf_signal = Signal::derive(move || global_state.csrf().get());
     let active_snapshot_id_signal = Signal::derive(move || {
@@ -43,13 +48,13 @@ pub fn ProjectSnapshots() -> impl IntoView {
             .git_project
             .is_some()
     });
-    
+
     let create_snapshot_action = ServerAction::<CreateProjectSnapshot>::new();
     let delete_snapshot_action = ServerAction::<DeleteProjectSnapshot>::new();
     let set_active_snapshot_action = ServerAction::<SetActiveProjectSnapshot>::new();
     let unset_active_snapshot_action = ServerAction::<UnsetActiveProjectSnapshot>::new();
     let restore_snapshot_action = ServerAction::<RestoreProjectSnapshot>::new();
-    
+
     let snapshots_resource = Resource::new_bincode(
         move || {
             (
@@ -63,17 +68,15 @@ pub fn ProjectSnapshots() -> impl IntoView {
         move |(slug, _, _, _, _)| async move { server_fns::get_project_snapshots(slug).await },
     );
 
-
     let snapshot_name_ref = NodeRef::<Input>::new();
     let snapshot_description_ref = NodeRef::<Textarea>::new();
-
 
     let (create_feedback, set_create_feedback) = signal(String::new());
     let (delete_feedback, set_delete_feedback) = signal(String::new());
     let (restore_feedback, set_restore_feedback) = signal(String::new());
     let (set_active_feedback, set_set_active_feedback) = signal(String::new());
     let (unset_active_feedback, set_unset_active_feedback) = signal(String::new());
-    
+
     Effect::new(move |_| {
         if let Some(result) = create_snapshot_action.value().get() {
             match result {
@@ -98,7 +101,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 Err(e) => set_delete_feedback.set(format!("Error deleting snapshot: {e}")),
             }
         } else {
-            set_delete_feedback.set("".to_string()); 
+            set_delete_feedback.set("".to_string());
         }
     });
 
@@ -111,7 +114,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 }
             }
         } else {
-            set_set_active_feedback.set("".to_string()); 
+            set_set_active_feedback.set("".to_string());
         }
     });
 
@@ -124,10 +127,10 @@ pub fn ProjectSnapshots() -> impl IntoView {
                 }
             }
         } else {
-            set_unset_active_feedback.set("".to_string()); 
+            set_unset_active_feedback.set("".to_string());
         }
     });
-    
+
     Effect::new(move |_| {
         if let Some(result) = restore_snapshot_action.value().get() {
             match result {
@@ -138,49 +141,54 @@ pub fn ProjectSnapshots() -> impl IntoView {
             set_restore_feedback.set("".to_string());
         }
     });
-    
-    
-    let on_restore_submit= move |ev: SubmitEvent, snapshot_id:i64| {
+
+    let on_restore_submit = move |ev: SubmitEvent, snapshot_id: i64| {
         ev.prevent_default();
         let confirmed = if let Some(window) = web_sys::window() {
             window
-                .confirm_with_message(
-                    "Are you sure you want to Restore this snapshot?"
-                )
+                .confirm_with_message("Are you sure you want to Restore this snapshot?")
                 .unwrap_or(false)
         } else {
             false
         };
-        if confirmed{
-            restore_snapshot_action.dispatch(RestoreProjectSnapshot{
-                server_id:server_id(),
+        if confirmed {
+            restore_snapshot_action.dispatch(RestoreProjectSnapshot {
+                server_id: server_id(),
                 csrf: csrf_signal.get().unwrap_or_default(),
                 project_slug: slug_signal(),
                 snapshot_id,
             });
         }
     };
-    
-    
-    let on_set_active_submit = move |ev: SubmitEvent, snapshot_id:i64| {
+
+    let on_set_active_submit = move |ev: SubmitEvent, snapshot_id: i64| {
         ev.prevent_default();
-        set_active_snapshot_action.dispatch(SetActiveProjectSnapshot{
-            server_id:server_id(),
+        set_active_snapshot_action.dispatch(SetActiveProjectSnapshot {
+            server_id: server_id(),
             csrf: csrf_signal.get().unwrap_or_default(),
             project_slug: slug_signal(),
             snapshot_id,
         });
-        global_state.project_state().unwrap().project().update(|project| {
-            project.active_snapshot_id = Some(snapshot_id);
-        });
-        if active_git_signal(){
-            let prod_branch_commit =  set_active_snapshot_action.value().get()
-                .and_then(|r|r.ok())
+        global_state
+            .project_state()
+            .unwrap()
+            .project()
+            .update(|project| {
+                project.active_snapshot_id = Some(snapshot_id);
+            });
+        if active_git_signal() {
+            let prod_branch_commit = set_active_snapshot_action
+                .value()
+                .get()
+                .and_then(|r| r.ok())
                 .flatten();
 
-
-            global_state.project_state().unwrap().project()
-                .git_project().unwrap()
+            global_state
+                .project_state()
+                .unwrap()
+                .project()
+                .git_project()
+                .unwrap()
                 .update(|git_project| {
                     git_project.prod_branch_commit = prod_branch_commit;
                 });
@@ -188,29 +196,32 @@ pub fn ProjectSnapshots() -> impl IntoView {
     };
     let on_unset_active_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
-        unset_active_snapshot_action.dispatch(UnsetActiveProjectSnapshot{
-            server_id:server_id(),
+        unset_active_snapshot_action.dispatch(UnsetActiveProjectSnapshot {
+            server_id: server_id(),
             csrf: csrf_signal.get().unwrap_or_default(),
             project_slug: slug_signal(),
         });
-        global_state.project_state().update(|project_opt| {
-            match project_opt{
+        global_state
+            .project_state()
+            .update(|project_opt| match project_opt {
                 None => {}
                 Some(p_state) => {
                     p_state.project.active_snapshot_id = None;
                 }
-            }
-        });
-        if active_git_signal(){
-            global_state.project_state().unwrap().project()
-                .git_project().unwrap()
+            });
+        if active_git_signal() {
+            global_state
+                .project_state()
+                .unwrap()
+                .project()
+                .git_project()
+                .unwrap()
                 .update(|git_project| {
                     git_project.prod_branch_commit = None;
                 });
         }
     };
-    
-    
+
     let on_create_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
         let name = snapshot_name_ref.get().expect("name input exists").value();
@@ -220,17 +231,17 @@ pub fn ProjectSnapshots() -> impl IntoView {
             set_create_feedback.set("Snapshot name cannot be empty.".to_string());
             return;
         }
-        set_create_feedback.set("Creating...".to_string()); 
+        set_create_feedback.set("Creating...".to_string());
         create_snapshot_action.dispatch(CreateProjectSnapshot {
-            server_id:server_id(),
-            csrf:csrf_signal().unwrap_or_default(),
+            server_id: server_id(),
+            csrf: csrf_signal().unwrap_or_default(),
             project_slug: slug_signal(),
             name,
             description: description.filter(|d| !d.trim().is_empty()),
         });
     };
 
-    let on_delete_submit = move |ev: SubmitEvent, snapshot_name: String, snapshot_id:i64 | {
+    let on_delete_submit = move |ev: SubmitEvent, snapshot_name: String, snapshot_id: i64| {
         ev.prevent_default();
         let confirmed = if let Some(window) = web_sys::window() {
             window
@@ -243,7 +254,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
         };
         if confirmed {
             delete_snapshot_action.dispatch(DeleteProjectSnapshot {
-                server_id:server_id(),
+                server_id: server_id(),
                 csrf: csrf_signal.get().unwrap_or_default(),
                 project_slug: slug_signal(),
                 snapshot_id,
@@ -503,32 +514,33 @@ pub fn ProjectSnapshots() -> impl IntoView {
 pub mod server_fns {
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
-    
-    use crate::models::ProjectSnapshot;
+
+    use crate::models::{ProjectSlugStrFront, ProjectSnapshot};
     use crate::AppResult;
-    use common::{ProjectSlugStr, ServerId};
-    
+    use common::ServerId;
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::permission::ssr::handle_project_permission_request;
         use crate::api::ssr::{request_server_project_action};
         use common::server_action::permission::Permission;
+        use common::{GitBranchNameStr, GitCommitStr, SnapShotNameStr};
         use common::server_action::project_action::snapshot::ProjectSnapshotAction;
         use crate::AppError;
+        use std::str::FromStr;
         use time::format_description::well_known::Rfc3339;
         use crate::ssr::ws_clients;
     }}
 
     #[server(input=Bincode, output=Bincode)]
     pub async fn get_project_snapshots(
-        project_slug: ProjectSlugStr,
+        project_slug: ProjectSlugStrFront,
     ) -> AppResult<Vec<ProjectSnapshot>> {
         handle_project_permission_request(
             project_slug,
             Permission::Read,
             None,
             |_, pool, project_slug_obj| async move {
-                let snapshots=  sqlx::query!(
+                let snapshots = sqlx::query!(
                     "SELECT id, project_id, name,snapshot_name,version, description, git_commit, git_branch, created_at
                      FROM projects_snapshots
                      WHERE project_id = $1
@@ -545,20 +557,20 @@ pub mod server_fns {
                     version: s.version,
                     snapshot_name: s.snapshot_name,
                     description: s.description,
-                    git_commit:s.git_commit,
-                    git_branch:s.git_branch,
+                    git_commit: s.git_commit,
+                    git_branch: s.git_branch,
                     created_at: s.created_at.format(&Rfc3339).unwrap_or_default(),
                 }).collect())
             },
         )
-        .await
+            .await
     }
 
     #[server(input=Bincode, output=Bincode)]
     pub async fn create_project_snapshot(
         csrf: String,
-        server_id:ServerId,
-        project_slug: ProjectSlugStr,
+        server_id: ServerId,
+        project_slug: ProjectSlugStrFront,
         name: String,
         description: Option<String>,
     ) -> AppResult<()> {
@@ -583,14 +595,16 @@ pub mod server_fns {
                         WHERE projects.id = $1 and projects.project_github_id is not null"#,
                     project_slug.id
                 )
-                    .fetch_optional(&pool)
-                    .await?;
-                let (branch_name, dev_commit) = project_github.map(|pg| {
-                    (
-                        Some(pg.branch_name),
-                        Some(pg.dev_commit)
-                    )
-                }).unwrap_or((None, None));
+                .fetch_optional(&pool)
+                .await?;
+                let (branch_name, dev_commit) = project_github
+                    .map(|pg| {
+                        (
+                            Some(GitBranchNameStr(pg.branch_name)),
+                            Some(GitCommitStr(pg.dev_commit)),
+                        )
+                    })
+                    .unwrap_or((None, None));
                 let _ = ssr::inner_create_snapshot(
                     &pool,
                     crate::ssr::ws_clients()?,
@@ -600,21 +614,20 @@ pub mod server_fns {
                     description,
                     branch_name.clone(),
                     dev_commit.clone(),
-                ).await?;
+                )
+                .await?;
 
                 Ok(())
             },
         )
-            .await
+        .await
     }
-
-    
 
     #[server(input=Bincode, output=Bincode)]
     pub async fn unset_active_project_snapshot(
         csrf: String,
-        server_id:ServerId,
-        project_slug: ProjectSlugStr,
+        server_id: ServerId,
+        project_slug: ProjectSlugStrFront,
     ) -> AppResult<()> {
         handle_project_permission_request(
             project_slug,
@@ -639,25 +652,24 @@ pub mod server_fns {
 
                 request_server_project_action(
                     server_id,
-                    project_slug.clone(),
+                    project_slug.to_project_slug_str(),
                     ProjectSnapshotAction::UnmountProd.into(),
                     None,
-                ).await?;
+                )
+                .await?;
                 Ok(())
             },
         )
         .await
     }
 
-
-
     #[server(input=Bincode, output=Bincode)]
     pub async fn restore_project_snapshot(
         csrf: String,
-        server_id:ServerId,
-        project_slug: ProjectSlugStr,
+        server_id: ServerId,
+        project_slug: ProjectSlugStrFront,
         snapshot_id: i64,
-    ) -> AppResult<()>{
+    ) -> AppResult<()> {
         handle_project_permission_request(
             project_slug,
             Permission::Owner, // Restoring requires owner permission
@@ -670,25 +682,16 @@ pub mod server_fns {
                  )
                     .fetch_optional(&pool)
                     .await?;
-                let users_slug = sqlx::query!(
-                    "SELECT u.slug from permissions as  p inner join  users as u on p.user_id = u.id where p.project_id = $1",
-                    project_slug.id
-                )
-                    .fetch_all(&pool)
-                    .await?
-                    .into_iter()
-                    .map(|u| u.slug)
-                    .collect::<Vec<_>>();
                 if snapshot.is_none() {
                     return Err(AppError::Custom("Snapshot not found for this project.".to_string()));
                 }
                 let snapshot = snapshot.unwrap();
+                let snapshot_name = SnapShotNameStr::from_str(&snapshot.snapshot_name)?;
                 request_server_project_action(
                     server_id,
-                    project_slug.clone(),
-                    ProjectSnapshotAction::Restore { 
-                        snapshot_name: snapshot.snapshot_name,
-                        users_slug
+                    project_slug.to_project_slug_str(),
+                    ProjectSnapshotAction::Restore{
+                        snapshot_name,
                     }.into(),
                     None,
                 ).await?;
@@ -697,23 +700,22 @@ pub mod server_fns {
         )
             .await
     }
-    
-    
+
     #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project_snapshot(
         csrf: String,
-        server_id:ServerId,
-        project_slug: ProjectSlugStr,
+        server_id: ServerId,
+        project_slug: ProjectSlugStrFront,
         snapshot_id: i64,
     ) -> AppResult<()> {
         handle_project_permission_request(
             project_slug,
             Permission::Owner,
             Some(csrf),
-            |_, pool, project_slug_obj| async move {
+            |_, pool, project_slug| async move {
                 let active_snapshot = sqlx::query!(
                      "SELECT active_snapshot_id FROM projects WHERE id = $1",
-                     project_slug_obj.id
+                     project_slug.id
                  )
                     .fetch_one(&pool)
                     .await?;
@@ -723,12 +725,12 @@ pub mod server_fns {
                 let snapshot = sqlx::query!(
                      "DELETE FROM projects_snapshots WHERE id = $1 AND project_id = $2 returning snapshot_name",
                      snapshot_id,
-                     project_slug_obj.id
+                     project_slug.id
                  )
                     .fetch_optional(&pool)
                     .await?;
-                if let Some(snapshot) = snapshot{
-                    request_server_project_action(server_id,project_slug_obj.clone(), ProjectSnapshotAction::Delete { snapshot_name: snapshot.snapshot_name }.into(), None).await?;
+                if let Some(snapshot) = snapshot {
+                    request_server_project_action(server_id, project_slug.to_project_slug_str(), ProjectSnapshotAction::Delete { snapshot_name: SnapShotNameStr::from_str(&snapshot.snapshot_name)? }.into(), None).await?;
                 }
 
                 Ok(())
@@ -740,8 +742,8 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn set_active_project_snapshot(
         csrf: String,
-        server_id:ServerId,
-        project_slug: ProjectSlugStr,
+        server_id: ServerId,
+        project_slug: ProjectSlugStrFront,
         snapshot_id: i64,
     ) -> AppResult<Option<(String, String)>> {
         handle_project_permission_request(
@@ -749,49 +751,70 @@ pub mod server_fns {
             Permission::Owner, // Setting active requires owner
             Some(csrf),
             |_, pool, project_slug| async move {
-                Ok( ssr::inner_set_snapshot_prod(
+                ssr::inner_set_snapshot_prod(
                     &pool,
                     ws_clients()?,
                     server_id,
                     project_slug.clone(),
                     snapshot_id,
-
-                ).await?)
+                )
+                .await
             },
         )
-            .await
+        .await
     }
 
     #[cfg(feature = "ssr")]
     pub mod ssr {
-        use common::server_action::project_action::snapshot::ProjectSnapshotAction;
-        use crate::{AppError, AppResult};
-        use common::{ServerId, Slug};
         use crate::api::ssr::request_server_project_action;
+        use crate::security::utils::ssr::SANITIZED_REGEX;
         use crate::ssr::WsClients;
-        
+        use crate::{AppError, AppResult};
+        use common::server_action::project_action::snapshot::ProjectSnapshotAction;
+        use common::{GitBranchNameStr, GitCommitStr, ServerId, Slug, SnapShotNameStr};
+        use std::str::FromStr;
+        use validator::Validate;
+
+        #[derive(Debug, Clone, Validate)]
+        pub struct CreateSnapshotForm {
+            #[validate(length(min = 2, max = 30), regex(path = *SANITIZED_REGEX, message="Snapshot must contain only letters (a-z, A-Z), number (0-9) and underscores (_)"
+            ))]
+            pub name: String,
+            #[validate(length(max = 500))]
+            pub description: String,
+        }
+
         #[allow(clippy::too_many_arguments)]
         pub async fn inner_create_snapshot(
             pool: &sqlx::PgPool,
-            ws_clients:WsClients,
-            server_id:ServerId,
+            ws_clients: WsClients,
+            server_id: ServerId,
             project_slug: Slug,
             name: Option<String>,
             description: Option<String>,
-            branch_name: Option<String>,
-            commit:Option<String>,
+            branch_name: Option<GitBranchNameStr>,
+            commit: Option<GitCommitStr>,
         ) -> AppResult<i64> {
+            let form = CreateSnapshotForm {
+                name: name.clone().unwrap_or_else(|| {
+                    format!("Version {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"))
+                }),
+                description: description.clone().unwrap_or_default(),
+            };
+            form.validate()?;
             let prev_snap = sqlx::query!(
                 "SELECT version FROM projects_snapshots WHERE project_id = $1 ORDER BY version DESC LIMIT 1",
                 project_slug.id
             )
                 .fetch_optional(pool)
                 .await?;
-            let prev_version = prev_snap
-                .map(|row| row.version)
-                .unwrap_or(0);
+            let prev_version = prev_snap.map(|row| row.version).unwrap_or(0);
             let new_version = prev_version + 1;
-            let snapshot_name = format!("{}_snapshot_{}",project_slug, chrono::Utc::now().format("%Y_%m_%d_%H_%M_%S"));
+            let snapshot_name = format!(
+                "{}_snapshot_{}",
+                project_slug,
+                chrono::Utc::now().format("%Y_%m_%d_%H_%M_%S")
+            );
             let project_snapshot_id = sqlx::query!(
                      r#"
                      INSERT INTO projects_snapshots (project_id, name, version,snapshot_name, description, git_commit,git_branch , created_at)
@@ -803,25 +826,29 @@ pub mod server_fns {
                     new_version,
                     snapshot_name,
                      description,
-                        commit,
-                        branch_name,
+                        commit.map(|i|i.0),
+                        branch_name.map(|i|i.0),
                  )
                 .fetch_one(pool)
                 .await?.id;
 
             request_server_project_action(
                 server_id,
-                project_slug.clone(),
-                ProjectSnapshotAction::Create { snapshot_name }.into(),
-                Some(ws_clients)
-            ).await?;
+                project_slug.to_project_slug_str(),
+                ProjectSnapshotAction::Create {
+                    snapshot_name: SnapShotNameStr::from_str(&snapshot_name)?,
+                }
+                .into(),
+                Some(ws_clients),
+            )
+            .await?;
             Ok(project_snapshot_id)
         }
 
         pub async fn inner_set_snapshot_prod(
             pool: &sqlx::PgPool,
             ws_clients: WsClients,
-            server_id:ServerId,
+            server_id: ServerId,
             project_slug: Slug,
             snapshot_id: i64,
         ) -> AppResult<Option<(String, String)>> {
@@ -834,40 +861,53 @@ pub mod server_fns {
                 .await?;
 
             if snapshot.is_none() {
-                return Err(AppError::Custom("Snapshot not found for this project.".to_string()));
+                return Err(AppError::Custom(
+                    "Snapshot not found for this project.".to_string(),
+                ));
             }
             let snapshot = snapshot.unwrap();
-            let branch_commit = if let (Some(branch), Some( commit)) = (snapshot.git_branch, snapshot.git_commit) {
-                Some((branch, commit))
-            } else {
-                None
-            };
+            let branch_commit =
+                if let (Some(branch), Some(commit)) = (snapshot.git_branch, snapshot.git_commit) {
+                    Some((branch, commit))
+                } else {
+                    None
+                };
             let active_snapshot_id = sqlx::query!(
-                     "SELECT active_snapshot_id FROM projects WHERE id = $1",
-                     project_slug.id
-                 )
-                .fetch_one(pool)
-                .await?;
+                "SELECT active_snapshot_id FROM projects WHERE id = $1",
+                project_slug.id
+            )
+            .fetch_one(pool)
+            .await?;
 
-            let should_umount_first = if let Some(active_snapshot_id) = active_snapshot_id.active_snapshot_id {
-                if active_snapshot_id == snapshot.id {
-                    return Err(AppError::Custom("Snapshot is already active.".to_string()));
-                }
-                true
-            }else{
-                false
-            };
-
+            let should_umount_first =
+                if let Some(active_snapshot_id) = active_snapshot_id.active_snapshot_id {
+                    if active_snapshot_id == snapshot.id {
+                        return Err(AppError::Custom("Snapshot is already active.".to_string()));
+                    }
+                    true
+                } else {
+                    false
+                };
 
             sqlx::query!(
-                     "UPDATE projects SET active_snapshot_id = $1 WHERE id = $2",
-                     snapshot_id,
-                     project_slug.id
-                 )
-                .execute(pool)
-                .await?;
+                "UPDATE projects SET active_snapshot_id = $1 WHERE id = $2",
+                snapshot_id,
+                project_slug.id
+            )
+            .execute(pool)
+            .await?;
 
-            request_server_project_action(server_id,project_slug.clone(), ProjectSnapshotAction::MountSnapshotProd { snapshot_name: snapshot.snapshot_name, should_umount_first }.into(), Some(ws_clients)).await?;
+            request_server_project_action(
+                server_id,
+                project_slug.to_project_slug_str(),
+                ProjectSnapshotAction::MountSnapshotProd {
+                    snapshot_name: SnapShotNameStr::from_str(&snapshot.snapshot_name)?,
+                    should_umount_first,
+                }
+                .into(),
+                Some(ws_clients),
+            )
+            .await?;
             Ok(branch_commit)
         }
     }

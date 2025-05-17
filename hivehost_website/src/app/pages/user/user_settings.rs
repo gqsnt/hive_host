@@ -1,17 +1,20 @@
 use leptos::control_flow::For;
 use leptos::either::{Either, EitherOf3};
 
-use leptos::prelude::{expect_context, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, OnAttribute, Show, Transition};
+use crate::app::pages::{GlobalState, GlobalStateStoreFields};
+use leptos::html::{Input, Textarea};
 use leptos::prelude::IntoMaybeErased;
+use leptos::prelude::{
+    expect_context, ElementChild, GlobalAttributes, NodeRef, NodeRefAttribute, OnAttribute, Show,
+    Transition,
+};
 use leptos::prelude::{signal, Effect, Set};
 use leptos::prelude::{ClassAttribute, Get, Resource, ServerAction, Signal};
+use leptos::server::OnceResource;
 use leptos::text_prop::TextProp;
 use leptos::{component, view, IntoView};
-use leptos::html::{Input, Textarea};
-use leptos::server::OnceResource;
 use reactive_stores::Store;
 use web_sys::SubmitEvent;
-use crate::app::pages::{GlobalState, GlobalStateStoreFields};
 
 #[component]
 pub fn UserSettingsPage() -> impl IntoView {
@@ -29,9 +32,8 @@ pub fn UserSettingsPage() -> impl IntoView {
         },
         |_| server_fns::get_ssh_keys(),
     );
-    
-    let user_githubs = OnceResource::new_bincode(server_fns::get_user_githubs());
 
+    let user_githubs = OnceResource::new_bincode(server_fns::get_user_githubs());
 
     let old_password_ref = NodeRef::<Input>::default();
     let new_password_ref = NodeRef::<Input>::default();
@@ -39,7 +41,6 @@ pub fn UserSettingsPage() -> impl IntoView {
 
     let add_ssh_key_name_ref = NodeRef::<Input>::default();
     let add_ssh_key_value_ref = NodeRef::<Textarea>::default();
-
 
     let on_password_update = move |event: SubmitEvent| {
         event.prevent_default();
@@ -60,17 +61,13 @@ pub fn UserSettingsPage() -> impl IntoView {
         });
     };
 
-
-
-    let on_delete_ssh_click = move |event: SubmitEvent, ssh_key_id:i64, key_name:String| {
+    let on_delete_ssh_click = move |event: SubmitEvent, ssh_key_id: i64, key_name: String| {
         event.prevent_default();
         let confirmed = if let Some(window) = web_sys::window() {
             window
-                .confirm_with_message(
-                    &format!(
-                        "Are you sure you want to delete the key '{key_name}'?",
-                    ),
-                )
+                .confirm_with_message(&format!(
+                    "Are you sure you want to delete the key '{key_name}'?",
+                ))
                 .unwrap_or(false)
         } else {
             false
@@ -81,7 +78,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                 ssh_key_id,
             });
         }
-
     };
 
     let add_ssh_key = move |event: SubmitEvent| {
@@ -98,8 +94,6 @@ pub fn UserSettingsPage() -> impl IntoView {
                 .value(),
         });
     };
-
-
 
     let (new_ssh_key_result, set_new_ssh_key_result) = signal(" ".to_string());
     let (password_change_result, set_password_change_result) = signal(" ".to_string());
@@ -549,9 +543,6 @@ pub mod server_fns {
         }
     }
 
-
-
-    
     #[server(input=Bincode, output=Bincode)]
     pub async fn get_user_githubs() -> AppResult<Vec<UserGithub>> {
         let auth = auth(false)?;
@@ -567,7 +558,6 @@ pub mod server_fns {
         .fetch_all(&pool)
         .await?)
     }
-    
 
     #[server(input=Bincode, output=Bincode)]
     pub async fn get_ssh_keys() -> AppResult<Vec<SshKeyInfo>> {
@@ -608,7 +598,7 @@ pub mod server_fns {
         Ok(())
     }
 
-    #[server]
+    #[server(input=Bincode, output=Bincode)]
     pub async fn add_ssh_key(
         csrf: String,
         ssh_key_name: String,
@@ -663,7 +653,7 @@ pub mod server_fns {
         password_form.validate()?;
         let pool = pool()?;
         let user_id = get_auth_session_user_id(&auth).unwrap();
-        
+
         let result = sqlx::query!(
             r#"
         SELECT password FROM users WHERE id = $1
@@ -675,7 +665,7 @@ pub mod server_fns {
         let password = secrecy::SecretString::from(old_password.as_str());
         password_auth::verify_password(password.expose_secret().as_bytes(), &result.password)
             .map_err(|_| crate::AppError::InvalidCredentials)?;
-        
+
         sqlx::query!(
             r#"
         UPDATE users SET password = $1 WHERE id = $2

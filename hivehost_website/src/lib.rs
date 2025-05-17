@@ -1,25 +1,26 @@
+use common::SanitizeError;
 use std::str::FromStr;
-use common::ParseSlugError;
 use thiserror::Error;
 
 #[cfg(feature = "ssr")]
+use crate::github::ssr::SignatureError;
+#[cfg(feature = "ssr")]
 use axum_session::SessionError;
 use leptos::prelude::{FromServerFnError, ServerFnErrorErr};
-use leptos::server_fn::codec::{BincodeEncoding};
+use leptos::server_fn::codec::BincodeEncoding;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "ssr")]
 use sqlx::migrate::MigrateError;
 #[cfg(feature = "ssr")]
 use validator::{ValidationError, ValidationErrors};
 
-
 pub mod api;
 pub mod app;
+pub mod github;
 pub mod models;
 pub mod rate_limiter;
 pub mod security;
 pub mod tasks;
-pub mod github;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
@@ -70,7 +71,7 @@ pub enum AppError {
     #[error("Invalid ProjectSlug")]
     InvalidProjectSlug,
     #[error("Invalid Slug {0}")]
-    ParseSlug(#[from] ParseSlugError),
+    ParseSlug(#[from] SanitizeError),
     #[cfg(feature = "ssr")]
     #[error("Validation Error {0}")]
     ValidationError(#[from] ValidationError),
@@ -104,37 +105,41 @@ pub enum AppError {
     Io(String),
     #[cfg(feature = "ssr")]
     #[error("TarpcClientError: {0}")]
-    TrpcClientError(#[from] common::tarpc_client::TarpcClientError)
+    TrpcClientError(#[from] common::tarpc_client::TarpcClientError),
+
+    #[cfg(feature = "ssr")]
+    #[error("Signature error: {0}")]
+    SignatureError(#[from] SignatureError),
 }
 
 #[cfg(feature = "ssr")]
-macro_rules! impl_from_to_string {
-    ($res:path, $from:ty) => {
-        impl From<$from> for AppError {
-            fn from(value: $from) -> Self {
-                $res(value.to_string())
+pub mod ssr_macros {
+    macro_rules! impl_from_to_string {
+        ($res:ty, $res_path:path, $from:ty) => {
+            impl From<$from> for $res {
+                fn from(value: $from) -> Self {
+                    $res_path(value.to_string())
+                }
             }
-        }
-    };
+        };
+    }
+    pub(crate) use impl_from_to_string;
 }
 
 #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::AddrParse, std::net::AddrParseError);
+ssr_macros::impl_from_to_string!(AppError, AppError::AddrParse, std::net::AddrParseError);
 #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::SessionError, SessionError);
+ssr_macros::impl_from_to_string!(AppError, AppError::SessionError, SessionError);
 #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::MigrateError, MigrateError);
+ssr_macros::impl_from_to_string!(AppError, AppError::MigrateError, MigrateError);
 #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::DotEnv, dotenvy::Error);
+ssr_macros::impl_from_to_string!(AppError, AppError::DotEnv, dotenvy::Error);
 #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::RequestError, reqwest::Error);
+ssr_macros::impl_from_to_string!(AppError, AppError::RequestError, reqwest::Error);
 #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::SqlxError, sqlx::Error);
+ssr_macros::impl_from_to_string!(AppError, AppError::SqlxError, sqlx::Error);
 #[cfg(feature = "ssr")]
-impl_from_to_string!(AppError::Io, std::io::Error);
-
-
-
+ssr_macros::impl_from_to_string!(AppError, AppError::Io, std::io::Error);
 
 impl FromServerFnError for AppError {
     type Encoder = BincodeEncoding;
@@ -163,7 +168,6 @@ impl FromStr for BoolInput {
     }
 }
 
-
 #[cfg(feature = "ssr")]
 pub mod ssr {
     use crate::app::shell;
@@ -178,7 +182,10 @@ pub mod ssr {
         response::{IntoResponse, Response},
     };
     use common::server_action::permission::Permission;
-    use common::{ProjectId, ServerId, UserId};
+    use common::server_action::tarpc::WebsiteToServerClient;
+    use common::tarpc_client::{TarpcClient, TarpcClientError};
+    use common::{AuthResponse, AuthToken, ProjectId, ServerId, UserId};
+    use dashmap::DashMap;
     use leptos::config::LeptosOptions;
     use leptos::context::{provide_context, use_context};
     use leptos_axum::{handle_server_fns_with_context, AxumRouteListing};
@@ -187,20 +194,17 @@ pub mod ssr {
     use secrecy::SecretString;
     use sqlx::types::Uuid;
     use sqlx::PgPool;
+    use std::str::FromStr;
     use std::sync::atomic::Ordering;
     use std::sync::Arc;
-    use dashmap::DashMap;
-    use tarpc::{client, context};
     use tarpc::tokio_serde::formats::Bincode;
-    use common::server_action::tarpc::{AuthResponse, WebsiteToServerClient};
-    use common::tarpc_client::{TarpcClient, TarpcClientError};
+    use tarpc::{client, context};
 
     pub type Permissions = Arc<Cache<(UserId, ProjectId), Permission>>;
-    pub type GithubInstallCache = Arc<Cache<i64, (String ,String, String)>>;
+    pub type GithubInstallCache = Arc<Cache<i64, (String, String, String)>>;
 
-    pub type WsClient =  TarpcClient<WebsiteToServerClient>;
-    pub type WsClients =  DashMap<ServerId, WsClient>;
-
+    pub type WsClient = TarpcClient<WebsiteToServerClient>;
+    pub type WsClients = DashMap<ServerId, WsClient>;
 
     #[derive(Clone, FromRef)]
     pub struct AppState {
@@ -211,22 +215,24 @@ pub mod ssr {
         pub github_install_cache: GithubInstallCache,
         pub server_vars: ServerVars,
         pub rate_limiter: Arc<RateLimiter>,
-        pub ws_clients:WsClients
+        pub ws_clients: WsClients,
     }
 
     #[derive(Debug, Clone)]
     pub struct ServerVars {
         pub csrf_server: Arc<CsrfServer>,
-        pub git_pem:Arc<Vec<u8>>,
-        pub github_client_id:Arc<String>,
+        pub git_pem: Arc<Vec<u8>>,
+        pub github_client_id: Arc<String>,
+        pub github_webhook_secret: Arc<String>,
     }
-    
-    impl ServerVars{
-        pub fn new(github_client_id:String) -> Self {
+
+    impl ServerVars {
+        pub fn new(github_client_id: String, github_webhook_secret: String) -> Self {
             Self {
                 csrf_server: Arc::new(CsrfServer::default()),
                 git_pem: Arc::new(include_bytes!("../../hivehost-git.private-key.pem").to_vec()),
                 github_client_id: Arc::new(github_client_id),
+                github_webhook_secret: Arc::new(github_webhook_secret),
             }
         }
     }
@@ -256,7 +262,6 @@ pub mod ssr {
     pub fn ws_clients() -> AppResult<WsClients> {
         use_context::<WsClients>().ok_or(AppError::WebsiteToServerClientNotFound)
     }
-    
 
     pub fn server_vars() -> AppResult<ServerVars> {
         use_context::<ServerVars>().ok_or(AppError::ServerVarsNotFound)
@@ -315,25 +320,26 @@ pub mod ssr {
                 provide_context(app_state.pool.clone());
                 provide_context(app_state.server_vars.clone());
                 provide_context(app_state.ws_clients.clone());
-                
             },
             move || shell(app_state.leptos_options.clone()),
         );
         handler(State(options), req).await.into_response()
     }
 
-
-    pub async fn connect_website_client(addr: String, token: Option<String>) -> Result<WebsiteToServerClient, TarpcClientError> {
+    pub async fn connect_website_client(
+        addr: String,
+        token: String,
+    ) -> Result<WebsiteToServerClient, TarpcClientError> {
         let mut transport = tarpc::serde_transport::tcp::connect(addr, Bincode::default);
-        transport
-            .config_mut()
-            .max_frame_length(usize::MAX);
-        let client = WebsiteToServerClient::new(client::Config::default(), transport.await?).spawn();
-        match client.auth(context::current(), token.unwrap_or_default()).await{
+        transport.config_mut().max_frame_length(10 * 10 * 1024);
+        let client =
+            WebsiteToServerClient::new(client::Config::default(), transport.await?).spawn();
+        match client
+            .auth(context::current(), AuthToken::from_str(&token).unwrap())
+            .await
+        {
             Ok(AuthResponse::Ok) => Ok(client),
-            _ => {
-                Err(TarpcClientError::ConnectionError("Auth failed".to_string()))
-            }
+            _ => Err(TarpcClientError::ConnectionError("Auth failed".to_string())),
         }
     }
 }

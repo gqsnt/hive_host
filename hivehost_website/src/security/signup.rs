@@ -1,4 +1,4 @@
-use crate::{AppResult};
+use crate::AppResult;
 use leptos::server;
 use leptos::server_fn::codec::Bincode;
 
@@ -96,22 +96,27 @@ pub async fn signup(
     auth.login_user(user.id);
     auth.remember_user(remember);
     leptos_axum::redirect("/user");
-    let user_slug = Slug::new(user.id, form.username.clone());
     let ws_clients = crate::ssr::ws_clients()?;
+    let user_slug = Slug::new(user.id, form.username.clone());
     let mut project_created = false;
     for client in ws_clients.iter() {
         crate::api::ssr::request_user_action(
             *client.key(),
             ServerUserAction::Create {
-                user_slug: user_slug.clone(),
-            }
+                user_slug: user_slug.to_user_slug_str(),
+            },
         )
+        .await?;
+        if !project_created {
+            create_project(
+                *client.key(),
+                user_slug.clone(),
+                "default".to_string(),
+                None,
+            )
             .await?;
-        if !project_created{
-            create_project(*client.key(), user_slug.clone(), "default".to_string(), None).await?;
             project_created = true;
         }
-
     }
 
     Ok(())

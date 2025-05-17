@@ -1,43 +1,39 @@
-use serde::{Deserialize, Serialize};
 use crate::server_action::permission::Permission;
-use crate::server_action::project_action::{IsProjectServerAction};
+use crate::server_action::project_action::IsProjectServerAction;
+use serde::{Deserialize, Serialize};
 
-
-#[derive(Debug,  Clone, PartialEq, Eq,Deserialize,Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum TokenAction {
-    UploadFiles {path: String},
-    UpdateFile{path: String},
-    ViewFile {path:String},
-    DownloadFile{path:String},
-    DownloadDir{path:String},
+    UploadFiles { path: String },
+    UpdateFile { path: String },
+    ViewFile { path: String },
+    DownloadFile { path: String },
 }
 
 impl IsProjectServerAction for TokenAction {
     fn permission(&self) -> Permission {
         match self {
-            TokenAction::UpdateFile {..} | TokenAction::UploadFiles { .. } => Permission::Write,
-            TokenAction::DownloadFile {..} |TokenAction::ViewFile { .. } | TokenAction::DownloadDir { .. } => Permission::Read,
+            TokenAction::UpdateFile { .. } | TokenAction::UploadFiles { .. } => Permission::Write,
+            TokenAction::DownloadFile { .. } | TokenAction::ViewFile { .. } => Permission::Read,
         }
     }
 
     fn require_csrf(&self) -> bool {
         match self {
-            TokenAction::UpdateFile {..} |TokenAction::UploadFiles { .. }  => true,
-            TokenAction::DownloadFile {..} |TokenAction::ViewFile { .. } | TokenAction::DownloadDir { .. } => false,
+            TokenAction::UpdateFile { .. } | TokenAction::UploadFiles { .. } => true,
+            TokenAction::DownloadFile { .. } | TokenAction::ViewFile { .. } => false,
         }
     }
 }
 
-#[derive(Debug,  Clone, PartialEq, Eq,Deserialize,Serialize)]
-pub enum TokenActionResponse{
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub enum TokenActionResponse {
     Ok(String),
     Error(String),
 }
 
-
-
-#[derive(Debug,  Clone, PartialEq, Eq,Deserialize,Serialize)]
-pub enum UsedTokenActionResponse{
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub enum UsedTokenActionResponse {
     Ok,
     Content(Vec<u8>),
     File(FileInfo),
@@ -45,11 +41,11 @@ pub enum UsedTokenActionResponse{
     Error(String),
 }
 
-#[derive( Debug, Clone, PartialEq, Eq,Deserialize,Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct FileInfo {
     pub name: String,
     pub path: String,
-    pub content:Option<String>,
+    pub content: Option<String>,
     pub size: u64,
     pub last_modified: String,
 }

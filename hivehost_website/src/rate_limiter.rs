@@ -44,7 +44,6 @@ pub mod ssr {
             }
         }
 
-
         pub async fn check(&self, ip: &str) -> bool {
             let now = Instant::now();
             let mut entry = self.cache.get(ip).await.unwrap_or_default();
@@ -60,7 +59,7 @@ pub mod ssr {
             if entry.timestamps.len() as u32 >= self.limit_per_minute {
                 return false;
             }
-            
+
             entry.timestamps.push_back(now);
             self.cache.insert(ip.to_string(), entry).await;
 

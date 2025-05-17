@@ -7,40 +7,42 @@ use common::server_action::permission::Permission;
 use crate::app::pages::{GlobalState, GlobalStateStoreFields, ProjectStateStoreFields};
 use leptos::either::EitherOf3;
 use leptos::logging::log;
-use leptos::prelude::{CollectView, NodeRef, NodeRefAttribute, OnAttribute};
 use leptos::prelude::ElementChild;
+use leptos::prelude::{CollectView, NodeRef, NodeRefAttribute, OnAttribute};
 
+use common::UserId;
+use leptos::html::{Input, Select};
 use leptos::prelude::{
-    expect_context, ClassAttribute, For, Get, IntoMaybeErased, Resource, ServerAction,
-    Show, Suspend,
+    expect_context, ClassAttribute, For, Get, IntoMaybeErased, Resource, ServerAction, Show,
+    Suspend,
 };
 use leptos::prelude::{signal, Effect, Read, Set, Signal, Transition};
 use leptos::{component, view};
-use leptos::html::{Input, Select};
 use reactive_stores::{OptionStoreExt, Store};
 use strum::IntoEnumIterator;
-use common::UserId;
 
 #[component]
 pub fn ProjectTeam() -> impl IntoView {
     let global_state: Store<GlobalState> = expect_context();
     let project_slug_signal: Signal<ProjectSlugSignal> = expect_context();
     let slug = move || project_slug_signal.read().0.clone();
-    let server_id = move || global_state.project_state().unwrap().project().read().server_id;
+    let server_id = move || {
+        global_state
+            .project_state()
+            .unwrap()
+            .project()
+            .read()
+            .server_id
+    };
     let update_member = ServerAction::<server_fns::UpdateProjectTeamPermission>::new();
     let add_member = ServerAction::<server_fns::AddProjectTeamPermission>::new();
     let delete_member = ServerAction::<server_fns::DeleteProjectTeamMember>::new();
 
-    let add_member_email_ref= NodeRef::<Input>::default();
-    let add_member_permission_ref= NodeRef::<Select>::default();
+    let add_member_email_ref = NodeRef::<Input>::default();
+    let add_member_permission_ref = NodeRef::<Select>::default();
 
-    let permission_signal = Signal::derive(move || 
-        global_state
-            .project_state()
-            .unwrap()
-            .read()
-            .permission
-    );
+    let permission_signal =
+        Signal::derive(move || global_state.project_state().unwrap().read().permission);
 
     let team_res = Resource::new_bincode(
         move || {
@@ -54,16 +56,17 @@ pub fn ProjectTeam() -> impl IntoView {
         move |(_, _, _, s)| server_fns::get_project_team(s),
     );
 
-    let on_update_member = move |event: web_sys::SubmitEvent, user_id: UserId, permission: String| {
-        event.prevent_default();
-        update_member.dispatch(server_fns::UpdateProjectTeamPermission {
-            csrf: global_state.csrf().get().unwrap_or_default(),
-            project_slug: slug(),
-            server_id: server_id(),
-            user_id,
-            permission: Permission::from(permission.as_str()),
-        });
-    };
+    let on_update_member =
+        move |event: web_sys::SubmitEvent, user_id: UserId, permission: String| {
+            event.prevent_default();
+            update_member.dispatch(server_fns::UpdateProjectTeamPermission {
+                csrf: global_state.csrf().get().unwrap_or_default(),
+                project_slug: slug(),
+                server_id: server_id(),
+                user_id,
+                permission: Permission::from(permission.as_str()),
+            });
+        };
 
     let on_delete_member = move |event: web_sys::SubmitEvent, user_id: UserId| {
         event.prevent_default();
@@ -277,9 +280,10 @@ pub fn ProjectTeam() -> impl IntoView {
 }
 
 pub mod server_fns {
+    use crate::models::{ProjectSlugStrFront, UserSlugStrFront};
     use crate::AppResult;
     use common::server_action::permission::Permission;
-    use common::{ProjectId, ProjectSlugStr, ServerId, UserId, UserSlugStr};
+    use common::{ProjectId, ServerId, UserId};
     use leptos::server;
     use leptos::server_fn::codec::Bincode;
     use serde::{Deserialize, Serialize};
@@ -297,8 +301,8 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn delete_project_team_member(
         csrf: String,
-        server_id:ServerId,
-        project_slug: ProjectSlugStr,
+        server_id: ServerId,
+        project_slug: ProjectSlugStrFront,
         user_id: UserId,
     ) -> AppResult<()> {
         handle_project_permission_request(
@@ -323,8 +327,8 @@ pub mod server_fns {
                 )
                 .fetch_one(&pool)
                 .await?;
-                let user_slug = Slug::new(user_id, other_user.username);
-                let project_slug = Slug::new(project.id, project.name);
+                let user_slug = Slug::new(user_id, other_user.username).to_user_slug_str();
+                let project_slug = Slug::new(project.id, project.name).to_project_slug_str();
                 request_server_project_action(
                     server_id,
                     project_slug,
@@ -341,8 +345,8 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn update_project_team_permission(
         csrf: String,
-        server_id:ServerId,
-        project_slug: ProjectSlugStr,
+        server_id: ServerId,
+        project_slug: ProjectSlugStrFront,
         user_id: UserId,
         permission: Permission,
     ) -> AppResult<()> {
@@ -373,9 +377,9 @@ pub mod server_fns {
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     server_id,
-                    project_slug,
+                    project_slug.to_project_slug_str(),
                     ProjectPermissionAction::Update {
-                        user_slug,
+                        user_slug: user_slug.to_user_slug_str(),
                         permission,
                     }
                     .into(),
@@ -391,8 +395,8 @@ pub mod server_fns {
     #[server(input=Bincode, output=Bincode)]
     pub async fn add_project_team_permission(
         csrf: String,
-        server_id:ServerId,
-        project_slug: ProjectSlugStr,
+        server_id: ServerId,
+        project_slug: ProjectSlugStrFront,
         email: String,
         permission: Permission,
     ) -> AppResult<()> {
@@ -435,9 +439,9 @@ pub mod server_fns {
                 let project_slug = Slug::new(project.id, project.name);
                 request_server_project_action(
                     server_id,
-                    project_slug,
+                    project_slug.to_project_slug_str(),
                     ProjectPermissionAction::Grant {
-                        user_slug,
+                        user_slug: user_slug.to_user_slug_str(),
                         permission,
                     }
                     .into(),
@@ -452,7 +456,7 @@ pub mod server_fns {
 
     #[server(input=Bincode, output=Bincode)]
     pub async fn get_project_team(
-        project_slug: ProjectSlugStr,
+        project_slug: ProjectSlugStrFront,
     ) -> AppResult<Vec<UserPermissionPage>> {
         handle_project_permission_request(
             project_slug,
@@ -488,6 +492,6 @@ pub mod server_fns {
         pub project_id: ProjectId,
         pub username: String,
         pub permission: Permission,
-        pub slug:UserSlugStr,
+        pub slug: UserSlugStrFront,
     }
 }
