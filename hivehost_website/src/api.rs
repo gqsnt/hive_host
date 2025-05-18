@@ -37,7 +37,7 @@ pub fn fetch_api(
         } else {
             path.clone()
         };
-        let body = body.unwrap_or({ FormData::new().unwrap() });
+        let body = body.unwrap_or(FormData::new().unwrap());
 
         gloo_net::http::Request::post(&path)
             .header("Access-Control-Allow-Origin", &dns_path)

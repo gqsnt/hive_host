@@ -146,7 +146,7 @@ pub fn ProjectSnapshots() -> impl IntoView {
         ev.prevent_default();
         let confirmed = if let Some(window) = web_sys::window() {
             window
-                .confirm_with_message("Are you sure you want to Restore this snapshot?")
+                .confirm_with_message("Restoring is Highly Destructive, it will clean your dev path and sync it with the snapshot, create a new snapshot before to save your work and be able to restore it, Are you sure you want to Restore this snapshot?")
                 .unwrap_or(false)
         } else {
             false
@@ -517,7 +517,7 @@ pub mod server_fns {
 
     use crate::models::{ProjectSlugStrFront, ProjectSnapshot};
     use crate::AppResult;
-    use common::ServerId;
+    use common::{ServerId};
 
     cfg_if::cfg_if! { if #[cfg(feature = "ssr")] {
         use crate::security::permission::ssr::handle_project_permission_request;
@@ -607,7 +607,7 @@ pub mod server_fns {
                     .unwrap_or((None, None));
                 let _ = ssr::inner_create_snapshot(
                     &pool,
-                    crate::ssr::ws_clients()?,
+                    ws_clients()?,
                     server_id,
                     project_slug.clone(),
                     Some(name),
@@ -888,7 +888,6 @@ pub mod server_fns {
                 } else {
                     false
                 };
-
             sqlx::query!(
                 "UPDATE projects SET active_snapshot_id = $1 WHERE id = $2",
                 snapshot_id,
@@ -896,7 +895,7 @@ pub mod server_fns {
             )
             .execute(pool)
             .await?;
-
+            
             request_server_project_action(
                 server_id,
                 project_slug.to_project_slug_str(),

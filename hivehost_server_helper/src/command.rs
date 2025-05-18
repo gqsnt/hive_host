@@ -155,15 +155,7 @@ pub async fn execute_command(action: HelperCommand) -> ServerHelperResult<()> {
             user_slug,
         } => {
             let user_project_path = get_user_project_path(&user_slug, &project_slug);
-            let r = run_external_command(
-                "findmnt",
-                &["-n", "-o", "TARGET", "--target", &user_project_path],
-            )
-            .await?;
-            if !r.is_empty() && !r.eq("/")  {
-                run_external_command("umount", &[&user_project_path]).await?;
-            }
-
+            run_external_umount(&user_project_path).await?;
             tokio::fs::remove_dir(&user_project_path).await?;
         }
         HelperCommand::CreateSnapshot {
@@ -200,23 +192,37 @@ pub async fn execute_command(action: HelperCommand) -> ServerHelperResult<()> {
         }
         HelperCommand::UnmountProd { project_slug } => {
             let path = get_project_prod_path(&project_slug);
-            let r = run_external_command(
-                "findmnt",
-                &["-n", "-o", "TARGET", "--target", &path],
-            ).await?;
-            if !r.is_empty() && !r.eq("/") {
-                run_external_command("umount", &[&path]).await?;
-            }
+            run_external_umount(&path).await?;
         }
         HelperCommand::RestoreSnapshot {
             project_slug,
             snapshot_name,
         } => {
-            let path = get_project_dev_path(&project_slug);
-            let snapshot_path = get_project_snapshot_path(&snapshot_name.0);
-            run_external_command("btrfs", &["subvolume", "snapshot", &snapshot_path, &path])
+            let project_path = get_project_dev_path(&project_slug);
+            let snapshot_path = format!("{}/",get_project_snapshot_path(&snapshot_name.0));
+            run_external_command("rm", &["-rf", &format!("{}/*",project_path)]).await?;
+            run_external_command(
+                "rsync",
+                &[
+                    "-r",
+                    &snapshot_path,
+                    &project_path,
+                ],
+            )
                 .await?;
         }
+    }
+    Ok(())
+}
+
+
+pub async fn run_external_umount(path: &str) -> ServerHelperResult<()> {
+    let r = run_external_command(
+        "findmnt",
+        &["-n", "-o", "TARGET", "--target", path],
+    ).await?;
+    if !r.is_empty() && !r.eq("/") {
+        run_external_command("umount", &[path]).await?;
     }
     Ok(())
 }

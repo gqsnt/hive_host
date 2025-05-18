@@ -311,7 +311,6 @@ impl FromStr for SnapShotNameStr {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.is_empty()
-            || s.len() > 40
             || !s
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')

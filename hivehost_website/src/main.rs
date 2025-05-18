@@ -1,3 +1,4 @@
+
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() -> hivehost_website::AppResult<()> {
@@ -40,7 +41,9 @@ async fn main() -> hivehost_website::AppResult<()> {
     use tower_http::compression::{CompressionLayer, Predicate};
     #[allow(unused_imports)]
     use tower_http::CompressionLevel;
+    use hivehost_website::rate_limiter::ssr::rate_limit_middleware;
 
+    
     dotenvy::dotenv().ok();
 
     let database_url = dotenvy::var("DATABASE_URL")?;
@@ -155,10 +158,10 @@ async fn main() -> hivehost_website::AppResult<()> {
                 .with_config(auth_config),
         )
         .layer(SessionLayer::new(session_store))
-        // .route_layer(axum::middleware::from_fn_with_state(
-        //     rate_limiter.clone(),
-        //     rate_limit_middleware,
-        // ))
+        .route_layer(axum::middleware::from_fn_with_state(
+            rate_limiter.clone(),
+            rate_limit_middleware,
+        ))
         .with_state(app_state);
 
     // run our app with hyper
